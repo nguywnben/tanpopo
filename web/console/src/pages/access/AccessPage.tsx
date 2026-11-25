@@ -40,7 +40,7 @@ type VirtualKey = components['schemas']['VirtualKeySummary'];
 type Member = components['schemas']['MemberSummary'];
 type CreatedKey = components['schemas']['VirtualKeyCreatedResponse'];
 
-const allRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER', 'DEVELOPER'];
+const orgMemberRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER', 'DEVELOPER'];
 const orgAdminRoles: Role[] = ['OPERATOR', 'ORG_OWNER'];
 const teamAdminGrantableRoles: Role[] = ['TEAM_ADMIN', 'DEVELOPER'];
 const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
@@ -104,7 +104,7 @@ export function AccessPage({
 
   const isOrgAdmin = roles.some(r => orgAdminRoles.includes(r));
   const isSecurityReviewer = roles.includes('SECURITY_REVIEWER');
-  const grantableMemberRoles = isOrgAdmin ? allRoles : teamAdminGrantableRoles;
+  const grantableMemberRoles = isOrgAdmin ? orgMemberRoles : teamAdminGrantableRoles;
   const canManage = roles.some(r => manageRoles.includes(r));
   const canReadMembers = roles.some(r => memberReadRoles.includes(r));
   const canEmergencyRevoke = canManage || isSecurityReviewer;

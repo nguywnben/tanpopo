@@ -143,7 +143,9 @@ export function RoutingPage({
         hasEnvScope ? listDeployments(environmentId) : Promise.resolve([] as Deployment[]),
         listAdminModels(),
         listConnections(),
-        hasEnvScope ? listRecentTraces(environmentId) : Promise.resolve([] as components['schemas']['TraceSummary'][]),
+        hasEnvScope && canManage
+          ? listRecentTraces(environmentId).catch(() => [] as components['schemas']['TraceSummary'][])
+          : Promise.resolve([] as components['schemas']['TraceSummary'][]),
         getEffectivePolicy(),
         projectId ? getEffectivePolicy(projectId) : Promise.resolve(null),
         hasEnvScope ? getEffectivePolicy(projectId, environmentId) : Promise.resolve(null),
@@ -176,7 +178,7 @@ export function RoutingPage({
     } finally {
       if (refreshSeqRef.current === seq) setLoading(false);
     }
-  }, [projectId, environmentId, t]);
+  }, [projectId, environmentId, canManage, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -458,7 +460,7 @@ export function RoutingPage({
                     {row.targets.map(tg => {
                       const dep = deploymentById.get(tg.deployment_id);
                       const label = dep ? formatDeploymentLabel(dep) : tg.deployment_id;
-                      return tg.weight !== undefined ? `${label} (${tg.weight}%)` : label;
+                      return isWeighted(row.strategy) && tg.weight !== undefined ? `${label} (${tg.weight}%)` : label;
                     }).join(' → ')}
                   </span>
                 ),

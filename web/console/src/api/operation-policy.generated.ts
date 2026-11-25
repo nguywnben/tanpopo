@@ -48,6 +48,10 @@ export const operationPolicy = {
     "csrf": true,
     "ifMatch": true
   },
+  "POST /admin/v1/organizations/{orgId}/finalize-erasure": {
+    "csrf": true,
+    "ifMatch": false
+  },
   "PUT /admin/v1/organizations/{orgId}/extension-policies": {
     "csrf": true,
     "ifMatch": true

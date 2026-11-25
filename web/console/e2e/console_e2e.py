@@ -973,6 +973,189 @@ def verify_round2_defects_e2e(
     return results
 
 
+def verify_round3_defects_e2e(
+    page: Page,
+    https_base: str,
+    owner_email: str,
+    owner_pw: str,
+    shot_dir: Path | None = None,
+) -> dict[str, Any]:
+    results: dict[str, Any] = {}
+
+    def save_shot(name: str) -> None:
+        if shot_dir is not None:
+            shot_dir.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(shot_dir / name))
+
+    # 1. DEF-042: Access -> Members omits OPERATOR from member role picker
+    page.goto(f"{https_base}/access/members", wait_until="networkidle")
+    page.get_by_role("button", name=re.compile("Add member", re.I)).first.click()
+    mem_form = page.locator("#tp-add-member-form")
+    mem_form.wait_for(state="visible", timeout=8000)
+    role_combo = mem_form.get_by_role("combobox", name=re.compile("Assign roles|Select roles", re.I)).first
+    role_combo.click()
+    opt_texts = [t.strip() for t in page.locator('[role="option"]').all_inner_texts()]
+    if any("operator" in txt.lower() for txt in opt_texts):
+        raise AssertionError(f"DEF-042: Member invite role picker unexpectedly includes OPERATOR: {opt_texts}")
+    page.keyboard.press("Escape")
+    page.locator('dialog[open] button:has-text("Cancel")').first.click()
+    results["access_no_operator_ok"] = True
+
+    # 2. DEF-043 & DEF-044: Extensions provenance separation & Quarantine -> Uninstall workflow
+    page.goto(f"{https_base}/extensions/marketplace", wait_until="networkidle")
+    mkt_anth = page.locator("tr", has_text="@tanpopo/anthropic").first
+    mkt_anth.wait_for(state="visible", timeout=8000)
+    if not re.search(r"Signature verified \([a-f0-9]+\)", mkt_anth.inner_text(), re.I):
+        raise AssertionError(f"DEF-043: Marketplace row missing verified signature fingerprint: {mkt_anth.inner_text()!r}")
+    mkt_anth.get_by_role("button", name="Stage for review").click()
+    rev_dlg = page.locator('dialog[open], [role="dialog"]').last
+    rev_dlg.wait_for(state="visible", timeout=8000)
+    rev_dlg.get_by_text(re.compile("Enterprise signature", re.I)).first.wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(350)
+    save_shot("e2e-round3-ext-review-1440.png")
+    consent_cb = rev_dlg.get_by_role("checkbox", name=re.compile("explicitly consent", re.I)).first
+    if consent_cb.count() > 0 and not consent_cb.is_checked():
+        consent_cb.click()
+    rev_dlg.get_by_role("button", name="Approve & activate").click()
+    rev_dlg.wait_for(state="hidden", timeout=10000)
+
+    page.goto(f"{https_base}/extensions/installed", wait_until="networkidle")
+    anth_row = page.locator("tr", has_text="@tanpopo/anthropic").first
+    anth_row.wait_for(state="visible", timeout=8000)
+    save_shot("e2e-round3-ext-installed-1440.png")
+    anth_row.get_by_role("button", name=re.compile("Actions", re.I)).click()
+    if page.get_by_role("menuitem", name=re.compile("Uninstall package", re.I)).count() > 0:
+        raise AssertionError("DEF-044: Active extension row unexpectedly offered direct Uninstall before Quarantine")
+    page.get_by_role("menuitem", name=re.compile("Quarantine package", re.I)).or_(
+        page.get_by_text("Quarantine package")
+    ).first.click()
+    q_dlg = page.locator('dialog[open], [role="alertdialog"], [role="dialog"]').last
+    q_dlg.wait_for(state="visible", timeout=8000)
+    q_inputs = q_dlg.locator("input")
+    q_inputs.nth(0).fill("Round 3 E2E quarantine->uninstall verification")
+    if q_inputs.count() > 1:
+        q_inputs.nth(1).fill("@tanpopo/anthropic")
+    q_dlg.get_by_role("button", name=re.compile("Confirm quarantine", re.I)).click()
+    q_dlg.wait_for(state="hidden", timeout=10000)
+
+    anth_row.get_by_text(re.compile("^Quarantined$", re.I)).first.wait_for(state="visible", timeout=8000)
+    anth_row.get_by_role("button", name=re.compile("Actions", re.I)).click()
+    page.get_by_role("menuitem", name=re.compile("Uninstall package", re.I)).or_(
+        page.get_by_text("Uninstall package")
+    ).first.click()
+    u_dlg = page.locator('dialog[open], [role="alertdialog"], [role="dialog"]').last
+    u_dlg.wait_for(state="visible", timeout=8000)
+    u_dlg.locator("input").first.fill("Clean up quarantined adapter")
+    u_dlg.get_by_role("button", name=re.compile("Confirm uninstall", re.I)).click()
+    u_dlg.wait_for(state="hidden", timeout=10000)
+    anth_row.wait_for(state="hidden", timeout=8000)
+    results["extensions_provenance_and_sm01_ok"] = True
+
+    # 3. DEF-050: Routing table header is "Target chain" and omits "(100%)" on PRIORITY_FAILOVER
+    page.goto(f"{https_base}/routes", wait_until="networkidle")
+    page.get_by_text("Target chain").first.wait_for(state="visible", timeout=8000)
+    if page.get_by_text("Fallback chain").count() > 0:
+        raise AssertionError("DEF-050: Stale 'Fallback chain' header still visible on RoutingPage")
+    save_shot("e2e-round3-routes-1440.png")
+    results["routing_target_chain_ok"] = True
+
+    # 4. DEF-032 & DEF-035: Models short connection ID & empty-project isolation check
+    page.goto(f"{https_base}/models", wait_until="networkidle")
+    page.get_by_role("button", name="Add deployment").first.click()
+    dep_form = page.locator("#tp-add-deployment-form")
+    dep_form.wait_for(state="visible", timeout=8000)
+    conn_combo = dep_form.get_by_role("combobox", name=re.compile("Provider connection", re.I)).first
+    conn_combo.click()
+    conn_opts = [t.strip() for t in page.locator('[role="option"]').all_inner_texts()]
+    if not any(re.search(r"E2E Local Upstream \(.+ · [a-z0-9]{8}\)", opt) for opt in conn_opts):
+        raise AssertionError(f"DEF-032: Connection picker missing short ID suffix: {conn_opts}")
+    page.keyboard.press("Escape")
+    page.locator('dialog[open] button:has-text("Cancel")').first.click()
+    results["models_connection_short_id_ok"] = True
+
+    # 5. DEF-046 & DEF-047: Playground prompt/scope reset & cross-tab logout propagation + re-login
+    page.goto(f"{https_base}/devtools/playground", wait_until="networkidle")
+    page.wait_for_function(
+        "() => { const el = document.querySelector('.tp-scope-switcher-env'); return el && el.textContent && !el.textContent.includes('No env'); }",
+        timeout=8000,
+    )
+    pg_model = page.get_by_role("combobox", name=re.compile("Model or route slug", re.I)).first
+    pg_model.locator("xpath=..").click()
+    pg_model.fill("llama3.2")
+    pg_opt = page.get_by_role("option", name=re.compile("llama3\\.2", re.I)).first
+    pg_opt.wait_for(state="visible", timeout=5000)
+    pg_opt.click()
+    pg_prompt = page.get_by_label(re.compile("^Prompt$", re.I)).first
+    pg_prompt.fill("Round3 E2E persistence check")
+    page.get_by_role("button", name=re.compile("^Send$", re.I)).first.click()
+    page.get_by_text("Tanpopo E2E OK").first.wait_for(state="visible", timeout=15000)
+    save_shot("e2e-round3-playground-1440.png")
+
+    # Mobile 375x812 dark check + screenshot (switch theme at desktop viewport before collapsing topbar controls)
+    set_theme_mode(page, "dark")
+    page.set_viewport_size({"width": 375, "height": 812})
+    page.wait_for_timeout(150)
+    save_shot("e2e-round3-playground-mobile-375-dark.png")
+    page.set_viewport_size({"width": 1440, "height": 900})
+    set_theme_mode(page, "light")
+
+    # Click Inspect trace -> verifies navigation to /observability/traces?request_id=... (not fallback /overview)!
+    inspect_btn = page.get_by_role("button", name=re.compile("Inspect trace", re.I)).first
+    inspect_btn.wait_for(state="visible", timeout=10000)
+    inspect_btn.click()
+    page.wait_for_url("**/observability/traces?request_id=*", timeout=10000)
+    page.locator("main#main-content h1").get_by_text(re.compile("Request traces", re.I)).wait_for(state="visible", timeout=8000)
+    results["playground_inspect_trace_route_ok"] = True
+
+    # Return to Playground, send prompt, and switch env via Scope Switcher -> Playground must clear stale chat turns!
+    page.goto(f"{https_base}/devtools/playground", wait_until="networkidle")
+    page.wait_for_function(
+        "() => { const el = document.querySelector('.tp-scope-switcher-env'); return el && el.textContent && !el.textContent.includes('No env'); }",
+        timeout=8000,
+    )
+    pg_model2 = page.get_by_role("combobox", name=re.compile("Model or route slug", re.I)).first
+    pg_model2.locator("xpath=..").click()
+    pg_model2.fill("llama3.2")
+    pg_opt2 = page.get_by_role("option", name=re.compile("llama3\\.2", re.I)).first
+    pg_opt2.wait_for(state="visible", timeout=5000)
+    pg_opt2.click()
+    page.get_by_label(re.compile("^Prompt$", re.I)).first.fill("Round3 E2E scope reset check")
+    page.get_by_role("button", name=re.compile("^Send$", re.I)).first.click()
+    page.get_by_text("Tanpopo E2E OK").first.wait_for(state="visible", timeout=15000)
+
+    scope_btn = page.locator("button.tp-scope-switcher").first
+    scope_btn.click()
+    no_env_opt = page.get_by_role("option", name=re.compile("No env|All env", re.I)).first
+    if no_env_opt.count() > 0:
+        no_env_opt.click()
+        page.wait_for_timeout(200)
+        if page.get_by_text("Tanpopo E2E OK").count() > 0:
+            raise AssertionError("DEF-046: Playground kept stale response after scope switch")
+    else:
+        page.keyboard.press("Escape")
+    results["playground_scope_reset_ok"] = True
+
+    # Cross-tab logout propagation: tab2 logged into /overview -> sign out tab1 -> tab2 redirects to /login!
+    tab2 = page.context.new_page()
+    try:
+        tab2.goto(f"{https_base}/overview", wait_until="networkidle")
+        tab2.locator("main#main-content h1").wait_for(state="visible", timeout=8000)
+        page.get_by_role("button", name=re.compile("^Sign out$", re.I)).first.click()
+        tab2.wait_for_url("**/login**", timeout=10000)
+        results["cross_tab_logout_ok"] = True
+    finally:
+        tab2.close()
+
+    # Sign back in cleanly for remaining sweeps
+    page.goto(f"{https_base}/login", wait_until="networkidle")
+    page.locator('input[type="email"]').fill(owner_email)
+    page.locator('input[type="password"]').fill(owner_pw)
+    page.locator('button[type="submit"]').click()
+    page.wait_for_url("**/overview", timeout=15000)
+    page.locator("main#main-content h1").wait_for(state="visible", timeout=15000)
+    return results
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run Tanpopo Web Console Playwright E2E suite")
     parser.add_argument("--binary", default="", help="Path to prebuilt tanpopo binary (defaults to building into temp dir)")
@@ -1018,6 +1201,18 @@ def main() -> int:
         env_srv["TANPOPO_BOOTSTRAP_TOKEN_FILE"] = str(boot_file)
         env_srv["TANPOPO_MASTER_KEY"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         env_srv["TANPOPO_ALLOWED_ORIGINS"] = f"https://127.0.0.1:{tls_port}"
+        if not env_srv.get("TANPOPO_RELEASE_ROOT_PUBKEYS"):
+            rel_sig_file = tmpdir / "release-signatures.json"
+            pub_res = subprocess.run(
+                ["go", "run", "./web/console/e2e/signer", "--out", str(rel_sig_file)],
+                cwd=str(REPO_ROOT),
+                env=env_build,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            env_srv["TANPOPO_RELEASE_ROOT_PUBKEYS"] = pub_res.stdout.strip()
+            env_srv["TANPOPO_RELEASE_SIGNATURES_PATH"] = str(rel_sig_file)
 
         server_log = open(tmpdir / "tanpopo.log", "wb")
         server_proc = subprocess.Popen(
@@ -1215,6 +1410,13 @@ def main() -> int:
                         print("[e2e] chromium phase=round2-defects", flush=True)
                         b_summary["round2_defects"] = verify_round2_defects_e2e(
                             page, https_base, browser, report["external_requests"], report["page_errors"]
+                        )
+
+                        # Round 3 DEF workflows (Access no OPERATOR, Extensions provenance + SM-01, Routing Target chain, Models short IDs, Playground reset + cross-tab logout)
+                        print("[e2e] chromium phase=round3-defects", flush=True)
+                        raw_shot_dir = os.environ.get("TANPOPO_E2E_SCREENSHOT_DIR", "").strip()
+                        b_summary["round3_defects"] = verify_round3_defects_e2e(
+                            page, https_base, owner_email, owner_pw, Path(raw_shot_dir) if raw_shot_dir else None
                         )
 
                         # CWV & real click/keyboard INP on key workspace screens

@@ -85,7 +85,7 @@ const emptyCapabilities: components['schemas']['CapabilityProfile'] = {
 const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
 
 export function ModelsPage({
-  projectId: _projectId = '',
+  projectId = '',
   projects: _projects = [],
   environments = [],
   environmentId,
@@ -147,7 +147,9 @@ export function ModelsPage({
     try {
       const [modelRows, depRows, connRows] = await Promise.all([
         listAdminModels(),
-        listDeployments(environmentId || undefined),
+        environmentId || (projectId && environments.length > 0)
+          ? listDeployments(environmentId || undefined, projectId || undefined)
+          : Promise.resolve([] as Deployment[]),
         listConnections(),
       ]);
       if (reloadSeqRef.current !== seq) return;
@@ -162,7 +164,7 @@ export function ModelsPage({
     } finally {
       if (reloadSeqRef.current === seq) setLoading(false);
     }
-  }, [environmentId, t]);
+  }, [projectId, environmentId, environments.length, t]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -285,7 +287,12 @@ export function ModelsPage({
   async function openDeploymentAction(deployment: Deployment, action: 'disable' | 'delete') {
     setError('');
     try {
-      const [routeRows, depRows] = await Promise.all([listRoutes(), listDeployments(environmentId || undefined)]);
+      const [routeRows, depRows] = await Promise.all([
+        listRoutes(),
+        environmentId || (projectId && environments.length > 0)
+          ? listDeployments(environmentId || undefined, projectId || undefined)
+          : Promise.resolve([] as Deployment[]),
+      ]);
       const healthyIds = new Set(depRows.filter(d => d.state === 'ACTIVE_HEALTHY').map(d => d.id));
       const lastHealthyRoutes =
         deployment.state === 'ACTIVE_HEALTHY'
@@ -410,6 +417,9 @@ export function ModelsPage({
           </div>
 
           <SectionHeader title={environmentId ? t('models.envDeployments') : t('models.allEnvsDeployments')} count={visibleDeployments.length} />
+          {visibleDeployments.some(d => (d.connection_state ?? connections.find(c => c.id === d.connection_id)?.state) === 'DISABLED') ? (
+            <Banner tone="warn">{t('models.disabledConnectionBanner')}</Banner>
+          ) : null}
           <DataTable
             ariaLabel={t('models.deploymentsAria')}
             loading={loading}
@@ -458,7 +468,14 @@ export function ModelsPage({
                   const connState = row.connection_state ?? connections.find(c => c.id === row.connection_id)?.state;
                   const effectiveState =
                     row.state === 'ACTIVE_HEALTHY' && connState && connState !== 'ACTIVE' ? connState : row.state;
-                  return <StatusPill tone={stateTone(effectiveState)} label={formatOperationalState(effectiveState)} />;
+                  return (
+                    <div className="tp-stack-sm">
+                      <StatusPill tone={stateTone(effectiveState)} label={formatOperationalState(effectiveState)} />
+                      {connState && connState !== 'ACTIVE' && effectiveState !== connState ? (
+                        <span className="tp-muted">{t('models.connectionStateNote', {state: formatOperationalState(connState)})}</span>
+                      ) : null}
+                    </div>
+                  );
                 },
               },
               {
@@ -666,7 +683,7 @@ export function ModelsPage({
             value={selectedConnection}
             placeholder={t('models.selectConnection')}
             onChange={setSelectedConnection}
-            options={connections.map(item => ({value: item.id, label: `${item.name} (${item.billing_mode})`}))}
+            options={connections.map(item => ({value: item.id, label: `${item.name} (${item.billing_mode} · ${item.id.slice(-8)})`}))}
           />
           <TextField label={t('models.upstreamModelName')} required value={upstreamName} onChange={event => setUpstreamName(event.target.value)} />
           <div className="tp-grid-2">

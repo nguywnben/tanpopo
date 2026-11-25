@@ -142,13 +142,77 @@ api.use({
 });
 
 const unauthorizedListeners = new Set<() => void>();
+const crossTabLogoutListeners = new Set<() => void>();
+const AUTH_BROADCAST_CHANNEL = 'tanpopo.auth';
+const AUTH_STORAGE_EVENT_KEY = 'tanpopo.auth.logout_ts';
+let authChannel: BroadcastChannel | null = null;
+let storageSubscribed = false;
+
+function ensureCrossTabAuthListeners() {
+  if (typeof window === 'undefined') return;
+  if (!authChannel && typeof BroadcastChannel !== 'undefined') {
+    try {
+      authChannel = new BroadcastChannel(AUTH_BROADCAST_CHANNEL);
+      authChannel.onmessage = event => {
+        if (event.data && typeof event.data === 'object' && event.data.type === 'logout') {
+          handleRemoteLogoutSignal();
+        }
+      };
+    } catch {
+      authChannel = null;
+    }
+  }
+  if (!storageSubscribed) {
+    storageSubscribed = true;
+    window.addEventListener('storage', event => {
+      if (event.key === AUTH_STORAGE_EVENT_KEY && event.newValue) {
+        handleRemoteLogoutSignal();
+      }
+    });
+  }
+}
+
+function handleRemoteLogoutSignal() {
+  clearCsrfToken();
+  purgeOrgScopedClientState();
+  for (const listener of crossTabLogoutListeners) {
+    try {
+      listener();
+    } catch {
+      // Ignore individual subscriber errors during cross-tab logout.
+    }
+  }
+}
+
+export function broadcastLogoutEvent() {
+  if (typeof window === 'undefined') return;
+  const payload = {type: 'logout', ts: Date.now(), nonce: Math.random().toString(36).slice(2)};
+  try {
+    ensureCrossTabAuthListeners();
+    authChannel?.postMessage(payload);
+  } catch {
+    // Ignore BroadcastChannel errors.
+  }
+  try {
+    window.localStorage.setItem(AUTH_STORAGE_EVENT_KEY, JSON.stringify(payload));
+  } catch {
+    // Storage may be unavailable in restricted contexts.
+  }
+}
 
 export function subscribeUnauthorized(listener: () => void): () => void {
   unauthorizedListeners.add(listener);
   return () => { unauthorizedListeners.delete(listener); };
 }
 
+export function subscribeCrossTabLogout(listener: () => void): () => void {
+  ensureCrossTabAuthListeners();
+  crossTabLogoutListeners.add(listener);
+  return () => { crossTabLogoutListeners.delete(listener); };
+}
+
 function notifyUnauthorized() {
+  broadcastLogoutEvent();
   for (const listener of unauthorizedListeners) {
     try {
       listener();
@@ -211,6 +275,7 @@ export async function logoutAdmin() {
   const result = await api.POST('/admin/v1/auth/logout');
   clearCsrfToken();
   purgeOrgScopedClientState();
+  broadcastLogoutEvent();
   if (!result.response.ok && result.response.status !== 204 && result.response.status !== 401) {
     throw apiError(result.response, result.error);
   }

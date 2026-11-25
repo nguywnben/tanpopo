@@ -40,6 +40,7 @@ import {
   logoutAdmin,
   purgeOrgScopedClientState,
   setActiveOrgId,
+  subscribeCrossTabLogout,
   subscribeUnauthorized,
 } from '../api/client';
 import {listKillSwitches, listPendingApprovals, subscribeSecurityStateChanged} from '../api/managementClient';
@@ -165,9 +166,13 @@ export function ConsoleShell() {
         if (!active) return;
 
         const resolvedOrgs: Organization[] = orgsRes.status === 'fulfilled' ? orgsRes.value : [];
-        const resolvedOrgId = sessionOrg && (resolvedOrgs.length === 0 || resolvedOrgs.some(item => item.id === sessionOrg))
-          ? sessionOrg
-          : resolvedOrgs[0]?.id ?? sessionOrg;
+        const isDeleting = (item: Organization) => item.status === 'DELETING' || item.status === 'PENDING_ERASURE';
+        const resolvedOrgId =
+          (sessionOrg && resolvedOrgs.some(item => item.id === sessionOrg && !isDeleting(item)) ? sessionOrg : undefined)
+          ?? resolvedOrgs.find(item => !isDeleting(item))?.id
+          ?? (sessionOrg && resolvedOrgs.length === 0 ? sessionOrg : undefined)
+          ?? resolvedOrgs[0]?.id
+          ?? sessionOrg;
         setActiveOrgId(resolvedOrgId || undefined);
 
         let list: Project[] = [];
@@ -220,7 +225,7 @@ export function ConsoleShell() {
   }, [navigate]);
 
   useEffect(() => {
-    const unsubUnauth = subscribeUnauthorized(() => {
+    const resetAndRedirectToLogin = () => {
       setSession(null);
       setOrganizations([]);
       setActiveOrgIdState('');
@@ -231,7 +236,9 @@ export function ConsoleShell() {
       setPendingApprovals(0);
       setActiveSwitches(0);
       navigate('/login?reason=session_expired', {replace: true});
-    });
+    };
+    const unsubUnauth = subscribeUnauthorized(resetAndRedirectToLogin);
+    const unsubCrossTab = subscribeCrossTabLogout(resetAndRedirectToLogin);
     const unsubSec = subscribeSecurityStateChanged(() => {
       const userRoles = session?.roles ?? [];
       if (!userRoles.some(role => emergencyRoles.includes(role))) return;
@@ -245,6 +252,7 @@ export function ConsoleShell() {
     });
     return () => {
       unsubUnauth();
+      unsubCrossTab();
       unsubSec();
     };
   }, [navigate, session]);

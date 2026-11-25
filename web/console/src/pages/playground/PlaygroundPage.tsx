@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react';
 import {Send, Square, Trash2} from 'lucide-react';
+import {getAdminSession, subscribeCrossTabLogout, subscribeOrgCachePurge} from '../../api/client';
 import {createPlaygroundSession, getTraceWaterfall, listRoutesForEnvironment} from '../../api/managementClient';
 import type {components} from '../../api/generated';
 import {useI18n} from '../../i18n/I18nProvider';
@@ -51,6 +52,27 @@ export function PlaygroundPage({
 
   const authorized = roles.some(role => allowedRoles.includes(role));
 
+  function clearPlaygroundWorkspace() {
+    sendSeqRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setBusy(false);
+    setSession(null);
+    setModel('');
+    setCompareModel('');
+    setMessages([]);
+    setComparison(null);
+    setPrimaryReqId('');
+    setCompareReqId('');
+    setPrimaryTrace(null);
+    setCompareTrace(null);
+    setPrimaryTraceDone(false);
+    setCompareTraceDone(false);
+    setBudgetExceededHit(false);
+    setError('');
+    setNotice('');
+  }
+
   useEffect(() => {
     let active = true;
     setAvailableRoutes([]);
@@ -69,14 +91,21 @@ export function PlaygroundPage({
   }, [environmentId]);
 
   useEffect(() => {
-    setSession(null);
-    setPrimaryReqId('');
-    setCompareReqId('');
-    setPrimaryTrace(null);
-    setCompareTrace(null);
-    setPrimaryTraceDone(false);
-    setCompareTraceDone(false);
+    clearPlaygroundWorkspace();
   }, [projectId, environmentId]);
+
+  useEffect(() => {
+    const unsubPurge = subscribeOrgCachePurge(() => {
+      clearPlaygroundWorkspace();
+    });
+    const unsubLogout = subscribeCrossTabLogout(() => {
+      clearPlaygroundWorkspace();
+    });
+    return () => {
+      unsubPurge();
+      unsubLogout();
+    };
+  }, []);
 
   async function streamCompletion(
     ephemeralKey: string,
@@ -174,7 +203,10 @@ export function PlaygroundPage({
         model.trim(),
         nextHistory,
         controller.signal,
-        text => setMessages([...nextHistory, {role: 'assistant', content: text}]),
+        text => {
+          if (sendSeqRef.current !== seq) return;
+          setMessages([...nextHistory, {role: 'assistant', content: text}]);
+        },
       );
       if (sendSeqRef.current !== seq) return;
       setMessages([...nextHistory, {role: 'assistant', content: primary.text}]);
@@ -195,7 +227,10 @@ export function PlaygroundPage({
           compareModel.trim(),
           nextHistory,
           controller.signal,
-          text => setComparison({primary: primary.text, secondary: text}),
+          text => {
+            if (sendSeqRef.current !== seq) return;
+            setComparison({primary: primary.text, secondary: text});
+          },
         );
         if (sendSeqRef.current !== seq) return;
         setComparison({primary: primary.text, secondary: secondary.text});
@@ -216,11 +251,19 @@ export function PlaygroundPage({
         const status = cause && typeof cause === 'object' && 'status' in cause ? Number(cause.status) : 0;
         const reqId = cause && typeof cause === 'object' && 'requestId' in cause ? String(cause.requestId) : '';
         if (code.includes('budget') || status === 402) setBudgetExceededHit(true);
-        if (reqId) {
-          setPrimaryReqId(prev => prev || reqId);
-          setPrimaryTraceDone(true);
+        if (status === 401) {
+          setSession(null);
+          void getAdminSession().catch(() => {});
         }
         setError(cause instanceof Error ? cause.message : t('playground.requestFailed'));
+        if (reqId) {
+          setPrimaryReqId(prev => prev || reqId);
+          setPrimaryTraceDone(false);
+          const fetchedErrTrace = await pollTrace(reqId);
+          if (sendSeqRef.current !== seq) return;
+          setPrimaryTrace(fetchedErrTrace);
+          setPrimaryTraceDone(true);
+        }
       }
     } finally {
       if (sendSeqRef.current === seq) {
@@ -409,8 +452,30 @@ export function PlaygroundPage({
             <section className="tp-section">
               <SectionHeader title={t('playground.executionTraces')} />
               <ul className="tp-list">
-                {primaryReqId ? <TraceRow label={t('playground.primary')} requestId={primaryReqId} trace={primaryTrace} traceDone={primaryTraceDone} formatMicroUSD={formatMicroUSD} formatNumber={formatNumber} t={t} /> : null}
-                {compareReqId ? <TraceRow label={t('playground.comparison')} requestId={compareReqId} trace={compareTrace} traceDone={compareTraceDone} formatMicroUSD={formatMicroUSD} formatNumber={formatNumber} t={t} /> : null}
+                {primaryReqId ? (
+                  <TraceRow
+                    label={t('playground.primary')}
+                    requestId={primaryReqId}
+                    trace={primaryTrace}
+                    traceDone={primaryTraceDone}
+                    formatMicroUSD={formatMicroUSD}
+                    formatNumber={formatNumber}
+                    onInspect={() => navigate(`/observability/traces?request_id=${encodeURIComponent(primaryReqId)}`)}
+                    t={t}
+                  />
+                ) : null}
+                {compareReqId ? (
+                  <TraceRow
+                    label={t('playground.comparison')}
+                    requestId={compareReqId}
+                    trace={compareTrace}
+                    traceDone={compareTraceDone}
+                    formatMicroUSD={formatMicroUSD}
+                    formatNumber={formatNumber}
+                    onInspect={() => navigate(`/observability/traces?request_id=${encodeURIComponent(compareReqId)}`)}
+                    t={t}
+                  />
+                ) : null}
               </ul>
             </section>
           ) : null}
@@ -442,6 +507,7 @@ function TraceRow({
   traceDone,
   formatMicroUSD,
   formatNumber,
+  onInspect,
   t,
 }: {
   label: string;
@@ -450,6 +516,7 @@ function TraceRow({
   traceDone: boolean;
   formatMicroUSD: (v: number) => string;
   formatNumber: (v: number) => string;
+  onInspect: () => void;
   t: (key: string, vars?: Record<string, string | number>) => string;
 }) {
   return (
@@ -469,7 +536,10 @@ function TraceRow({
               : t('playground.tracePending')}
         </span>
       </div>
-      {trace ? <StatusPill tone={stateTone(trace.usage_accuracy)} label={formatOperationalState(trace.usage_accuracy)} /> : null}
+      <div className="tp-toolbar">
+        {trace ? <StatusPill tone={stateTone(trace.usage_accuracy)} label={formatOperationalState(trace.usage_accuracy)} /> : null}
+        <Button variant="ghost" size="sm" onClick={onInspect}>{t('playground.inspectTrace')}</Button>
+      </div>
     </li>
   );
 }

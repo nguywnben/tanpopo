@@ -44,6 +44,8 @@ type CatalogEntry = {
   version: string;
   origin_trust_tier: 'official' | 'verified' | 'unverified_external';
   enterprise_signed: boolean;
+  signature_verified: boolean;
+  signing_key_fingerprint?: string;
   execution_tier: PermissionDiff['execution_tier'];
   capabilities: string[];
   description: string;
@@ -139,7 +141,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         item =>
           (trustFilter === 'ALL' || item.origin_trust_tier === trustFilter) &&
           (capFilter === 'ALL' || item.capabilities.includes(capFilter)) &&
-          (sigFilter === 'ALL' || (sigFilter === 'SIGNED' ? item.enterprise_signed : !item.enterprise_signed)) &&
+          (sigFilter === 'ALL' || (sigFilter === 'SIGNED' ? item.signature_verified : !item.signature_verified)) &&
           `${item.name} ${item.package_id} ${item.description} ${item.capabilities.join(' ')}`
             .toLowerCase()
             .includes(query.toLowerCase()),
@@ -401,43 +403,65 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                 header: t('extensions.col.package'),
                 primary: true,
                 width: '22%',
-                render: row => (
-                  <div className="tp-stack-sm">
-                    <span className="mono" style={{fontWeight: 600}}>{row.package_id}</span>
-                    <span className="mono tp-muted">
-                      {t('extensions.activeVersion', {version: row.active_version ?? '—'})}
-                      {row.candidate_version ? t('extensions.candidateVersion', {version: row.candidate_version}) : ''}
-                    </span>
-                  </div>
-                ),
+                render: row => {
+                  const displayName = row.canonical_name || row.package_id;
+                  return (
+                    <div className="tp-stack-sm">
+                      <span className="mono" style={{fontWeight: 600}}>{displayName}</span>
+                      {row.canonical_name && row.canonical_name !== row.package_id ? (
+                        <span className="mono tp-muted">{row.package_id}</span>
+                      ) : null}
+                      <span className="mono tp-muted">
+                        {t('extensions.activeVersion', {version: row.active_version ?? '—'})}
+                        {row.candidate_version ? t('extensions.candidateVersion', {version: row.candidate_version}) : ''}
+                      </span>
+                    </div>
+                  );
+                },
               },
               {id: 'state', header: t('extensions.col.lifecycle'), width: '16%', render: row => <StatusPill tone={stateTone(row.state)} label={formatOperationalState(row.state)} />},
               {id: 'origin', header: t('extensions.col.origin'), width: '16%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
-              {id: 'sig', header: t('extensions.col.publisher'), width: '15%', render: row => <span>{row.enterprise_signed ? t('extensions.enterpriseSigned') : t('extensions.unsigned')}</span>},
+              {
+                id: 'sig',
+                header: t('extensions.col.publisher'),
+                width: '15%',
+                render: row => <span>{formatSignatureProvenance(row.signature_verified === true, row.signing_key_fingerprint, t, row.enterprise_signed)}</span>,
+              },
               {id: 'tier', header: t('extensions.col.executionTier'), width: '19%', render: row => <span className="mono">{row.execution_tier}</span>},
               {
                 id: 'actions',
                 header: t('common.actions'),
                 width: '12%',
-                render: row => (
-                  <RowActionsMenu
-                    label={t('common.actionsFor', {name: row.package_id})}
-                    items={[
-                      {id: 'permissions', label: t('extensions.action.reviewPermissions'), onClick: () => void openReview(row.id, 'upgrade')},
-                      ...(operator
-                        ? [
-                            {id: 'upgrade', label: t('extensions.action.upgrade'), onClick: () => { setUpgradeTarget(row); setUpgradeUri(''); setUpgradeSha(''); }},
-                            ...(row.previous_rollback_version
-                              ? [{id: 'rollback', label: t('extensions.action.rollback'), onClick: () => void prepareLifecycleAction(row, 'rollback')}]
-                              : []),
-                            {type: 'divider' as const},
-                            {id: 'quarantine', label: t('extensions.action.quarantine'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'quarantine')},
-                            {id: 'uninstall', label: t('extensions.action.uninstall'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'uninstall')},
-                          ]
-                        : []),
-                    ]}
-                  />
-                ),
+                render: row => {
+                  const displayName = row.canonical_name || row.package_id;
+                  const canUninstall =
+                    row.state === 'INSTALLED_DISABLED' ||
+                    row.state === 'QUARANTINED' ||
+                    row.state === 'PENDING_PERMISSION_APPROVAL';
+                  return (
+                    <RowActionsMenu
+                      label={t('common.actionsFor', {name: displayName})}
+                      items={[
+                        {id: 'permissions', label: t('extensions.action.reviewPermissions'), onClick: () => void openReview(row.id, 'upgrade')},
+                        ...(operator
+                          ? [
+                              {id: 'upgrade', label: t('extensions.action.upgrade'), onClick: () => { setUpgradeTarget(row); setUpgradeUri(''); setUpgradeSha(''); }},
+                              ...(row.previous_rollback_version
+                                ? [{id: 'rollback', label: t('extensions.action.rollback'), onClick: () => void prepareLifecycleAction(row, 'rollback')}]
+                                : []),
+                              {type: 'divider' as const},
+                              ...(row.state !== 'QUARANTINED'
+                                ? [{id: 'quarantine', label: t('extensions.action.quarantine'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'quarantine')}]
+                                : []),
+                              ...(canUninstall
+                                ? [{id: 'uninstall', label: t('extensions.action.uninstall'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'uninstall')}]
+                                : []),
+                            ]
+                          : []),
+                      ]}
+                    />
+                  );
+                },
               },
             ]}
           />
@@ -513,7 +537,12 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                 ),
               },
               {id: 'origin', header: t('extensions.col.origin'), width: '15%', render: row => <StatusPill tone={stateTone(row.origin_trust_tier)} label={formatOperationalState(row.origin_trust_tier)} />},
-              {id: 'sig', header: t('extensions.col.signature'), width: '14%', render: row => <span>{row.enterprise_signed ? t('extensions.enterpriseSigned') : t('common.none')}</span>},
+              {
+                id: 'sig',
+                header: t('extensions.col.signature'),
+                width: '14%',
+                render: row => <span>{formatSignatureProvenance(row.signature_verified, row.signing_key_fingerprint, t, row.enterprise_signed)}</span>,
+              },
               {id: 'tier', header: t('extensions.col.tier'), width: '15%', render: row => <span className="mono">{row.execution_tier}</span>},
               {id: 'caps', header: t('extensions.col.capabilities'), width: '14%', render: row => <span className="tp-muted">{row.capabilities.join(', ') || '—'}</span>},
               {
@@ -648,10 +677,20 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
             <KeyValueList
               items={[
                 {label: t('extensions.originTrust'), value: <StatusPill tone={stateTone(reviewDiff.origin_trust_tier)} label={formatOperationalState(reviewDiff.origin_trust_tier)} />},
-                {label: t('extensions.publisherSignature'), value: reviewDiff.enterprise_signed ? t('extensions.enterpriseSigned') : t('extensions.unsigned')},
+                {
+                  label: t('extensions.publisherSignature'),
+                  value: formatSignatureProvenance(reviewDiff.signature_verified === true, reviewDiff.signing_key_fingerprint, t),
+                },
+                {
+                  label: t('extensions.enterpriseSignature'),
+                  value: reviewDiff.enterprise_signed ? t('extensions.enterpriseSigned') : t('common.none'),
+                },
                 {label: t('extensions.col.executionTier'), value: reviewDiff.execution_tier, mono: true},
               ]}
             />
+            {reviewDiff.origin_trust_tier === 'unverified_external' && reviewDiff.signature_verified !== true ? (
+              <Banner tone="warn">{t('extensions.unsignedDevNote')}</Banner>
+            ) : null}
 
             <PermissionDiffView diff={reviewDiff} />
 
@@ -678,7 +717,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       <ConfirmDialog
         open={actionTarget !== null}
         onClose={() => setActionTarget(null)}
-        title={actionTarget ? t(`extensions.confirmTitle.${actionTarget.kind}`, {pkg: actionTarget.row.package_id}) : ''}
+        title={actionTarget ? t(`extensions.confirmTitle.${actionTarget.kind}`, {pkg: actionTarget.row.canonical_name || actionTarget.row.package_id}) : ''}
         description={
           actionTarget?.kind === 'quarantine'
             ? t('extensions.confirmDesc.quarantine', {
@@ -693,7 +732,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
               : t('extensions.confirmDesc.uninstall')
         }
         confirmLabel={actionTarget ? t(`extensions.confirmBtn.${actionTarget.kind}`) : t('common.action')}
-        requireMatch={actionTarget?.kind === 'quarantine' ? actionTarget.row.package_id : undefined}
+        requireMatch={actionTarget?.kind === 'quarantine' ? (actionTarget.row.canonical_name || actionTarget.row.package_id) : undefined}
         matchLabel={t('extensions.matchPackageId')}
         busy={busy}
         confirmDisabled={actionReason.trim().length < 5}
@@ -807,6 +846,20 @@ function formatQuotas(p: components['schemas']['ExtensionPermissionSet'], t: (ke
   });
 }
 
+function formatSignatureProvenance(
+  signatureVerified: boolean,
+  fingerprint: string | undefined,
+  t: (key: string, vars?: Record<string, string | number>) => string,
+  enterpriseSigned = false,
+): string {
+  const shortFp = fingerprint ? ` (${fingerprint.slice(0, 12)})` : '';
+  const pubStatus = signatureVerified ? `${t('extensions.signatureVerified')}${shortFp}` : t('extensions.unsigned');
+  if (enterpriseSigned) {
+    return `${pubStatus} · ${t('extensions.enterpriseSigned')}`;
+  }
+  return pubStatus;
+}
+
 function toCatalogEntry(value: unknown): CatalogEntry | null {
   if (!value || typeof value !== 'object') return null;
   const row = value as Record<string, unknown>;
@@ -822,6 +875,7 @@ function toCatalogEntry(value: unknown): CatalogEntry | null {
     : typeof rawCaps === 'string'
       ? [rawCaps]
       : [];
+  const rawFp = typeof row.signing_key_fingerprint === 'string' ? row.signing_key_fingerprint.trim() : '';
   return {
     id: String(row.id ?? row.package_id),
     name,
@@ -829,6 +883,8 @@ function toCatalogEntry(value: unknown): CatalogEntry | null {
     version: String(row.version ?? '0.0.0'),
     origin_trust_tier: trust,
     enterprise_signed: row.enterprise_signed === true,
+    signature_verified: row.signature_verified === true,
+    ...(rawFp ? {signing_key_fingerprint: rawFp} : {}),
     execution_tier: tier,
     capabilities: caps,
     description: typeof row.summary === 'string' ? row.summary : typeof row.description === 'string' ? row.description : '',
@@ -838,9 +894,8 @@ function toCatalogEntry(value: unknown): CatalogEntry | null {
 }
 
 function errText(cause: unknown, t: (key: string) => string): string {
-  const status = cause && typeof cause === 'object' && 'status' in cause ? Number(cause.status) : 0;
   const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
-  if (status === 409 || code.includes('already_installed') || code.includes('already_exists')) {
+  if (code.includes('already_installed') || code.includes('already_exists')) {
     return t('extensions.errAlreadyInstalled');
   }
   return cause instanceof Error ? cause.message : t('common.requestFailed');

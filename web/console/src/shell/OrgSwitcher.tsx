@@ -43,17 +43,23 @@ export function OrgSwitcher({
         <div className="tp-scope-menu-list" role="listbox" aria-label={t('common.organization')}>
           {organizations.map(org => {
             const selected = org.id === activeOrgId;
+            const deleting = org.status === 'DELETING' || org.status === 'PENDING_ERASURE';
             return (
               <button
                 key={org.id}
                 type="button"
                 role="option"
                 aria-selected={selected}
+                disabled={deleting}
                 className="tp-scope-menu-item"
                 data-selected={selected ? 'true' : 'false'}
-                onClick={() => onSelectOrg(org.id)}
+                onClick={() => {
+                  if (!deleting) onSelectOrg(org.id);
+                }}
               >
-                <span className="tp-scope-menu-item-label">{org.name}</span>
+                <span className="tp-scope-menu-item-label">
+                  {org.name}{deleting ? ` (${t('orgs.statusDeleting')})` : ''}
+                </span>
                 {selected ? <Check size={14} strokeWidth={2.2} className="tp-scope-menu-check" aria-hidden="true" /> : null}
               </button>
             );
