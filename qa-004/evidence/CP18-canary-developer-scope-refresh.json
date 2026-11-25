@@ -1,0 +1,27 @@
+{
+  "role": "project-scoped DEVELOPER",
+  "expectedProject": "qa004-isolation-canary",
+  "observations": [
+    {
+      "state": "login",
+      "scope": "QA-004 Isolated Canary / No env (Active workspace scope)",
+      "requestCount": "0"
+    },
+    {
+      "state": "refresh",
+      "scope": "QA-004 Isolated Canary / No env (Active workspace scope)",
+      "requestCount": "0"
+    },
+    {
+      "state": "no-project selection",
+      "scope": "No project / No env (Active workspace scope)",
+      "requestCount": "0"
+    },
+    {
+      "state": "refresh after no-project",
+      "scope": "QA-004 Isolated Canary / No env (Active workspace scope)",
+      "requestCount": "0"
+    }
+  ],
+  "interpretation": "project binding and zero-data isolation persisted; selecting No project was temporary and reload restored the only assigned project; no broadened data observed"
+}

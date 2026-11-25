@@ -1,0 +1,10 @@
+{
+  "project": "qa004-isolation-canary",
+  "status": 200,
+  "environments": [
+    {
+      "slug": "qa004-scope-canary-env",
+      "name": "qa004-scope-canary-env"
+    }
+  ]
+}

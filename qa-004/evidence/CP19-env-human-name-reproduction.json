@@ -1,0 +1,32 @@
+{
+  "interaction": "real Console Owner flow: Add environment",
+  "request": {
+    "method": "POST",
+    "path": "/admin/v1/projects/{projectId}/environments",
+    "body": {
+      "name": "QA-004 Human Label Check",
+      "slug": "qa004-human-label-check"
+    }
+  },
+  "createResponse": {
+    "status": 201,
+    "name": "QA-004 Human Label Check",
+    "slug": "qa004-human-label-check"
+  },
+  "subsequentList": {
+    "method": "GET",
+    "path": "/admin/v1/projects/{projectId}/environments",
+    "status": 200,
+    "matchingEnvironment": {
+      "name": "qa004-human-label-check",
+      "slug": "qa004-human-label-check"
+    }
+  },
+  "selectedWorkspace": "QA-004 Isolated Canary / qa004-human-label-check",
+  "observedDiscrepancy": "create response retained the distinct human name; persisted list response and workspace picker expose the slug as the name",
+  "screenshots": [
+    "CP19-environment-create-form.png",
+    "CP19-env-human-name-displayed.png",
+    "CP19-environment-picker-slug-options.png"
+  ]
+}
