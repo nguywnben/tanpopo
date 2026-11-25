@@ -442,7 +442,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                     <RowActionsMenu
                       label={t('common.actionsFor', {name: displayName})}
                       items={[
-                        {id: 'permissions', label: t('extensions.action.reviewPermissions'), onClick: () => void openReview(row.id, 'upgrade')},
+                        {id: 'permissions', label: t('extensions.action.reviewPermissions'), onClick: () => void openReview(row.id, row.active_version ? 'upgrade' : 'install')},
                         ...(operator
                           ? [
                               {id: 'upgrade', label: t('extensions.action.upgrade'), onClick: () => { setUpgradeTarget(row); setUpgradeUri(''); setUpgradeSha(''); }},

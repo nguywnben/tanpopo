@@ -1564,7 +1564,7 @@ func (s *Server) ensureSecretBindingsAuthorizedForCaller(
 	ownerProjPtr *string,
 	bindings []catalog.SecretBindingInput,
 ) bool {
-	if len(bindings) == 0 || actorHasOrgScopeBinding(sc.Actor, orgID) {
+	if len(bindings) == 0 || rbac.Authorize(sc.Actor, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID}) == nil {
 		return true
 	}
 	for _, b := range bindings {
