@@ -817,6 +817,10 @@ func (s *Server) handleCreateConnection(w http.ResponseWriter, r *http.Request) 
 		cfgJSON = string(rawCfg)
 	}
 
+	if !s.ensureSecretBindingsAuthorizedForCaller(w, r, sc, orgID, ownerProjPtr, bindings) {
+		return
+	}
+
 	conn, err := s.catalog.CreateProviderConnection(r.Context(), catalog.CreateProviderConnectionParams{
 		OrgID:            orgID,
 		OwnerProjectID:   ownerProjPtr,
@@ -1042,6 +1046,12 @@ func (s *Server) handleUpdateConnection(w http.ResponseWriter, r *http.Request) 
 				CredentialID: strings.TrimSpace(req.SecretBindings[slot]),
 				InjectMode:   catalog.InjectModeHostBlind,
 			})
+		}
+	}
+
+	if replaceBindings {
+		if !s.ensureSecretBindingsAuthorizedForCaller(w, r, sc, orgID, cur.OwnerProjectID, nextBindings) {
+			return
 		}
 	}
 
@@ -1544,4 +1554,35 @@ func (s *Server) loadConnectionSlotFingerprints(ctx context.Context, orgID, conn
 		return nil, err
 	}
 	return out, nil
+}
+
+func (s *Server) ensureSecretBindingsAuthorizedForCaller(
+	w http.ResponseWriter,
+	r *http.Request,
+	sc *authSessionContext,
+	orgID string,
+	ownerProjPtr *string,
+	bindings []catalog.SecretBindingInput,
+) bool {
+	if len(bindings) == 0 || actorHasOrgScopeBinding(sc.Actor, orgID) {
+		return true
+	}
+	for _, b := range bindings {
+		var secretProj sql.NullString
+		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
+			return q.QueryRowContext(r.Context(), s.rebind(`
+				SELECT owner_project_id FROM secret_credentials WHERE org_id = ? AND id = ?`),
+				orgID, b.CredentialID,
+			).Scan(&secretProj)
+		})
+		if errors.Is(err, sql.ErrNoRows) || (err == nil && (!secretProj.Valid || ownerProjPtr == nil || secretProj.String != *ownerProjPtr)) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "secret credential not found", false, nil)
+			return false
+		}
+		if err != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating secret credential scope", true, nil)
+			return false
+		}
+	}
+	return true
 }

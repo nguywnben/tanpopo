@@ -383,23 +383,26 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if isDeletingOrgStatus(org.Status) {
-		receipt, status, code, msg, foundReceipt := func() (cryptoShredReceiptDTO, int, string, string, bool) {
+		receipt, snapPending, status, code, msg, foundReceipt := func() (cryptoShredReceiptDTO, bool, int, string, string, bool) {
 			s.orgErasureMu.Lock()
 			defer s.orgErasureMu.Unlock()
 			latest, lerr := s.storage.Tenancy().GetOrganization(r.Context(), orgID)
 			if errors.Is(lerr, port.ErrNotFound) {
 				if rec, found := s.lookupCompletedOrgShredReceipt(r.Context(), orgID); found {
-					return rec, http.StatusOK, "", "", true
+					return rec, false, http.StatusOK, "", "", true
 				}
-				return cryptoShredReceiptDTO{}, http.StatusNotFound, "resource_not_found", "organization not found", false
+				return cryptoShredReceiptDTO{}, false, http.StatusNotFound, "resource_not_found", "organization not found", false
 			}
 			if lerr != nil {
-				return cryptoShredReceiptDTO{}, http.StatusInternalServerError, "internal_error", "failed reading organization", false
+				return cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed reading organization", false
 			}
-			rec, st, cd, ms := s.resumeDeletingOrganization(r.Context(), latest, sc.Actor.PrincipalID, requestIDFromContext(r.Context()), req.Reason)
-			return rec, st, cd, ms, st == http.StatusOK
+			rec, sp, st, cd, ms := s.resumeDeletingOrganization(r.Context(), latest, sc.Actor.PrincipalID, requestIDFromContext(r.Context()), req.Reason)
+			return rec, sp, st, cd, ms, st == http.StatusOK
 		}()
 		if foundReceipt && status == http.StatusOK {
+			if snapPending {
+				w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
+			}
 			writeJSON(w, http.StatusOK, receipt)
 			return
 		}
@@ -407,6 +410,8 @@ func (s *Server) handleDeleteOrganization(w http.ResponseWriter, r *http.Request
 		retryable := status >= 500
 		if status == http.StatusNotFound {
 			errType = "not_found_error"
+		} else if status == http.StatusConflict {
+			errType = "conflict_error"
 		}
 		writeErrorEnvelope(w, r, status, code, errType, msg, retryable, nil)
 		return
@@ -486,14 +491,14 @@ func (s *Server) executeOrganizationDeletion(
 	reason string,
 	shredRequestID string,
 ) (cryptoShredReceiptDTO, bool, int, string, string, *port.Organization) {
-	finalizeFn, receipt, immediate, status, code, msg, conflictLatest := s.prepareAndShredOrganizationDeletion(
+	finalizeFn, receipt, immediate, snapPending, status, code, msg, conflictLatest := s.prepareAndShredOrganizationDeletion(
 		ctx, sc, org, expectedVer, requestID, reason, shredRequestID,
 	)
 	if status != http.StatusOK {
-		return receipt, false, status, code, msg, conflictLatest
+		return receipt, snapPending, status, code, msg, conflictLatest
 	}
 	if immediate {
-		return receipt, false, http.StatusOK, "", "", nil
+		return receipt, snapPending, http.StatusOK, "", "", nil
 	}
 	receipt, snapPending, st, fcode, fmsg := finalizeFn(ctx)
 	return receipt, snapPending, st, fcode, fmsg, nil
@@ -509,16 +514,16 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 	requestID string,
 	reason string,
 	shredRequestID string,
-) (orgDeletionFinalizeFn, cryptoShredReceiptDTO, bool, int, string, string, *port.Organization) {
+) (orgDeletionFinalizeFn, cryptoShredReceiptDTO, bool, bool, int, string, string, *port.Organization) {
 	if org == nil {
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
 	}
 	orgID := org.ID
 	if isDeletingOrgStatus(org.Status) {
 		s.orgErasureMu.Lock()
 		defer s.orgErasureMu.Unlock()
-		rec, st, cd, ms := s.resumeDeletingOrganization(ctx, org, sc.Actor.PrincipalID, requestID, reason)
-		return nil, rec, st == http.StatusOK, st, cd, ms, nil
+		rec, sp, st, cd, ms := s.resumeDeletingOrganization(ctx, org, sc.Actor.PrincipalID, requestID, reason)
+		return nil, rec, st == http.StatusOK, sp, st, cd, ms, nil
 	}
 
 	now := s.nowMs()
@@ -530,11 +535,11 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 	// collect keys/principals to invalidate, and tear down RESTRICT FKs leaving DEK metadata intact.
 	tx1, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed starting teardown fence transaction", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed starting teardown fence transaction", nil
 	}
 	defer func() { _ = tx1.Rollback() }()
 	if err := port.SetOrgRLSTx(ctx, tx1, s.dialect, orgID); err != nil {
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed initializing teardown RLS context", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed initializing teardown RLS context", nil
 	}
 
 	resFence, err := tx1.ExecContext(ctx, s.rebind(`
@@ -543,16 +548,16 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 		now, orgID, expectedVer,
 	)
 	if err != nil {
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed fencing organization version", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed fencing organization version", nil
 	}
 	if affected, _ := resFence.RowsAffected(); affected == 0 {
 		_ = tx1.Rollback()
 		if latest, lerr := s.storage.Tenancy().GetOrganization(ctx, orgID); lerr == nil {
-			return nil, cryptoShredReceiptDTO{}, false, http.StatusConflict, "optimistic_lock_conflict", "optimistic lock conflict", latest
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusConflict, "optimistic_lock_conflict", "optimistic lock conflict", latest
 		} else if errors.Is(lerr, port.ErrNotFound) {
-			return nil, cryptoShredReceiptDTO{}, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
 		}
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusConflict, "optimistic_lock_conflict", "optimistic lock conflict", org
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusConflict, "optimistic_lock_conflict", "optimistic lock conflict", org
 	}
 	fencedVer := expectedVer + 1
 
@@ -562,67 +567,67 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 		orgID,
 	)
 	if kerr != nil {
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed enumerating organization virtual keys", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed enumerating organization virtual keys", nil
 	}
 	for kRows.Next() {
 		var kid string
 		if scanErr := kRows.Scan(&kid); scanErr != nil {
 			_ = kRows.Close()
-			return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed scanning virtual key id", nil
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed scanning virtual key id", nil
 		}
 		activeKeyIDs = append(activeKeyIDs, kid)
 	}
 	if rowsErr := kRows.Err(); rowsErr != nil {
 		_ = kRows.Close()
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed iterating organization virtual keys", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed iterating organization virtual keys", nil
 	}
 	_ = kRows.Close()
 	revokedKeysCount = len(activeKeyIDs)
 
 	pRows, perr := tx1.QueryContext(ctx, s.rebind(`SELECT id FROM principals WHERE org_id = ?`), orgID)
 	if perr != nil {
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed enumerating organization principals", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed enumerating organization principals", nil
 	}
 	for pRows.Next() {
 		var pid string
 		if scanErr := pRows.Scan(&pid); scanErr != nil {
 			_ = pRows.Close()
-			return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed scanning principal id", nil
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed scanning principal id", nil
 		}
 		orgPrincipals = append(orgPrincipals, pid)
 	}
 	if rowsErr := pRows.Err(); rowsErr != nil {
 		_ = pRows.Close()
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed iterating organization principals", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed iterating organization principals", nil
 	}
 	_ = pRows.Close()
 
 	if err := cleanupOrgRestrictedFKsTx(ctx, tx1, s.dialect, orgID); err != nil {
 		_ = tx1.Rollback()
 		if errors.Is(err, port.ErrResourceInUse) {
-			return nil, cryptoShredReceiptDTO{}, false, http.StatusConflict, "resource_in_use", "organization cannot be deleted while its principals are referenced by global kill switches or change requests", nil
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusConflict, "resource_in_use", "organization cannot be deleted while its principals are referenced by global kill switches or change requests", nil
 		}
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed tearing down organization resources", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed tearing down organization resources", nil
 	}
 
 	if err := tx1.Commit(); err != nil {
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed committing organization teardown fence", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed committing organization teardown fence", nil
 	}
 
 	s.orgErasureMu.Lock()
 	if latestOrg, lerr := s.storage.Tenancy().GetOrganization(ctx, orgID); errors.Is(lerr, port.ErrNotFound) {
 		s.orgErasureMu.Unlock()
 		if receipt, found := s.lookupCompletedOrgShredReceipt(ctx, orgID); found {
-			return nil, receipt, true, http.StatusOK, "", "", nil
+			return nil, receipt, true, false, http.StatusOK, "", "", nil
 		}
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusNotFound, "resource_not_found", "organization not found", nil
 	} else if lerr != nil {
 		s.orgErasureMu.Unlock()
-		return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed reading organization", nil
+		return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed reading organization", nil
 	} else if latestOrg.Version != fencedVer {
-		receipt, status, code, msg := s.resumeDeletingOrganization(ctx, latestOrg, sc.Actor.PrincipalID, requestID, reason)
+		receipt, sp, status, code, msg := s.resumeDeletingOrganization(ctx, latestOrg, sc.Actor.PrincipalID, requestID, reason)
 		s.orgErasureMu.Unlock()
-		return nil, receipt, status == http.StatusOK, status, code, msg, nil
+		return nil, receipt, status == http.StatusOK, sp, status, code, msg, nil
 	}
 
 	// Phase 2: Crypto-shred organization DEK after winning the OCC version fence.
@@ -631,7 +636,7 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 		meta, merr := s.vault.GetOrgKeyMetadata(ctx, orgID)
 		if merr != nil && !errors.Is(merr, port.ErrNotFound) {
 			s.orgErasureMu.Unlock()
-			return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed reading organization encryption key metadata", nil
+			return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed reading organization encryption key metadata", nil
 		}
 		if merr == nil && meta != nil {
 			reqID := strings.TrimSpace(shredRequestID)
@@ -643,7 +648,7 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 				ExpectedGeneration: meta.KeyGeneration,
 			}); serr != nil {
 				s.orgErasureMu.Unlock()
-				return nil, cryptoShredReceiptDTO{}, false, http.StatusInternalServerError, "internal_error", "failed crypto-shredding organization DEK", nil
+				return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed crypto-shredding organization DEK", nil
 			}
 			destroyedDEK = fmt.Sprintf("%s:v%d:g%d", orgID, meta.DEKVersion, meta.KeyGeneration)
 		} else {
@@ -773,7 +778,7 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 		ShreddedAt:              formatTimeRFC3339Ms(now),
 		RevokedVirtualKeysCount: revokedKeysCount,
 	}
-	return finalizeFn, preview, false, http.StatusOK, "", "", nil
+	return finalizeFn, preview, false, false, http.StatusOK, "", "", nil
 }
 
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {

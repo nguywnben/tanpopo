@@ -591,3 +591,168 @@ func TestSecurityAudit_FourEyesDeletionFullTeardown(t *testing.T) {
 		t.Fatalf("expected approved four-eyes project deletion to remove project & revoke active keys; prjCount=%d activeKeyCount=%d", prjCount, activeKeyCount)
 	}
 }
+
+func TestSecurityAudit_TeamAdminCannotBindOrgOwnedSecretToProjectConnection(t *testing.T) {
+	h := newPart2TestHarness(t, 23)
+	boot, ownerCookie := h.bootstrapOwner(t, "SecScope Org", "sec-scope-proj")
+
+	// 1. Seed a built-in provider adapter row & opt-in via org extension policies for child project use.
+	adapterID := seedLocalOpenAIAdapter(t, h, "api.openai.com")
+	recPol := h.doAuthedCookie(t, http.MethodPut, "/admin/v1/organizations/"+boot.OrgID+"/extension-policies", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"min_plugin_trust": "ANY_APPROVED",
+		"policies": []map[string]any{
+			{"package_id": "tanpopo.local_openai", "enabled": true},
+		},
+	})
+	if recPol.Code != http.StatusOK {
+		t.Fatalf("PUT /extension-policies code=%d body=%s", recPol.Code, recPol.Body.String())
+	}
+
+	// 2. ORG_OWNER creates an org-owned secret (owner_project_id NULL) and a project-owned secret.
+	recOrgSec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/secrets", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":         "org-master-openai-key",
+		"secret_kind":  "API_KEY",
+		"secret_value": "sk-org-secret-do-not-expose",
+	})
+	if recOrgSec.Code != http.StatusCreated {
+		t.Fatalf("create org secret code=%d body=%s", recOrgSec.Code, recOrgSec.Body.String())
+	}
+	var orgSec struct {
+		CredentialID string `json:"credential_id"`
+	}
+	mustDecodeJSON(t, recOrgSec.Body.Bytes(), &orgSec)
+
+	recProjSec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/secrets", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"name":         "proj-scoped-openai-key",
+		"project_id":   boot.ProjectID,
+		"secret_kind":  "API_KEY",
+		"secret_value": "sk-proj-secret-allowed",
+	})
+	if recProjSec.Code != http.StatusCreated {
+		t.Fatalf("create project secret code=%d body=%s", recProjSec.Code, recProjSec.Body.String())
+	}
+	var projSec struct {
+		CredentialID string `json:"credential_id"`
+	}
+	mustDecodeJSON(t, recProjSec.Body.Bytes(), &projSec)
+
+	// 3. Create & enroll a project-scoped TEAM_ADMIN bound only to boot.ProjectID.
+	recMem := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/members", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"email":       "ta-secret@tanpopo.test",
+		"kind":        "HUMAN",
+		"roles":       []string{"TEAM_ADMIN"},
+		"project_ids": []string{boot.ProjectID},
+	})
+	if recMem.Code != http.StatusCreated {
+		t.Fatalf("POST /members code=%d body=%s", recMem.Code, recMem.Body.String())
+	}
+	var mem struct {
+		EnrollmentToken string `json:"enrollment_token"`
+	}
+	mustDecodeJSON(t, recMem.Body.Bytes(), &mem)
+	recEnroll := h.doPublic(t, http.MethodPost, "/admin/v1/auth/enroll", map[string]any{
+		"token":    mem.EnrollmentToken,
+		"password": "TeamAdminStrong!2026",
+	})
+	if recEnroll.Code != http.StatusOK {
+		t.Fatalf("POST /auth/enroll code=%d body=%s", recEnroll.Code, recEnroll.Body.String())
+	}
+	var taBody struct {
+		CSRFToken string `json:"csrf_token"`
+	}
+	mustDecodeJSON(t, recEnroll.Body.Bytes(), &taBody)
+	taCookie := recEnroll.Result().Cookies()[0]
+	for _, c := range recEnroll.Result().Cookies() {
+		if strings.Contains(c.Name, "tanpopo_admin_session") {
+			taCookie = c
+			break
+		}
+	}
+
+	// 4. TEAM_ADMIN MUST NOT bind org-owned secret on POST /connections -> uniform 404 resource_not_found.
+	recCreateBlocked := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", taCookie, taBody.CSRFToken, "", map[string]any{
+		"project_id":   boot.ProjectID,
+		"name":         "ta-org-secret-conn",
+		"adapter_id":   adapterID,
+		"endpoint_url": "https://api.openai.com/v1",
+		"billing_mode": "COMMERCIAL_API",
+		"data_region":  "US",
+		"secret_bindings": map[string]string{
+			"api_key": orgSec.CredentialID,
+		},
+	})
+	if recCreateBlocked.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when TEAM_ADMIN binds org-owned secret on POST /connections, got %d body=%s", recCreateBlocked.Code, recCreateBlocked.Body.String())
+	}
+
+	// 5. TEAM_ADMIN CAN create a project connection using their own project-owned secret -> 201 Created.
+	recCreateOK := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", taCookie, taBody.CSRFToken, "", map[string]any{
+		"project_id":   boot.ProjectID,
+		"name":         "ta-proj-secret-conn",
+		"adapter_id":   adapterID,
+		"endpoint_url": "https://api.openai.com/v1",
+		"billing_mode": "COMMERCIAL_API",
+		"data_region":  "US",
+		"secret_bindings": map[string]string{
+			"api_key": projSec.CredentialID,
+		},
+	})
+	if recCreateOK.Code != http.StatusCreated {
+		t.Fatalf("expected 201 when TEAM_ADMIN binds project-owned secret, got %d body=%s", recCreateOK.Code, recCreateOK.Body.String())
+	}
+	var conn struct {
+		ID      string `json:"id"`
+		Version int64  `json:"version"`
+	}
+	mustDecodeJSON(t, recCreateOK.Body.Bytes(), &conn)
+
+	// 6. TEAM_ADMIN MUST NOT rebind that connection to an org-owned secret via PATCH /connections/{id} -> 404.
+	recPatchBlocked := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+conn.ID, taCookie, taBody.CSRFToken, FormatETag(conn.Version), map[string]any{
+		"secret_bindings": map[string]string{
+			"api_key": orgSec.CredentialID,
+		},
+	})
+	if recPatchBlocked.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 when TEAM_ADMIN rebinds org-owned secret on PATCH /connections, got %d body=%s", recPatchBlocked.Code, recPatchBlocked.Body.String())
+	}
+
+	// 7. ORG_OWNER retains authority to bind the org-owned secret to the connection -> 200 OK.
+	recPatchOwnerOK := h.doAuthedCookie(t, http.MethodPatch, "/admin/v1/connections/"+conn.ID, ownerCookie, boot.CSRFToken, FormatETag(conn.Version), map[string]any{
+		"secret_bindings": map[string]string{
+			"api_key": orgSec.CredentialID,
+		},
+	})
+	if recPatchOwnerOK.Code != http.StatusOK {
+		t.Fatalf("expected 200 when ORG_OWNER binds org-owned secret on PATCH /connections, got %d body=%s", recPatchOwnerOK.Code, recPatchOwnerOK.Body.String())
+	}
+}
+
+func TestCodeReview_PlaygroundAndMCPRejectDeletingTenant(t *testing.T) {
+	h := newPart2TestHarness(t, 24)
+	boot, ownerCookie := h.bootstrapOwner(t, "Deleting Tenant Org", "del-proj")
+	ctx := context.Background()
+
+	// Mark project as DELETING via raw UPDATE (simulating in-flight erasure Phase 1 fence).
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE projects SET status = 'DELETING' WHERE id = ?`, boot.ProjectID); err != nil {
+		t.Fatalf("fence project to DELETING: %v", err)
+	}
+
+	recPG := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/playground/sessions", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"project_id": boot.ProjectID,
+		"env_id":     boot.EnvID,
+	})
+	if recPG.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on POST /playground/sessions for DELETING project, got %d body=%s", recPG.Code, recPG.Body.String())
+	}
+
+	recMCP := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/mcp/servers", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"project_id":   boot.ProjectID,
+		"slug":         "deleting-mcp",
+		"name":         "Deleting MCP",
+		"transport":    "streamable_http",
+		"endpoint_url": "https://mcp.example.com/mcp",
+	})
+	if recMCP.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on POST /mcp/servers for DELETING project, got %d body=%s", recMCP.Code, recMCP.Body.String())
+	}
+}

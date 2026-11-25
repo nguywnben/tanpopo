@@ -63,6 +63,9 @@ func (s *Server) handleCreatePlaygroundSession(w http.ResponseWriter, r *http.Re
 	if !s.authorize(w, r, sc, rbac.ActionPlaygroundCreate, rbac.TargetScope{OrgID: orgID, ProjectID: projectID}) {
 		return
 	}
+	if !s.requireActiveOrgAndProject(w, r, orgID, projectID) {
+		return
+	}
 	var envProjectID string
 	err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
 		return q.QueryRowContext(r.Context(), s.rebind(`SELECT project_id FROM environments WHERE org_id=? AND id=?`), orgID, envID).Scan(&envProjectID)
@@ -123,9 +126,21 @@ func (s *Server) handleCreatePlaygroundSession(w http.ResponseWriter, r *http.Re
 		AllowedRoutes: []string{"/v1/chat/completions"},
 		ExpiresAtMs:   &expiresAtMs, ActorID: ownerID,
 	})
+	snapshotSyncPending := false
 	if err != nil {
-		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating ephemeral playground key", true, nil)
-		return
+		if errors.Is(err, vkey.ErrSnapshotSyncFailed) && created != nil {
+			snapshotSyncPending = true
+		} else {
+			switch {
+			case errors.Is(err, port.ErrNotFound):
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "environment or project not found", false, nil)
+			case errors.Is(err, port.ErrInvalidInput):
+				writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+			default:
+				writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed creating ephemeral playground key", true, nil)
+			}
+			return
+		}
 	}
 	if _, err = s.ledgers.UpsertLedger(r.Context(), ledger.UpsertLedgerParams{
 		OrgID: orgID, ScopeType: ledger.ScopeVirtualKey, ScopeID: created.Summary.ID,
@@ -138,6 +153,9 @@ func (s *Server) handleCreatePlaygroundSession(w http.ResponseWriter, r *http.Re
 		})
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed provisioning playground budget ceiling", true, nil)
 		return
+	}
+	if snapshotSyncPending {
+		w.Header().Set("X-Tanpopo-Snapshot-Sync", "pending")
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusCreated, playgroundSessionResponse{

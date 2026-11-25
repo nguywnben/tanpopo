@@ -550,7 +550,7 @@ func (s *Server) applyApprovedChangeRequest(ctx context.Context, sc *authSession
 			if reason == "" {
 				reason = "four-eyes approved organization deletion"
 			}
-			finalizeFn, _, immediate, st, code, msg, _ := s.prepareAndShredOrganizationDeletion(
+			finalizeFn, _, immediate, _, st, code, msg, _ := s.prepareAndShredOrganizationDeletion(
 				ctx, sc, org, org.Version, reqID, reason, payload.ShredRequestID,
 			)
 			if st != http.StatusOK {

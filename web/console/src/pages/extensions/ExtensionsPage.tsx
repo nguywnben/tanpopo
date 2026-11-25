@@ -201,7 +201,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         setUpgradeSha(entry.sha256);
         return;
       }
-      await openReview(existing.id, 'upgrade');
+      await openReview(existing.id, existing.active_version ? 'upgrade' : 'install');
       return;
     }
     if (!entry.source_uri || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
