@@ -1,0 +1,32 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "browser": "Playwright WebKit/WPE",
+  "viewport": {"width": 390, "height": 844},
+  "role": "ORG_OWNER",
+  "route": "MCP Hub",
+  "initial_proxy_attempt": {
+    "result": 403,
+    "error": "csrf_validation_failed",
+    "csrf_header_present": true,
+    "csrf_header_matches_current_session": true,
+    "origin_matches_browser_host": true,
+    "cause": "Test HTTPS proxy exposed origin https://127.0.0.1:19443 while this loopback runtime's source-derived allowlist is http(s)://127.0.0.1:18132"
+  },
+  "harness_correction": "Changed only the temporary local reverse proxy to forward the configured allowed HTTPS origin https://127.0.0.1:18132. Tanpopo source and runtime configuration were not modified.",
+  "retry": {
+    "session_status": 200,
+    "sync_status": 200,
+    "synced_tools": 1,
+    "schema_locked_tools": 0,
+    "page_errors": 0,
+    "layout": {
+      "before_sync": {"viewport_width": 390, "document_width": 390, "body_width": 390, "main_width": 390},
+      "after_sync": {"viewport_width": 390, "document_width": 390, "body_width": 390, "main_width": 390}
+    },
+    "visible_tool": "qa004-cp59-loopback-echo__echo",
+    "schema_state": "Pinned"
+  },
+  "visual_review": "The successful screenshot was visually inspected. The mobile navigation is usable, the status banner and server card reflow vertically, and the long observed schema hash wraps within the viewport. Expanding tool details exposes the grant selector and disabled Grant button; the test key had already been revoked.",
+  "classification": "PASS (scoped WebKit mobile Console). The initial 403 was caused by this local test proxy using an origin absent from the runtime allowlist; matching the configured loopback origin made the real UI action succeed in WebKit. Not a product defect.",
+  "limitations": ["One Owner session and MCP screen only", "No physical mobile device", "Other WebKit routes, roles, locales, dark theme, accessibility and data-heavy tables remain unverified"]
+}
