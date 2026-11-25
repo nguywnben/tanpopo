@@ -24,6 +24,10 @@ Actual: both trace records report `usage_accuracy=EXACT` and `total_cost_micros=
 - `../evidence/CP07-native-ollama-persistent-usage.json` — trace and FinOps API readback.
 - `../evidence/CP07-native-traces-after-stream.png`, `../evidence/CP07-native-finops-after-stream.png` — actual browser screenshots, visually inspected.
 
+### Independent provider-plane retest (CP30)
+
+A recovered local Ollama connection and newly activated deployment served one cookie-free `/v1/chat/completions` request through a temporary route. The upstream returned exact 7/4 usage; the real Traces UI waterfall displayed `Exact` and `$0.000000`. A separate FinOps `group_by=key` read for the same key reported one exact request and `exact_micro_usd=1`. The trace is request `trc_01m89hpm7ye0081h0g1g1bxnfq`; the real UI trace list and waterfall were visually inspected. This independently reproduces the trace-versus-settlement mismatch on a provider-plane route. See `evidence/CP30-provider-recovery-results.json` and `evidence/CP30-recovery-trace-inspect.png`.
+
 ## Business impact
 
 Operators cannot rely on traces to reconcile customer charges or investigate requests. The UI asserts “Exact” for estimated usage, and request-level zero cost cannot be reconciled to successful nonzero settlements and summary totals.

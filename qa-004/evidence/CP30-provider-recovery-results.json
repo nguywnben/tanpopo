@@ -1,0 +1,170 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 at 127.0.0.1:18128; local synthetic provider at 127.0.0.1:18126",
+  "provider_recovery": {
+    "starting_connection_state": "CREATED_UNVERIFIED",
+    "starting_deployment_state": "PROVISIONED",
+    "fixture_iteration": {
+      "first_success_stub": "served /api/tags but not the adapter's observed /v1/models probe path",
+      "first_probe_http": 404,
+      "connection_after_first_probe": "CREATED_UNVERIFIED",
+      "classification": "test fixture mismatch; not a Tanpopo defect"
+    },
+    "corrected_fixture_probe": {
+      "endpoint": "GET /v1/models",
+      "ui_result": "probe succeeded in 6 ms",
+      "connection_state": "ACTIVE",
+      "connection_version": 7,
+      "provider_fixture_observed": [
+        {
+          "path": "/v1/models"
+        }
+      ]
+    },
+    "deployment_after_probe": {
+      "state": "PROVISIONED",
+      "connection_state": "ACTIVE",
+      "version": 1,
+      "ui_action": "Activate deployment"
+    },
+    "manual_ui_activation": {
+      "result": "Deployment activated cleanly as ACTIVE_HEALTHY.",
+      "state": "ACTIVE_HEALTHY",
+      "connection_state": "ACTIVE",
+      "version": 2
+    }
+  },
+  "authorized_live_route_inference": {
+    "temporary_route_slug": "qa004-provider-recovery-route",
+    "temporary_route_target": "dpl_01m897vpcve008s9jjtnxtxvae",
+    "route_creation": "authorized Team Admin API, HTTP 201; Console route-target picker remained blocked by DEF-054",
+    "virtual_key_creation": "real Access & Keys UI; metadata-only API readback excluded plaintext secret",
+    "initial_key_grant": "temporary route slug was rejected as a path grant; UI helper text specifies path prefixes such as /v1/*",
+    "initial_request": {
+      "status": 403,
+      "error": "scope_or_plane_denied",
+      "message": "Virtual Key route allowlist denies /v1/chat/completions.",
+      "provider_fixture_requests": 0,
+      "classification": "expected authorization denial"
+    },
+    "grant_update": {
+      "real_ui_edit": true,
+      "allowed_planes": [
+        "PROVIDER"
+      ],
+      "allowed_routes": [
+        "/v1/*"
+      ],
+      "metadata_version": 2
+    },
+    "cookie_free_request": {
+      "method": "POST /v1/chat/completions",
+      "credentials_mode": "omit",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "response_model": "qa004-mock-failing",
+      "response_text": "Synthetic provider recovered.",
+      "usage": {
+        "prompt_tokens": 7,
+        "completion_tokens": 4,
+        "total_tokens": 11
+      },
+      "provider_fixture_observed": [
+        {
+          "path": "/v1/chat/completions"
+        }
+      ]
+    },
+    "persistent_trace": {
+      "route_slug": "qa004-provider-recovery-route",
+      "http_status": 200,
+      "usage_accuracy": "EXACT",
+      "trace_total_cost_micros": 0,
+      "console_duration_ms": 7,
+      "screenshots": [
+        "CP30-recovery-trace-list.png",
+        "CP30-recovery-trace-inspect.png"
+      ],
+      "request_id": "trc_01m89hpm7ye0081h0g1g1bxnfq"
+    },
+    "finops_readback": {
+      "group_by": "key",
+      "key_name": "QA004 provider recovery probe",
+      "exact_micro_usd": 1,
+      "estimated_micro_usd": 0,
+      "exact_request_count": 1,
+      "estimated_request_count": 0,
+      "unmetered_request_count": 0
+    }
+  },
+  "key_cleanup_and_audit": {
+    "key_metadata": {
+      "id": "vky_01m89hhsjee00a17b4cbz1ttrz",
+      "state": "REVOKED",
+      "version": 3,
+      "allowed_planes": [
+        "PROVIDER"
+      ],
+      "allowed_routes": [
+        "/v1/*"
+      ]
+    },
+    "post_revoke_replay": {
+      "status": 401,
+      "error": "invalid_virtual_key",
+      "provider_fixture_request_count_before": 1,
+      "provider_fixture_request_count_after": 1
+    },
+    "owner_audit_ui": {
+      "created_sequence": 186,
+      "grants_updated_sequence": 187,
+      "revoked_sequence": 188,
+      "route_created_sequence": 185,
+      "route_deleted_sequence": 189
+    },
+    "team_admin_audit_api": {
+      "status": 403,
+      "classification": "expected audit-read permission boundary"
+    },
+    "owner_console_hash_verification": "RFC 8785 JCS chain intact across 191 events"
+  },
+  "cleanup": {
+    "temporary_route_delete_status": 204,
+    "final_route_list": [
+      "qa004-loopback"
+    ],
+    "one_time_key_secret_file_removed": true,
+    "no_secret_or_database_artifacts_committed": true
+  },
+  "reconciliation": {
+    "DEF_002": "scoped recovery and live inference passed after valid provider probe and explicit deployment activation; failed-only dry-run remained excluded in CP29",
+    "DEF_052": "same request trace reports exact/0 while FinOps reports one exact request/1 micro-USD; confirms existing defect, no new ID",
+    "DEF_053": "with exact 7/4 usage and displayed 1000/2000 nano-USD-per-token values, labels imply 15 micro-USD while FinOps records 1 micro-USD; confirms existing unit-contract defect, no new ID",
+    "new_defect": false
+  },
+  "screenshots_visually_inspected": [
+    "CP30-provider-recovery-probe.png",
+    "CP30-recovered-deployment-provisioned.png",
+    "CP30-recovered-deployment-activated.png",
+    "CP30-provider-recovery-key-form.png",
+    "CP30-provider-recovery-key-route-grant.png",
+    "CP30-provider-recovery-key-granted.png",
+    "CP30-provider-recovery-key-revoked.png",
+    "CP30-audit-key-created.png",
+    "CP30-audit-key-revoked.png",
+    "CP30-audit-chain-verified.png",
+    "CP30-recovery-trace-list.png",
+    "CP30-recovery-trace-inspect.png"
+  ],
+  "limitations": [
+    "This covers one synthetic Ollama adapter, one 401-to-healthy recovery, one request protocol, and one project/environment only.",
+    "Failure after activation, retry/failover, stream cancellation, other adapters, deployments and roles remain unverified.",
+    "The trace/FinOps discrepancy and pricing-unit discrepancy remain unresolved and are tracked as DEF-052 and DEF-053."
+  ],
+  "sanitization": "No plaintext Virtual Key, credentials, CSRF tokens, cookies, database files, or raw provider logs are included.",
+  "deployment_rate_card": {
+    "input_token_nano_usd": 1000,
+    "output_token_nano_usd": 2000,
+    "self_hosted_zero_rate": false
+  }
+}

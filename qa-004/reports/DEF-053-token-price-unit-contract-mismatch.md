@@ -24,6 +24,10 @@ Under that stated contract, exact 7/4 token usage at 1000/2000 nano-USD per toke
 - `../evidence/CP07-native-ollama-settlements.json` — actual persisted cost of 1 micro-USD.
 - Source contract references: RC6 `docs/architecture/data-model.md` line 19; `docs/specifications/usage-billing-observability.md` line 26; Console English locale keys `models.rate.input_token_nano_usd` and `models.rate.output_token_nano_usd`; calculator `internal/finops/pricing/calculator.go`; direct mapping in `internal/admin/http/models.go`.
 
+### Independent provider-plane retest (CP30)
+
+The recovered synthetic Ollama route returned exact usage of 7 input / 4 output tokens with the same displayed 1,000 / 2,000 nano-USD fields and `self_hosted_zero_rate=false`. Under the Console's per-token labels, this is 15,000 nano-USD, or 15 micro-USD. FinOps again recorded 1 micro-USD for the exact request. This independently reproduces the documented unit conflict in a provider-plane route; it does not resolve which contract Product intends. See `evidence/CP30-provider-recovery-results.json`.
+
 ## Business impact
 
 Pricing can be under-collected by orders of magnitude, while organization owners have no UI cue that the configured values are interpreted per million. Budgets, chargeback and customer invoices can be materially wrong. A unit change can also make existing saved price cards unsafe to reinterpret without migration.
