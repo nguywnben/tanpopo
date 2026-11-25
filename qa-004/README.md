@@ -11,9 +11,10 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP05 isolated test-root verifier and provider activation](checkpoints/CP05-test-root-extension-verifier.md)
 - [CP06 synthetic provider, model, deployment and route setup](checkpoints/CP06-provider-model-route.md)
 - [CP07 native Ollama end-to-end journey](checkpoints/CP07-native-ollama-end-to-end.md)
+- [CP08 budgets, enforcement, and chargeback exports](checkpoints/CP08-finops-budgets-and-exports.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
 - [New defects](NEW-DEFECT-REGISTER.md)
 - [Release signing readiness](RELEASE-SIGNING-READINESS.md)
 
-QA is ongoing. The Ollama journey has three confirmed new failures (DEF-051–053); 46 historical findings remain UNVERIFIED, with one scoped PASS and three PARTIAL retests. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**
+QA is ongoing. Three confirmed new failures (DEF-051–053) remain open; 42 historical findings are UNVERIFIED, five have scoped PASS, and three remain PARTIAL. No full product acceptance or release approval is claimed. **GATE-REL-07 remains BLOCKED.**

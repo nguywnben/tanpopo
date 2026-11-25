@@ -1,0 +1,17 @@
+{
+  "selected_group": "model",
+  "visible_rows": 1,
+  "visible_text": "sh\nKill Switch\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nFinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExported JSON chargeback report.\nExact settled\n$0.000002\nProvider-reported usage\nEstimated settled\n$0.000001\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n1\nGroup by\nModel\nModel\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nqa004-mock\t\nExact\n$0.000002\n\t\nEstimated\n$0.000001\n\t2 / 1\t\n0",
+  "csv": {
+    "suggestedFilename": "tanpopo-chargeback-model.csv",
+    "bytes": 135,
+    "prefix": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\nqa004-mock,2,1,2,1,0\n",
+    "sha256": "06e1ca1916fd294a7bced886129928a034a805d4e3a8cab3bc0ea501699a7162"
+  },
+  "json": {
+    "suggestedFilename": "tanpopo-chargeback-model.json",
+    "bytes": 195,
+    "prefix": "[\n  {\n    \"group_key\": \"qa004-mock\",\n    \"exact_micro_usd\": 2,\n    \"estimated_micro_usd\": 1,\n    \"exact_request_count\": 2,\n    \"estimated_request_count\": 1,\n    \"unmetered_request_count\": 0\n  }\n]",
+    "sha256": "5789b7d65660a8ced30428d8c41d17cc1501ff796039712410083faf651b1636"
+  }
+}

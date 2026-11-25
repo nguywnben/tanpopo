@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "data": [
+    {
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m895k8pee008b440xk2ef12p",
+      "period": "MONTHLY",
+      "hard_limit_micros": 100,
+      "settled_exact_micros": 0,
+      "settled_estimated_micros": 0,
+      "version": 1
+    }
+  ]
+}

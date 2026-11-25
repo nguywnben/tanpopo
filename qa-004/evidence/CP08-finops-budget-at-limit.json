@@ -1,0 +1,22 @@
+{
+  "budget_readback": [
+    {
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 1,
+      "exact": 1,
+      "estimated": 0
+    }
+  ],
+  "attempt": {
+    "status": 429,
+    "request_id": "req_01m897e3q4e00aww84018w544q",
+    "trace_id": "trc_01m897e3q4e00awxk54kwsybxn",
+    "error": {
+      "code": "project_budget_exceeded",
+      "message": "Budget limit exceeded across organization, project, environment, or virtual key scope."
+    },
+    "provider_requests_before": 3,
+    "provider_requests_after": 3,
+    "upstream_called": false
+  }
+}

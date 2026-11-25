@@ -1,0 +1,43 @@
+{
+  "budget": {
+    "api_after_hard_refresh": {
+      "status": 200,
+      "items": [
+        {
+          "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m895k8pee008b440xk2ef12p",
+          "period": "MONTHLY",
+          "limit": 100,
+          "exact": 1,
+          "estimated": 0,
+          "version": 5
+        }
+      ]
+    },
+    "ui_row_after_reload": 1
+  },
+  "chargeback": {
+    "projectTable": "Project\tExact\tEstimated\tExact / Est. reqs\tUnmetered\ndefault\t\nExact\n$0.000002\n\t\nEstimated\n$0.000001\n\t2 / 1\t\n0",
+    "projectTableSelected": "Project\tExact\tEstimated\tExact / Est. reqs\tUnmetered\ndefault\t\nExact\n$0.000002\n\t\nEstimated\n$0.000001\n\t2 / 1\t\n0",
+    "modelTable": "Model\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nqa004-mock\t\nExact\n$0.000002\n\t\nEstimated\n$0.000001\n\t2 / 1\t\n0",
+    "projectCsv": {
+      "filename": "tanpopo-chargeback-project.csv",
+      "bytes": 132,
+      "sha256": "e5654df57e86fecab73c24981a6acb1cb3a0cf4c588acd6c97e6233b66ce8293",
+      "content": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\ndefault,2,1,2,1,0\n"
+    },
+    "modelCsv": {
+      "filename": "tanpopo-chargeback-model.csv",
+      "bytes": 135,
+      "sha256": "06e1ca1916fd294a7bced886129928a034a805d4e3a8cab3bc0ea501699a7162",
+      "content": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\nqa004-mock,2,1,2,1,0\n"
+    },
+    "modelJson": {
+      "filename": "tanpopo-chargeback-model.json",
+      "bytes": 195,
+      "sha256": "5789b7d65660a8ced30428d8c41d17cc1501ff796039712410083faf651b1636",
+      "content": "[\n  {\n    \"group_key\": \"qa004-mock\",\n    \"exact_micro_usd\": 2,\n    \"estimated_micro_usd\": 1,\n    \"exact_request_count\": 2,\n    \"estimated_request_count\": 1,\n    \"unmetered_request_count\": 0\n  }\n]"
+    }
+  }
+}
