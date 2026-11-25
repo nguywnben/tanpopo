@@ -1,7 +1,7 @@
-# DEF-048 — Documented native Data Plane endpoints are routed to the Console handler
+# DEF-048 — Documented native Data Plane endpoints are unreachable in supported runtime roles
 
 **Severity:** High
-**Status:** Confirmed on frozen RC5; credentialed Ollama reproduction on runtime 18116 and nine path probes across three isolated runtimes
+**Status:** Confirmed on frozen RC5; credentialed Ollama reproduction on runtime 18116; nine path probes across three isolated role-all runtimes; separated Data Plane role also returns 404
 **Baseline:** `3423d4f523ef0ac77469a1201b8b753d1d31c902`
 **Affected:** Native passthrough clients using Ollama, Anthropic, Gemini or other documented `/native/{dialect}/{upstreamPath}` routes in `--role all` runtimes
 **Release gate:** `GATE-REL-07` remains **BLOCKED**.
@@ -12,7 +12,7 @@
 2. Through the actual Console, select `Default Organization / default / dev`, choose `qa003-cp47-stream-route` and send a successful Playground prompt. The route is active and reaches a controlled, authorized, loopback-only Ollama-compatible provider. The visually inspected [Playground route screenshot](../evidence/CP51-native-ollama-route-ready.png) records the selected route. The successful setup request minted a short-TTL Playground Virtual Key; its secret remained in process memory and was never saved.
 3. Using that same valid key from a real browser `fetch` with `credentials: omit`, send `POST /native/ollama/api/chat` with a valid Ollama chat body, including the logical route/model slug. The loopback mock implements `/api/chat` and no external egress is needed.
 4. Observe HTTP **405**, `Content-Type: text/plain`, `Allow: GET, HEAD`, body `HTTP method not allowed for this console resource.` There is no `X-Tanpopo-Request-Id` or `X-Tanpopo-Trace-Id`; the expected upstream is not called and no native request appears in the trace list.
-5. The same POST paths for `ollama`, `anthropic` (`/native/anthropic/v1/messages`) and `gemini` (`/native/gemini/v1beta/models/gemini-2.5-pro:generateContent`) returned the same 405 across isolated RC5 runtimes 18114, 18115 and 18116. These nine unauthenticated probes only corroborate that the path is intercepted before the native gateway; they do not replace the valid-key Ollama reproduction.
+5. The same POST paths for `ollama`, `anthropic` (`/native/anthropic/v1/messages`) and `gemini` (`/native/gemini/v1beta/models/gemini-2.5-pro:generateContent`) returned the same 405 across isolated RC5 runtimes 18114, 18115 and 18116. These nine unauthenticated probes only corroborate that the path is intercepted before the native gateway; they do not replace the valid-key Ollama reproduction. CP52 started a fresh `--role data-plane` runtime: `/v1/chat/completions` reached the handler and returned structured 401, while Ollama and Anthropic `/native/*` returned bare 404 with no Tanpopo request ID. See [CP52](../checkpoints/CP52-data-plane-role-native-ingress.md) and [role control evidence](../evidence/CP52-data-plane-role-native-results.json).
 
 Sanitized [credentialed Ollama request result](../evidence/CP51-native-ollama-result.json), [three-runtime/dialect matrix](../evidence/CP51-native-route-probe-matrix.json), and [Traces screenshot](../evidence/CP51-native-ollama-traces.png) are preserved. The screenshot was visually inspected: it shows the successful setup chat traces but no row for the attempted native call. This is a routing failure, not a Google Cloud egress failure; all requests were loopback-local.
 
@@ -43,4 +43,4 @@ Clients using native provider SDKs or vendor-specific fields cannot use the adve
 
 ## Remaining limits
 
-The accepted native request never reached provider routing, so lossless body handling, native response parsing, provider dispatch, usage accounting, cancellation, SSRF controls, and native authorization remain unverified. Only runtime role `all` was used for credentialed end-to-end reproduction. Exact `--role data-plane` and separate listener deployment coverage remain open. No product implementation was modified and external provider spend was USD 0.
+The accepted native request never reached provider routing, so lossless body handling, native response parsing, provider dispatch, usage accounting, cancellation, SSRF controls, and native authorization remain unverified. Only runtime role `all` was used for credentialed end-to-end reproduction; CP52 confirms the separated Data Plane role also lacks the native route, but native authentication cannot be evaluated until routing is available. Other separate-listener deployment configurations remain open. No product implementation was modified and external provider spend was USD 0.
