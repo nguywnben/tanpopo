@@ -1,7 +1,7 @@
 # DEF-052 — Request trace accuracy/cost diverges from durable settlement and FinOps
 
 **Severity:** Major
-**Status:** FAIL — reproduced across native success, provider-plane success, and provider-plane partial-stream failure in isolated RC6 synthetic journeys.
+**Status:** FAIL — reproduced across native success, provider-plane success, server-side partial-stream failure, and browser-initiated client cancellation in isolated RC6 synthetic journeys.
 **Affected workflow:** Inference observability, support investigation, partial-stream diagnosis, FinOps reconciliation, audit and chargeback.
 
 ## Reproduction
@@ -28,6 +28,10 @@ Actual: both trace records report `usage_accuracy=EXACT` and `total_cost_micros=
 
 A recovered local Ollama connection and newly activated deployment served one cookie-free `/v1/chat/completions` request through a temporary route. The upstream returned exact 7/4 usage; the real Traces UI waterfall displayed `Exact` and `$0.000000`. A separate FinOps `group_by=key` read for the same key reported one exact request and `exact_micro_usd=1`. The trace is request `trc_01m89hpm7ye0081h0g1g1bxnfq`; the real UI trace list and waterfall were visually inspected. This independently reproduces the trace-versus-settlement mismatch on a provider-plane route. See `evidence/CP30-provider-recovery-results.json` and `evidence/CP30-recovery-trace-inspect.png`.
 
+
+### Independent client-cancellation retest (CP36)
+
+A real browser issued a cookie-free streaming request through the existing single-target provider route, received the first SSE chunk, then called `AbortController.abort()`. The loopback fixture observed the disconnect after two upstream chunks and stopped the remaining stream. Tanpopo persisted trace `trc_01m89nfp99e00bbbk7n8ze6gsm` with HTTP 200, `mid_stream_abort`, `usage_accuracy=EXACT`, and `$0`; Chargeback for the same test Virtual Key reports 0 exact and 1 estimated request, with `$0.000001` estimated. Traces and Chargeback screenshots were visually inspected. This independently reproduces DEF-052 for a client-triggered cancellation, separate from the provider-side truncation in CP34. See `evidence/CP36-client-cancel-results.json`, `evidence/CP36-client-cancel-trace.png`, and `evidence/CP36-client-cancel-finops.png`.
 
 ### Independent partial-stream failure retest (CP34)
 
