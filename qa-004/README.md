@@ -100,6 +100,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP95 native same-dialect mismatch guard](checkpoints/CP95-native-dialect-mismatch-guard.md)
 - [CP96 idempotency trace/chargeback reconciliation](checkpoints/CP96-idempotency-trace-chargeback-reconciliation.md)
 - [CP97 unified Responses API idempotency and settlement](checkpoints/CP97-responses-api-idempotency-and-settlement.md)
+- [CP98 unified Responses API SSE lifecycle](checkpoints/CP98-responses-api-streaming.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -217,3 +218,6 @@ CP96 reconciled persisted CP94 rows. Each VKEY had one 1-micro-USD Estimated Fin
 
 
 CP97 exercised a real cookie-free unified `/v1/responses` request on the default/dev synthetic Ollama route. Same-key exact replay returned an identical body without a second fixture call; changed-payload reuse returned 422 without dispatch, the same idempotency value remained isolated per VKEY, and both temporary keys were revoked. Persistent readback and visually inspected Traces/Chargeback screenshots show six trace rows labeled Exact/$0 but only one exact $0.000001 settlement per key for the two actual dispatches. This extends DEF-052 to `/v1/responses`; no new defect was assigned. Streaming, background retrieval, tools, modality variants, external SDK compatibility, and distributed idempotency remain unverified. See [CP97](checkpoints/CP97-responses-api-idempotency-and-settlement.md). QA continues and **GATE-REL-07 remains BLOCKED.**
+
+
+CP98 completed the unified `/v1/responses` SSE lifecycle on healthy isolated runtime 18128 with a route-scoped key and deterministic local fixture: the response returned HTTP 200 `text/event-stream`, all output lifecycle events and terminal `[DONE]` were consumed, and the fixture saw exactly one request without client authorization. A CP42 installation kill switch intentionally blocks quarantined runtime 18124; that 503 was preserved as an environmental BLOCKED result and not treated as a product defect. The initial fixture also lacked streaming support and was corrected for this test, then restored. Persistent Traces says Exact/$0 while Chargeback records one exact $0.000001 dispatch, extending DEF-052; no new defect was assigned. Screenshots of Traces, Chargeback and revoked keys were visually inspected. Header-accuracy semantics, cancellation, disconnect recovery, SDK compatibility, tool/multimodal variants and distributed behavior remain unverified. See [CP98](checkpoints/CP98-responses-api-streaming.md). QA continues and **GATE-REL-07 remains BLOCKED.**
