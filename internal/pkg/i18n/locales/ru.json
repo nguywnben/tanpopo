@@ -298,5 +298,8 @@
   "cli.bundle.flag.mirror_to": "Необязательный локальный каталог, file:// URI или локальное OCI-зеркало",
   "cli.bundle.export.summary": "Экспортирован подписанный пакет {{path}} ({{count}} расширений, sha256={{sha256}})",
   "cli.bundle.verify.summary": "Проверен пакет {{path}} ({{entries}} записей, ключ={{key}})",
-  "cli.bundle.import.summary": "Импортировано {{count}} артефактов в {{dest}}"
+  "cli.bundle.import.summary": "Импортировано {{count}} артефактов в {{dest}}",
+  "cli.serve.flag.metrics_listen": "Внутренний HTTP-адрес для Prometheus /metrics (по умолчанию 127.0.0.1:9090)",
+  "cli.serve.flag.otlp_endpoint": "HTTP-конечная точка OTLP для трассировок, метрик и журналов",
+  "cli.serve.flag.otlp_allow_private_ip": "Разрешить отправку OTLP на приватные или loopback IP-адреса"
 }

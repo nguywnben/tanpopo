@@ -25,6 +25,8 @@ import (
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"go.opentelemetry.io/otel/sdk/resource"
 
 	"github.com/nguywnben/tanpopo/internal/telemetry/privacy"
 )
@@ -136,6 +138,7 @@ type MetricsRegistry struct {
 
 	promReg       *prometheus.Registry
 	promExporter  *otelprom.Exporter
+	manualReader  *sdkmetric.ManualReader
 	meterProvider *sdkmetric.MeterProvider
 	meter         metric.Meter
 
@@ -177,8 +180,13 @@ func NewMetricsRegistry(cfg MetricsConfig) (*MetricsRegistry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("telemetry: create prometheus exporter: %w", err)
 	}
+	manualReader := sdkmetric.NewManualReader()
 
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(promExp))
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithResource(resource.Empty()),
+		sdkmetric.WithReader(promExp),
+		sdkmetric.WithReader(manualReader),
+	)
 	meter := mp.Meter("github.com/nguywnben/tanpopo/telemetry")
 
 	reg := &MetricsRegistry{
@@ -188,6 +196,7 @@ func NewMetricsRegistry(cfg MetricsConfig) (*MetricsRegistry, error) {
 		redactor:            red,
 		promReg:             promReg,
 		promExporter:        promExp,
+		manualReader:        manualReader,
 		meterProvider:       mp,
 		meter:               meter,
 		droppedBySig:        make(map[string]int64),
@@ -298,6 +307,26 @@ func (m *MetricsRegistry) Shutdown(ctx context.Context) error {
 		ctx = context.Background()
 	}
 	return m.meterProvider.Shutdown(ctx)
+}
+
+// CollectMetrics samples current OpenTelemetry metrics including live snapshot age.
+func (m *MetricsRegistry) CollectMetrics(ctx context.Context) (metricdata.ResourceMetrics, error) {
+	if m == nil || m.manualReader == nil {
+		return metricdata.ResourceMetrics{}, nil
+	}
+	m.mu.Lock()
+	ageProvider := m.snapshotAgeFn
+	m.mu.Unlock()
+	if ageProvider != nil {
+		if ch, age, ok := ageProvider(); ok {
+			m.SetConfigSnapshotAge(ch, age)
+		}
+	}
+	var rm metricdata.ResourceMetrics
+	if err := m.manualReader.Collect(ctx, &rm); err != nil {
+		return metricdata.ResourceMetrics{}, err
+	}
+	return rm, nil
 }
 
 // ServeHTTP exposes Prometheus text exposition format at GET /metrics with

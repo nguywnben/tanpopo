@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -592,25 +591,30 @@ func estimateSpanBytes(s sdktrace.ReadOnlySpan) int64 {
 
 // PipelineConfig wires Tanpopo's unified observability plane (metrics, traces, logs, TTL store).
 type PipelineConfig struct {
-	ServiceName         string
-	ServiceVersion      string
-	IncludeTenantLabels *bool
-	MetricsScrapeToken  string
-	OTLPEndpoint        string
-	OTLPHTTPClient      *http.Client
-	OTLPExporter        sdktrace.SpanExporter
-	OTLPAllowPrivateIP  bool
-	OTLPAllowedCIDRs    []string
-	OTLPControlHook     func(network, address string, c syscall.RawConn) error
-	MaxRingBufferBytes   int64
-	MaxPersistQueueBytes int64
-	ExportTimeout        time.Duration
-	FlushInterval        time.Duration
-	CapturePayloads      bool // Always false by default per OPS-AC-10
-	DB                   *sql.DB
-	Vault                *vault.Store
-	LogOut               io.Writer
-	NowMs                func() int64
+	ServiceName               string
+	ServiceVersion            string
+	IncludeTenantLabels       *bool
+	MetricsScrapeToken        string
+	AllowUnauthenticatedScrape bool
+	OTLPEndpoint              string
+	OTLPTracesEndpoint        string
+	OTLPMetricsEndpoint       string
+	OTLPLogsEndpoint          string
+	OTLPHTTPClient            *http.Client
+	OTLPExporter              sdktrace.SpanExporter
+	OTLPAllowPrivateIP        bool
+	OTLPAllowedCIDRs          []string
+	OTLPControlHook           func(network, address string, c syscall.RawConn) error
+	MaxRingBufferBytes        int64
+	MaxPersistQueueBytes      int64
+	ExportTimeout             time.Duration
+	FlushInterval             time.Duration
+	MetricsExportInterval     time.Duration
+	CapturePayloads           bool // Always false by default per OPS-AC-10
+	DB                        *sql.DB
+	Vault                     *vault.Store
+	LogOut                    io.Writer
+	NowMs                     func() int64
 }
 
 type guardedOTLPClient struct {
@@ -698,6 +702,9 @@ type Pipeline struct {
 	TracerProvider *sdktrace.TracerProvider
 	Tracer         trace.Tracer
 
+	logExporter     *ringLogExporter
+	metricsExporter *otlpMetricsExporter
+
 	db      *sql.DB
 	dialect port.Dialect
 	vault   *vault.Store
@@ -729,59 +736,82 @@ func NewPipeline(cfg PipelineConfig) (*Pipeline, error) {
 	nowFn := func() time.Time { return time.UnixMilli(nowMs()).UTC() }
 
 	metrics, err := NewMetricsRegistry(MetricsConfig{
-		IncludeTenantLabels: cfg.IncludeTenantLabels,
-		ScrapeBearerToken:   cfg.MetricsScrapeToken,
-		Redactor:            redactor,
+		IncludeTenantLabels:        cfg.IncludeTenantLabels,
+		ScrapeBearerToken:          cfg.MetricsScrapeToken,
+		AllowUnauthenticatedScrape: cfg.AllowUnauthenticatedScrape,
+		Redactor:                   redactor,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	exporter := cfg.OTLPExporter
-	if exporter == nil && strings.TrimSpace(cfg.OTLPEndpoint) != "" {
-		expTimeout := cfg.ExportTimeout
-		if expTimeout <= 0 {
-			expTimeout = DefaultExportTimeout
+	svcName := strings.TrimSpace(cfg.ServiceName)
+	if svcName == "" {
+		svcName = "tanpopo"
+	}
+
+	var (
+		exporter    = cfg.OTLPExporter
+		otlpClient  = cfg.OTLPHTTPClient
+		logExporter *ringLogExporter
+		metExporter *otlpMetricsExporter
+	)
+	expTimeout := cfg.ExportTimeout
+	if expTimeout <= 0 {
+		expTimeout = DefaultExportTimeout
+	}
+	endpoints, epErr := resolveOTLPSignalEndpoints(cfg)
+	if epErr != nil {
+		return nil, epErr
+	}
+	if endpoints != nil && otlpClient == nil {
+		guarded, gerr := egress.NewGuardedHTTPClient(egress.ClientConfig{
+			Policy: egress.Policy{
+				AllowedHosts:   endpoints.hosts,
+				RequireTLS:     endpoints.requireTLS,
+				AllowPrivateIP: cfg.OTLPAllowPrivateIP,
+				AllowedCIDRs:   cfg.OTLPAllowedCIDRs,
+			},
+			ControlHook: cfg.OTLPControlHook,
+			Timeout:     expTimeout,
+		})
+		if gerr != nil {
+			return nil, fmt.Errorf("telemetry: construct guarded OTLP HTTP client: %w", gerr)
 		}
-		client := cfg.OTLPHTTPClient
-		parsed, uerr := url.Parse(strings.TrimSpace(cfg.OTLPEndpoint))
-		scheme := ""
-		if parsed != nil {
-			scheme = strings.ToLower(strings.TrimSpace(parsed.Scheme))
-		}
-		if uerr != nil || (scheme != "http" && scheme != "https") || parsed.Host == "" || parsed.User != nil {
-			return nil, fmt.Errorf("telemetry: invalid OTLP endpoint %q", cfg.OTLPEndpoint)
-		}
-		if client == nil {
-			guarded, gerr := egress.NewGuardedHTTPClient(egress.ClientConfig{
-				Policy: egress.Policy{
-					AllowedHosts:   []string{parsed.Host},
-					RequireTLS:     strings.EqualFold(parsed.Scheme, "https"),
-					AllowPrivateIP: cfg.OTLPAllowPrivateIP,
-					AllowedCIDRs:   cfg.OTLPAllowedCIDRs,
-				},
-				ControlHook: cfg.OTLPControlHook,
-				Timeout:     expTimeout,
-			})
-			if gerr != nil {
-				return nil, fmt.Errorf("telemetry: construct guarded OTLP HTTP client: %w", gerr)
-			}
-			client = guarded
-		}
-		targetURL := strings.TrimSpace(cfg.OTLPEndpoint)
-		if strings.TrimSpace(parsed.Path) == "" || parsed.Path == "/" {
-			parsedCopy := *parsed
-			parsedCopy.Path = "/v1/traces"
-			targetURL = parsedCopy.String()
-		}
+		otlpClient = guarded
+	}
+	if exporter == nil && endpoints != nil && endpoints.tracesURL != "" {
 		exporter, err = otlptrace.New(context.Background(), &guardedOTLPClient{
-			endpointURL: targetURL,
-			httpClient:  client,
+			endpointURL: endpoints.tracesURL,
+			httpClient:  otlpClient,
 			stopCh:      make(chan struct{}),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("telemetry: initialize guarded OTLP HTTP exporter: %w", err)
 		}
+	}
+	if endpoints != nil && endpoints.logsURL != "" && otlpClient != nil {
+		logExporter = newRingLogExporter(
+			endpoints.logsURL,
+			otlpClient,
+			metrics,
+			svcName,
+			cfg.ServiceVersion,
+			cfg.MaxRingBufferBytes,
+			expTimeout,
+			cfg.FlushInterval,
+		)
+	}
+	if endpoints != nil && endpoints.metricsURL != "" && otlpClient != nil {
+		metExporter = newOTLPMetricsExporter(
+			endpoints.metricsURL,
+			otlpClient,
+			metrics,
+			svcName,
+			cfg.ServiceVersion,
+			expTimeout,
+			cfg.MetricsExportInterval,
+		)
 	}
 
 	ring := NewRingBufferSpanProcessor(RingBufferConfig{
@@ -793,10 +823,6 @@ func NewPipeline(cfg PipelineConfig) (*Pipeline, error) {
 		Redactor:       redactor,
 	})
 
-	svcName := strings.TrimSpace(cfg.ServiceName)
-	if svcName == "" {
-		svcName = "tanpopo"
-	}
 	res := resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName(svcName),
@@ -815,13 +841,19 @@ func NewPipeline(cfg PipelineConfig) (*Pipeline, error) {
 	if cfg.DB != nil {
 		dialect = port.DetectDialect(context.Background(), cfg.DB)
 	}
+	logger := privacy.NewJSONLogger(cfg.LogOut, redactor, nowFn)
+	if logExporter != nil {
+		logger.SetHook(logExporter.Enqueue)
+	}
 	p := &Pipeline{
 		Metrics:         metrics,
 		Redactor:        redactor,
-		Logger:          privacy.NewJSONLogger(cfg.LogOut, redactor, nowFn),
+		Logger:          logger,
 		Ring:            ring,
 		TracerProvider:  tp,
 		Tracer:          tp.Tracer("github.com/nguywnben/tanpopo/dataplane"),
+		logExporter:     logExporter,
+		metricsExporter: metExporter,
 		db:              cfg.DB,
 		dialect:         dialect,
 		vault:           cfg.Vault,
@@ -1042,7 +1074,7 @@ func (p *Pipeline) EnqueuePreScrubbedDebugBlob(orgID, projectID, virtualKeyID, r
 	})
 }
 
-// ForceFlush flushes both the OTLP span ring buffer and any queued trace/blob DB writes.
+// ForceFlush flushes the OTLP span/log/metric exporters and queued trace/blob DB writes.
 func (p *Pipeline) ForceFlush(ctx context.Context) error {
 	if p == nil {
 		return nil
@@ -1053,6 +1085,16 @@ func (p *Pipeline) ForceFlush(ctx context.Context) error {
 	var flushErr error
 	if p.Ring != nil {
 		flushErr = p.Ring.ForceFlush(ctx)
+	}
+	if p.logExporter != nil {
+		if lerr := p.logExporter.ForceFlush(ctx); lerr != nil && flushErr == nil {
+			flushErr = lerr
+		}
+	}
+	if p.metricsExporter != nil {
+		if merr := p.metricsExporter.ForceFlush(ctx); merr != nil && flushErr == nil {
+			flushErr = merr
+		}
 	}
 	if p.db != nil && !p.closed.Load() {
 		ch := make(chan struct{})
@@ -1075,7 +1117,7 @@ func (p *Pipeline) ForceFlush(ctx context.Context) error {
 	return flushErr
 }
 
-// Shutdown drains/stops the async DB persistence worker, OTel tracer provider, and metrics registry cleanly.
+// Shutdown drains/stops the async DB persistence worker, OTLP signal exporters, and metrics registry cleanly.
 func (p *Pipeline) Shutdown(ctx context.Context) error {
 	if p == nil {
 		return nil
@@ -1088,8 +1130,21 @@ func (p *Pipeline) Shutdown(ctx context.Context) error {
 		p.closed.Store(true)
 		close(p.persistStopCh)
 		p.persistWG.Wait()
+		if p.Logger != nil {
+			p.Logger.SetHook(nil)
+		}
 		if p.TracerProvider != nil {
 			retErr = p.TracerProvider.Shutdown(ctx)
+		}
+		if p.logExporter != nil {
+			if lerr := p.logExporter.Shutdown(ctx); lerr != nil && retErr == nil {
+				retErr = lerr
+			}
+		}
+		if p.metricsExporter != nil {
+			if merr := p.metricsExporter.Shutdown(ctx); merr != nil && retErr == nil {
+				retErr = merr
+			}
 		}
 		if p.Metrics != nil {
 			if merr := p.Metrics.Shutdown(ctx); merr != nil && retErr == nil {

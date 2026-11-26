@@ -1527,6 +1527,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/ops/keys/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retire superseded Master KEK after verifying all cluster nodes synchronized post-rotation (DR-03, OPERATOR only) */
+        post: operations["retireMasterKEK"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/ops/upgrades/preflight": {
         parameters: {
             query?: never;
@@ -6376,10 +6393,14 @@ export interface operations {
                         backup_unavailable_reason: string;
                         nodes: {
                             id?: string;
+                            role?: string;
+                            listen_addr?: string;
                             config_epoch?: number;
                             snapshot_age_ms?: number;
                             health?: string;
                             wal_bytes: number;
+                            last_heartbeat_ms?: number;
+                            stale?: boolean;
                         }[];
                     };
                 };
@@ -6414,6 +6435,47 @@ export interface operations {
                         /** Format: date-time */
                         created_at: string;
                     };
+                };
+            };
+        };
+    };
+    retireMasterKEK: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    key_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Superseded Master KEK retired after 100%-node verification */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        retired_key_id: string;
+                        verified_nodes: string[];
+                    };
+                };
+            };
+            /** @description Cluster nodes have not synchronized or DEKs still reference key_id */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
                 };
             };
         };

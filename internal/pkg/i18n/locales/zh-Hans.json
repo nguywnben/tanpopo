@@ -298,5 +298,8 @@
   "cli.bundle.flag.mirror_to": "可选的本地目录、file:// URI 或本地 OCI 镜像源目标",
   "cli.bundle.export.summary": "已导出已签名气隙包 {{path}}（{{count}} 个扩展，sha256={{sha256}}）",
   "cli.bundle.verify.summary": "已校验气隙包 {{path}}（{{entries}} 项，key={{key}}）",
-  "cli.bundle.import.summary": "已导入 {{count}} 个气隙包制品至 {{dest}}"
+  "cli.bundle.import.summary": "已导入 {{count}} 个气隙包制品至 {{dest}}",
+  "cli.serve.flag.metrics_listen": "Prometheus /metrics 内部 HTTP 监听地址（默认 127.0.0.1:9090）",
+  "cli.serve.flag.otlp_endpoint": "用于链路追踪、指标和日志的 OTLP HTTP 端点",
+  "cli.serve.flag.otlp_allow_private_ip": "允许 OTLP 导出器访问私有或回环采集器 IP"
 }

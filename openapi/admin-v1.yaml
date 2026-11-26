@@ -4227,10 +4227,14 @@ paths:
                       required: [wal_bytes]
                       properties:
                         id: { type: string }
+                        role: { type: string }
+                        listen_addr: { type: string }
                         config_epoch: { type: integer }
                         snapshot_age_ms: { type: integer }
                         health: { type: string }
                         wal_bytes: { type: integer, minimum: 0 }
+                        last_heartbeat_ms: { type: integer }
+                        stale: { type: boolean }
 
   /admin/v1/ops/backups:
     post:
@@ -4255,6 +4259,42 @@ paths:
                   sha256_hex: { type: string, pattern: "^[a-f0-9]{64}$" }
                   size_bytes: { type: integer }
                   created_at: { type: string, format: date-time }
+
+  /admin/v1/ops/keys/retire:
+    post:
+      tags: [DevToolsAndOps]
+      operationId: retireMasterKEK
+      summary: Retire superseded Master KEK after verifying all cluster nodes synchronized post-rotation (DR-03, OPERATOR only)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key_id]
+              properties:
+                key_id: { type: string }
+      responses:
+        "200":
+          description: Superseded Master KEK retired after 100%-node verification
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [retired_key_id, verified_nodes]
+                properties:
+                  retired_key_id: { type: string }
+                  verified_nodes:
+                    type: array
+                    items: { type: string }
+        "409":
+          description: Cluster nodes have not synchronized or DEKs still reference key_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanonicalErrorEnvelope"
 
   /admin/v1/ops/upgrades/preflight:
     post:

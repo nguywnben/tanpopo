@@ -298,5 +298,8 @@
   "cli.bundle.flag.mirror_to": "Optional local directory, file:// URI, or local OCI mirror target",
   "cli.bundle.export.summary": "Exported signed air-gap bundle {{path}} ({{count}} extensions, sha256={{sha256}})",
   "cli.bundle.verify.summary": "Verified air-gap bundle {{path}} ({{entries}} entries, key={{key}})",
-  "cli.bundle.import.summary": "Imported {{count}} air-gap bundle artifacts into {{dest}}"
+  "cli.bundle.import.summary": "Imported {{count}} air-gap bundle artifacts into {{dest}}",
+  "cli.serve.flag.metrics_listen": "Internal HTTP listen address for Prometheus /metrics (default 127.0.0.1:9090)",
+  "cli.serve.flag.otlp_endpoint": "OTLP HTTP endpoint for traces, metrics, and logs",
+  "cli.serve.flag.otlp_allow_private_ip": "Allow OTLP exporter egress to private or loopback collector IPs"
 }

@@ -8,6 +8,7 @@ import {ThemeProvider} from '../styles/theme';
 import {FinOpsPage} from './finops/FinOpsPage';
 import {ExtensionsPage} from './extensions/ExtensionsPage';
 import {ModelsPage} from './models/ModelsPage';
+import {OperationsPage} from './operations/OperationsPage';
 import {TracesPage} from './traces/TracesPage';
 
 function jsonResponse(body: unknown, status = 200, headers?: Record<string, string>) {
@@ -359,6 +360,80 @@ describe('Engineering Round 4 UI regressions (Slices A & B)', () => {
     fireEvent.click(screen.getByRole('button', {name: /Confirm unquarantine/i}));
     await waitFor(() => expect(unqCalled).toBe(true));
     await screen.findByText(/moved to INSTALLED_DISABLED/i);
+
+    const res = await axe.run(container);
+    expect(res.violations).toHaveLength(0);
+  });
+
+  it('DEF-072: OperationsPage renders split-role cluster nodes and Stale/Lagging statuses with 0 WCAG violations', async () => {
+    rememberCsrfToken('csrf-ops');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const parsed = new URL(url, 'http://localhost');
+      if (parsed.pathname === '/admin/v1/ops/cluster-status') {
+        return jsonResponse({
+          current_epoch: 12,
+          storage_engine: 'sqlite_wal',
+          backup_supported: true,
+          backup_unavailable_reason: '',
+          nodes: [
+            {
+              id: 'cp-node-1',
+              role: 'control-plane',
+              listen_addr: '127.0.0.1:8080',
+              config_epoch: 12,
+              snapshot_age_ms: 8,
+              health: 'ok',
+              wal_bytes: 4096,
+              last_heartbeat_ms: 1732500000000,
+              stale: false,
+            },
+            {
+              id: 'dp-node-stale',
+              role: 'data-plane',
+              listen_addr: '127.0.0.1:8081',
+              config_epoch: 12,
+              snapshot_age_ms: 42000,
+              health: 'stale',
+              wal_bytes: 0,
+              last_heartbeat_ms: 1732499900000,
+              stale: true,
+            },
+            {
+              id: 'dp-node-lagging',
+              role: 'data-plane',
+              listen_addr: '127.0.0.1:8082',
+              config_epoch: 9,
+              snapshot_age_ms: 210,
+              health: 'lagging',
+              wal_bytes: 0,
+              last_heartbeat_ms: 1732500000000,
+              stale: false,
+            },
+          ],
+        });
+      }
+      if (parsed.pathname === '/admin/v1/ops/webhooks') {
+        return jsonResponse({data: []});
+      }
+      if (parsed.pathname === '/admin/v1/ops/backups') {
+        return jsonResponse({data: []});
+      }
+      if (parsed.pathname === '/admin/v1/ops/audit-integrity') {
+        return jsonResponse({verified: true, entry_count: 3, last_checked_at_ms: 1732500000000});
+      }
+      if (parsed.pathname === '/readyz') {
+        return jsonResponse({status: 'ready'});
+      }
+      return jsonResponse({data: []});
+    });
+
+    const {container} = render(wrap(<OperationsPage pathname="/operations" projectId="prj_1" roles={['OPERATOR']} />));
+    await screen.findAllByText('cp-node-1');
+    expect(screen.getAllByText('control-plane').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('data-plane').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Stale').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Lagging').length).toBeGreaterThanOrEqual(1);
 
     const res = await axe.run(container);
     expect(res.violations).toHaveLength(0);

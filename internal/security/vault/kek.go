@@ -27,6 +27,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -156,6 +157,21 @@ func (p *StaticKEKProvider) ActiveKeyID(context.Context) (string, error) {
 		return "", ErrInvalidMasterKey
 	}
 	return p.activeKeyID, nil
+}
+
+// LoadedKeyIDs returns a deterministic sorted list of Master KEK IDs loaded in RAM.
+func (p *StaticKEKProvider) LoadedKeyIDs() []string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if len(p.keys) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(p.keys))
+	for k := range p.keys {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // WrapDEK seals a 256-bit Org DEK under the named Master KEK binding orgID and dekVersion in AAD.

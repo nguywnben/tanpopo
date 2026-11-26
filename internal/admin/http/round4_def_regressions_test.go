@@ -459,3 +459,98 @@ func TestDEF058_061_062_071_073_ExtensionLifecycleAndSecurityAPI(t *testing.T) {
 	}
 }
 
+func TestDEF072_ClusterNodesAndDR03KeyRetirementGate(t *testing.T) {
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "Round4 DR03 Org", "r4-dr03-proj")
+	ctx := context.Background()
+	nowMs := h.fk.Now().UTC().UnixMilli()
+
+	// Stage kek_v2, promote active, and rewrap org DEKs from kek_v1 -> kek_v2.
+	key2 := make([]byte, 32)
+	for i := range key2 {
+		key2[i] = byte(i + 1)
+	}
+	if err := h.kek.RegisterKey("kek_v2", key2, true); err != nil {
+		t.Fatalf("RegisterKey kek_v2: %v", err)
+	}
+	if _, err := h.vault.RewrapAllOrgDEKs(ctx, "kek_v1", "kek_v2"); err != nil {
+		t.Fatalf("RewrapAllOrgDEKs: %v", err)
+	}
+
+	var currentEpoch int64
+	if err := h.st.RawDB().QueryRowContext(ctx, `SELECT COALESCE(MAX(config_epoch), 0) FROM config_changelog`).Scan(&currentEpoch); err != nil {
+		t.Fatalf("query currentEpoch: %v", err)
+	}
+	if currentEpoch <= 0 {
+		currentEpoch = 1
+	}
+
+	insertNode := func(id, role string, epoch, hbMs int64, health string) {
+		t.Helper()
+		_, err := h.st.RawDB().ExecContext(ctx, `
+			INSERT INTO cluster_nodes (
+				node_id, role, listen_addr, config_epoch, snapshot_age_ms,
+				health, storage_engine, wal_bytes, loaded_kek_ids_json,
+				last_heartbeat_ms, started_at_ms
+			) VALUES (?, ?, ?, ?, 15, ?, 'sqlite_wal', 4096, '["kek_v1","kek_v2"]', ?, ?)
+			ON CONFLICT(node_id) DO UPDATE SET
+				config_epoch = excluded.config_epoch,
+				health = excluded.health,
+				last_heartbeat_ms = excluded.last_heartbeat_ms
+		`, id, role, "127.0.0.1:8080", epoch, health, hbMs, hbMs-5000)
+		if err != nil {
+			t.Fatalf("upsert cluster_nodes(%s): %v", id, err)
+		}
+	}
+
+	// Synchronized control-plane node + lagging data-plane node must block KEK retirement (409).
+	insertNode("cp-node-1", "control-plane", currentEpoch, nowMs, "ok")
+	insertNode("dp-node-1", "data-plane", currentEpoch-1, nowMs, "ok")
+
+	recLaggingStatus := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/ops/cluster-status", ownerCookie, "", "", nil)
+	if recLaggingStatus.Code != http.StatusOK || !strings.Contains(recLaggingStatus.Body.String(), `"lagging"`) {
+		t.Fatalf("DEF-072 expected cluster-status to report lagging node, got %d body=%s", recLaggingStatus.Code, recLaggingStatus.Body.String())
+	}
+
+	recRetireLagging := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/ops/keys/retire", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"key_id": "kek_v1",
+	})
+	if recRetireLagging.Code != http.StatusConflict || !strings.Contains(recRetireLagging.Body.String(), "cluster_node_sync_incomplete") {
+		t.Fatalf("DEF-072 expected 409 cluster_node_sync_incomplete while dp-node-1 lags, got %d body=%s", recRetireLagging.Code, recRetireLagging.Body.String())
+	}
+
+	// Stale node heartbeat (> 15s old) must also block KEK retirement and surface stale=true.
+	insertNode("dp-node-1", "data-plane", currentEpoch, nowMs-60000, "ok")
+	recStaleStatus := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/ops/cluster-status", ownerCookie, "", "", nil)
+	if recStaleStatus.Code != http.StatusOK || !strings.Contains(recStaleStatus.Body.String(), `"stale":true`) {
+		t.Fatalf("DEF-072 expected cluster-status to surface stale=true, got %d body=%s", recStaleStatus.Code, recStaleStatus.Body.String())
+	}
+	recRetireStale := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/ops/keys/retire", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"key_id": "kek_v1",
+	})
+	if recRetireStale.Code != http.StatusConflict || !strings.Contains(recRetireStale.Body.String(), "cluster_node_sync_incomplete") {
+		t.Fatalf("DEF-072 expected 409 cluster_node_sync_incomplete while dp-node-1 stale, got %d body=%s", recRetireStale.Code, recRetireStale.Body.String())
+	}
+
+	// Once all nodes are synchronized and healthy, retiring kek_v1 succeeds while kek_v2 remains active.
+	insertNode("dp-node-1", "data-plane", currentEpoch, nowMs, "ok")
+	recRetireOK := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/ops/keys/retire", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"key_id": "kek_v1",
+	})
+	if recRetireOK.Code != http.StatusOK {
+		t.Fatalf("DEF-072 expected 200 retiring kek_v1 after 100%% node sync, got %d body=%s", recRetireOK.Code, recRetireOK.Body.String())
+	}
+	var retireResp struct {
+		RetiredKeyID  string   `json:"retired_key_id"`
+		VerifiedNodes []string `json:"verified_nodes"`
+	}
+	mustDecodeJSON(t, recRetireOK.Body.Bytes(), &retireResp)
+	if retireResp.RetiredKeyID != "kek_v1" || len(retireResp.VerifiedNodes) != 2 {
+		t.Fatalf("unexpected retire response: %+v", retireResp)
+	}
+	loaded := strings.Join(h.vault.LoadedKeyIDs(ctx), ",")
+	if strings.Contains(loaded, "kek_v1") || !strings.Contains(loaded, "kek_v2") {
+		t.Fatalf("expected kek_v1 retired and kek_v2 active, loaded=%q", loaded)
+	}
+}
+

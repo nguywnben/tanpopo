@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -898,4 +899,190 @@ func TestPreStopWaitFromEnv(t *testing.T) {
 		t.Fatal("expected >30s TANPOPO_PRESTOP_WAIT to fail validation")
 	}
 }
+
+func TestDEF063_064_065_072_InternalMetricsListenerOTLPAndClusterNodes(t *testing.T) {
+	var (
+		mu       sync.Mutex
+		gotPaths = map[string]int{}
+	)
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		mu.Lock()
+		gotPaths[r.URL.Path]++
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer collector.Close()
+
+	dataDir := t.TempDir()
+	dbPath := filepath.Join(dataDir, "tanpopo.db")
+	t.Setenv("TANPOPO_DATA_DIR", dataDir)
+	t.Setenv("TANPOPO_PLUGINS_DIR", filepath.Join(dataDir, "plugins"))
+	t.Setenv("TANPOPO_DB_PATH", dbPath)
+	t.Setenv("TANPOPO_LOCK_FILE", filepath.Join(dataDir, "tanpopo.lock"))
+	t.Setenv("TANPOPO_BOOTSTRAP_TOKEN_FILE", filepath.Join(dataDir, "bootstrap.token"))
+	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	t.Setenv("TANPOPO_TEST_HERMETIC", "1")
+	t.Setenv("TANPOPO_METRICS_SCRAPE_TOKEN", "scrape-secret-r4")
+	t.Setenv("TANPOPO_METRICS_INCLUDE_TENANT_LABELS", "false")
+	t.Setenv("TANPOPO_OTLP_ENDPOINT", collector.URL)
+	t.Setenv("TANPOPO_OTLP_ALLOW_PRIVATE_IP", "true")
+	t.Setenv("TANPOPO_OTLP_ALLOWED_CIDRS", "127.0.0.1/32")
+	t.Setenv("TANPOPO_OTLP_METRICS_EXPORT_INTERVAL", "25ms")
+	t.Setenv("TANPOPO_NODE_ID", "node-r4-all")
+	t.Setenv("TANPOPO_LOG_OUT", "discard")
+
+	srvCtx, cancelSrv := context.WithCancel(context.Background())
+	listenCh := make(chan struct {
+		main    string
+		metrics string
+	}, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- serveWithConfig(srvCtx, "all", "127.0.0.1:0", serveRuntimeConfig{
+			MetricsListen:    "127.0.0.1:0",
+			HasMetricsListen: true,
+			OnListen: func(mainAddr, metricsAddr string) {
+				listenCh <- struct {
+					main    string
+					metrics string
+				}{main: mainAddr, metrics: metricsAddr}
+			},
+		})
+	}()
+
+	addrs := <-listenCh
+	if addrs.main == "" || addrs.metrics == "" {
+		cancelSrv()
+		t.Fatalf("expected non-empty main and internal metrics listeners, got %+v", addrs)
+	}
+
+	client := &http.Client{Timeout: 3 * time.Second}
+
+	// 1. DEF-064: Unauthenticated or invalid Bearer on internal /metrics returns 401; valid Bearer returns 200 without tenant labels.
+	respUnauth, err := client.Get("http://" + addrs.metrics + "/metrics")
+	if err != nil {
+		cancelSrv()
+		t.Fatalf("GET unauth metrics: %v", err)
+	}
+	_ = respUnauth.Body.Close()
+	if respUnauth.StatusCode != http.StatusUnauthorized {
+		cancelSrv()
+		t.Fatalf("DEF-064 expected 401 on unauthenticated /metrics, got %d", respUnauth.StatusCode)
+	}
+
+	reqBad, _ := http.NewRequest(http.MethodGet, "http://"+addrs.metrics+"/metrics", nil)
+	reqBad.Header.Set("Authorization", "Bearer wrong-token")
+	respBad, err := client.Do(reqBad)
+	if err != nil {
+		cancelSrv()
+		t.Fatalf("GET wrong token metrics: %v", err)
+	}
+	_ = respBad.Body.Close()
+	if respBad.StatusCode != http.StatusUnauthorized {
+		cancelSrv()
+		t.Fatalf("DEF-064 expected 401 on invalid token /metrics, got %d", respBad.StatusCode)
+	}
+
+	reqOK, _ := http.NewRequest(http.MethodGet, "http://"+addrs.metrics+"/metrics", nil)
+	reqOK.Header.Set("Authorization", "Bearer scrape-secret-r4")
+	respOK, err := client.Do(reqOK)
+	if err != nil {
+		cancelSrv()
+		t.Fatalf("GET authed metrics: %v", err)
+	}
+	metricsBody, _ := io.ReadAll(respOK.Body)
+	_ = respOK.Body.Close()
+	if respOK.StatusCode != http.StatusOK {
+		cancelSrv()
+		t.Fatalf("DEF-064 expected 200 on authenticated internal /metrics, got %d body=%s", respOK.StatusCode, string(metricsBody))
+	}
+	if !strings.Contains(string(metricsBody), "tanpopo_config_snapshot_age_seconds") {
+		cancelSrv()
+		t.Fatalf("expected tanpopo_config_snapshot_age_seconds in /metrics output, got:\n%s", string(metricsBody))
+	}
+
+	// 2. DEF-063/065: Exercise admin API + data plane to produce logs, spans, and metrics exported via OTLP.
+	respAdmin, err := client.Get("http://" + addrs.main + "/admin/v1/auth/session")
+	if err == nil {
+		_ = respAdmin.Body.Close()
+	}
+	respDP, err := client.Get("http://" + addrs.main + "/v1/models")
+	if err == nil {
+		_ = respDP.Body.Close()
+	}
+
+	// 3. DEF-072: Verify node registered itself in cluster_nodes while alive.
+	roDB, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		cancelSrv()
+		t.Fatalf("open sqlite db read: %v", err)
+	}
+	var nodeRole string
+	if err := roDB.QueryRow(`SELECT role FROM cluster_nodes WHERE node_id = ?`, "node-r4-all").Scan(&nodeRole); err != nil || nodeRole != "all" {
+		_ = roDB.Close()
+		cancelSrv()
+		t.Fatalf("DEF-072 expected node-r4-all in cluster_nodes with role=all, got role=%q err=%v", nodeRole, err)
+	}
+
+	// Wait briefly for periodic /v1/metrics tick, then cleanly cancel and await flush on shutdown.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		hasMetrics := gotPaths["/v1/metrics"] > 0
+		hasLogs := gotPaths["/v1/logs"] > 0
+		mu.Unlock()
+		if hasMetrics && hasLogs {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	cancelSrv()
+	if sErr := <-errCh; sErr != nil {
+		_ = roDB.Close()
+		t.Fatalf("serveWithConfig shutdown error: %v", sErr)
+	}
+
+	// Verify cluster_nodes cleaned up self entry on graceful shutdown and OTLP signals exported.
+	var remaining int
+	if err := roDB.QueryRow(`SELECT COUNT(*) FROM cluster_nodes WHERE node_id = ?`, "node-r4-all").Scan(&remaining); err != nil {
+		_ = roDB.Close()
+		t.Fatalf("count cluster_nodes post-shutdown: %v", err)
+	}
+	_ = roDB.Close()
+	if remaining != 0 {
+		t.Fatalf("DEF-072 expected clean cluster_nodes self-deregistration on shutdown, remaining=%d", remaining)
+	}
+
+	mu.Lock()
+	logsHits := gotPaths["/v1/logs"]
+	metricsHits := gotPaths["/v1/metrics"]
+	mu.Unlock()
+	if logsHits == 0 {
+		t.Fatalf("DEF-063/065 expected OTLP /v1/logs export hits, got 0 (paths=%v)", gotPaths)
+	}
+	if metricsHits == 0 {
+		t.Fatalf("DEF-065 expected OTLP /v1/metrics export hits, got 0 (paths=%v)", gotPaths)
+	}
+
+	// 4. Split-role control-plane runtime also exposes /metrics on control-plane mux.
+	t.Setenv("TANPOPO_DATA_DIR", filepath.Join(t.TempDir(), "cp-data"))
+	t.Setenv("TANPOPO_DB_PATH", "")
+	t.Setenv("TANPOPO_LOCK_FILE", "")
+	t.Setenv("TANPOPO_BOOTSTRAP_TOKEN_FILE", "")
+	t.Setenv("TANPOPO_NODE_ID", "cp-role-only")
+	cpHandler, closeCP, err := buildRuntime(context.Background(), "control-plane", "127.0.0.1:8080")
+	if err != nil {
+		t.Fatalf("buildRuntime control-plane: %v", err)
+	}
+	defer func() { _ = closeCP() }()
+	cpRec := httptest.NewRecorder()
+	cpReq := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	cpReq.Header.Set("Authorization", "Bearer scrape-secret-r4")
+	cpHandler.ServeHTTP(cpRec, cpReq)
+	if cpRec.Code != http.StatusOK || !strings.Contains(cpRec.Body.String(), "tanpopo_config_snapshot_age_seconds") {
+		t.Fatalf("expected control-plane /metrics 200, got %d body=%s", cpRec.Code, cpRec.Body.String())
+	}
+}
+
 

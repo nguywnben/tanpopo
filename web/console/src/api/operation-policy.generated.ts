@@ -436,6 +436,10 @@ export const operationPolicy = {
     "csrf": true,
     "ifMatch": false
   },
+  "POST /admin/v1/ops/keys/retire": {
+    "csrf": true,
+    "ifMatch": false
+  },
   "POST /admin/v1/ops/upgrades/preflight": {
     "csrf": true,
     "ifMatch": false

@@ -598,6 +598,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		// Group L: Minimum reusable Unit 32 lifecycle core required by Unit 30 Operations.
 		{Method: http.MethodGet, Path: "/admin/v1/ops/cluster-status", Action: rbac.ActionOpsRead, Handler: s.handleGetClusterOpsStatus},
 		{Method: http.MethodPost, Path: "/admin/v1/ops/backups", Action: rbac.ActionOpsWrite, Handler: s.handleCreateEncryptedBackup},
+		{Method: http.MethodPost, Path: "/admin/v1/ops/keys/retire", Action: rbac.ActionOpsWrite, Handler: s.handleRetireMasterKEK},
 		{Method: http.MethodPost, Path: "/admin/v1/ops/upgrades/preflight", Action: rbac.ActionOpsWrite, Handler: s.handleRunUpgradePreflight},
 		{Method: http.MethodPost, Path: "/admin/v1/playground/sessions", Action: rbac.ActionPlaygroundCreate, Handler: s.handleCreatePlaygroundSession},
 	}
