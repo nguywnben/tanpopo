@@ -1,0 +1,11 @@
+{
+  "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "deployments": 0,
+  "routes": 0,
+  "key": "REVOKED",
+  "fixtureRestored": true,
+  "fixtureHealth": {
+    "endpoint": "http://127.0.0.1:18125/api/tags",
+    "model": "qa004-mock"
+  }
+}
