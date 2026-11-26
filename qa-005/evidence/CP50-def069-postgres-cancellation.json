@@ -1,0 +1,79 @@
+{
+  "checkpoint": "CP50",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": {
+    "control_plane": "127.0.0.1:18151",
+    "data_plane": "127.0.0.1:18152",
+    "storage": "isolated PostgreSQL 16",
+    "fast_state": "three-node Valkey 8.1 Cluster; cluster_state=ok",
+    "a2a_enabled": true,
+    "browser": "Chromium 1440x1000",
+    "fixture": "loopback-only delayed endpoint 127.0.0.1:19187; 15-second synthetic work"
+  },
+  "agent": {
+    "id": "agt_01m8d1txhke0087aw28cgy7bhk",
+    "slug": "qa005-cp50b-delayed-cancel",
+    "endpoint": "http://127.0.0.1:19187/a2a",
+    "allowed_cidr": "127.0.0.1/32",
+    "state": "ACTIVE"
+  },
+  "virtual_key": {
+    "id": "vky_01m8d1tz0fe008fg7jczmcr6x9",
+    "last_four": "w2xw",
+    "allowed_planes": ["A2A"],
+    "final_state": "REVOKED",
+    "plaintext_included": false
+  },
+  "task": {
+    "id": "tsk_01m8d1v0h6e00bprccq77txq8b",
+    "request": "cookie-free POST /a2a/tasks to Data Plane 18152; sub_budget_hold_micros=10000; dispatch_async=false",
+    "fixture_observed_task_id": "tsk_01m8d1v0h6e00bprccq77txq8b",
+    "fixture_call": {
+      "authorization_forwarded": false,
+      "trace_root_present": true,
+      "hop_count": "1",
+      "work_duration_seconds": 15,
+      "completed": true,
+      "result_state": "completed",
+      "reported_spent_micros": 3000,
+      "cancel_signal_calls": 0
+    },
+    "ui_before_cancel": "Working; cap shown as $0.010000; Cancel action available",
+    "cancel_api": {"http_status": 200, "state": "canceled", "version": 3},
+    "ui_after_cancel": "Canceled; success notice says held budget released",
+    "after_reload": "Canceled",
+    "original_create_response": {"http_status": 200, "state": "canceled", "version": 3},
+    "settled_cost_micros": 0,
+    "postgres_readback": {
+      "task_state": "CANCELED",
+      "task_sub_budget_cap_micros": 10000,
+      "task_settled_cost_micros": 0,
+      "reservation_state": "RELEASED_UNUSED",
+      "reservation_original_hold_micros": 10000,
+      "linked_budget_ledgers_remaining_reserved_hold_micros": 0
+    }
+  },
+  "classifications": {
+    "DEF_069": "FAIL, freshly reproduced on PostgreSQL/Valkey; remains Major",
+    "nonzero_hold_release": "PASS (scoped; reservation state RELEASED_UNUSED and linked active holds 0)",
+    "remaining_task_cap_in_row": "expected original cap; not treated as remaining reservation or a separate defect",
+    "budget_accounting_defect": "not established; no new finding"
+  },
+  "screenshots": [
+    "screenshots/CP50-pg-a2a-agent.png",
+    "screenshots/CP50-pg-a2a-key-form.png",
+    "screenshots/CP50-pg-a2a-working.png",
+    "screenshots/CP50-pg-a2a-canceled.png",
+    "screenshots/CP50-pg-a2a-persisted-canceled.png",
+    "screenshots/CP50-pg-a2a-key-revoked.png",
+    "screenshots/CP50-pg-finops-after-cancel.png"
+  ],
+  "visual_inspection": "Working action, canceled notice/state, persisted state, revoked key and FinOps summary were visually inspected.",
+  "excluded_exploratory_run": "A first task completed before automation refreshed the active-task view; no valid cancel was recorded. It remains unverified and excluded from DEF-069 classification.",
+  "limitations": [
+    "One synchronous local endpoint, one Owner and one Data Plane; no real service or paid provider.",
+    "No configured organization/project/environment/key budget ceiling in this test scope; PostgreSQL reservation state was directly queried to verify this task reservation release.",
+    "Async worker, streaming, retry, concurrent cancellation, cross-Data-Plane race, downstream cancellation protocol, role and tenant matrix remain unverified."
+  ]
+}

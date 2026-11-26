@@ -60,6 +60,8 @@ CP47 retested orderly cross-node Virtual Key revocation on that split Control Pl
 
 CP48–49 added scoped A2A lifecycle and authorization checks on PostgreSQL/three-node Valkey. CP48 drove the real Console task from `input-required` through approved resume to `completed`, rendered the synthetic result, and settled $0.003 against a $0.010 hold. Its credential had both PROVIDER and A2A planes (corrected in the CP48–49 record). CP49 issued two provider-only keys; both A2A discovery and task creation were denied with HTTP 403 `scope_or_plane_denied`, no synthetic dispatch occurred, and both keys were revoked. These runs do not change DEF-069's fresh FAIL: CP28 observed that delegated work continues after cancellation. A2A failure/cancel budget conservation, cancellation on this PG/Valkey topology, multi-tenant and non-Owner roles, task retries, and real interoperability remain open.
 
+CP50 repeated DEF-069 on PostgreSQL/three-node Valkey with an A2A-only key and $0.010000 nonzero hold. The task was visibly Working, then the real Console cancellation returned 200 and persisted Canceled v3; after reload it stayed canceled. The delayed loopback agent nevertheless ran all 15 seconds, completed synthetic work reporting $0.003, and received no cancellation request. Tanpopo returned its create request as canceled/200 and settled zero. A read-only org-scoped PostgreSQL query confirmed the reservation moved to RELEASED_UNUSED and linked active ledger holds were zero; the task row's $0.010000 value is the original task cap and is not evidence of an unreleased hold. The A2A key was revoked. This strengthens the Major defect across storage/fast-state topologies without a new defect. The run used one synchronous fixture, Owner and Data Plane; other worker modes, races, tenant/role boundaries and external interoperability remain open.
+
 ## Baseline identity and evidence integrity
 
 - All QA-005 tests so far use a local Linux amd64 binary built from the exact source commit; SHA-256 is `62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9`. Go build metadata records the frozen revision and `vcs.modified=false`.
@@ -120,5 +122,6 @@ Coverage remains incomplete for the 57 unverified historical findings, PostgreSQ
 - CP46: shared RPM admission across two Data Planes over isolated PostgreSQL/Valkey Cluster
 - CP47: cross-Data Plane Virtual Key revocation and replay denial
 - CP48–49: PostgreSQL/Valkey A2A input-required resume and provider-only key denial for discovery/task creation
+- CP50: DEF-069 PostgreSQL/Valkey delayed-work cancellation with nonzero hold and durable reservation-state readback
 - [Full evidence directory](evidence/)
 - [Historical campaigns](historical/)
