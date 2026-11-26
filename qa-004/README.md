@@ -111,6 +111,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP126 native Generate malformed image error settlement](checkpoints/CP126-native-generate-malformed-image-error-settlement.md)
 - [CP127 Firefox browser runtime blocker](checkpoints/CP127-firefox-browser-runtime-blocker.md)
 - [CP128 Virtual Key rotation grace and revocation](checkpoints/CP128-virtual-key-rotation-grace-and-revocation.md)
+- [CP129 consecutive Virtual Key rotation](checkpoints/CP129-consecutive-virtual-key-rotation.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -313,3 +314,6 @@ CP127 attempted the Owner FinOps budget screen in Firefox at 390×844. The bundl
 
 
 CP128 exercised the real Owner Access & Keys rotation lifecycle for one route/model-restricted Provider key. The UI stated a 24-hour dual-valid grace period; both old and new secrets independently accessed only the allowed model during grace; graceful revoke changed the key to REVOKED and both credentials then returned 401. `virtual_key.rotated` and `virtual_key.revoked` audit events linked to the same target. All four screenshots were visually inspected. This is a scoped PASS; rotation expiry timing, concurrent/repeated rotation, restart during grace, other roles and write paths remain open. No inference or budget change occurred; temporary keys were revoked. New failures remain DEF-051–074 (24); historical status remains 24 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 19 UNVERIFIED. QA is ongoing; **GATE-REL-07 remains BLOCKED.** Evidence: [CP128](checkpoints/CP128-virtual-key-rotation-grace-and-revocation.md) and [sanitized results](evidence/CP128-key-rotation-results.json).
+
+
+CP129 exercised a second real-UI key rotation before the prior grace elapsed. After the second rotation, the oldest credential returned 401 while the immediately previous and current credentials remained valid; final graceful revoke invalidated all three. Two rotation audit events and the revoke event linked to the same key. All three screenshots were visually inspected, the one successful canary key was revoked, and earlier setup-retry keys were cleaned and verified revoked. This is a scoped lifecycle PASS; concurrent/stale-version rotations, exact grace expiration, restart, other roles and active-stream behavior remain open. No defect was assigned. Historical counts and the 24 confirmed new failures (DEF-051–074) are unchanged. QA continues; **GATE-REL-07 remains BLOCKED.** Evidence: [CP129](checkpoints/CP129-consecutive-virtual-key-rotation.md) and [sanitized results](evidence/CP129-consecutive-vkey-rotation-results.json).

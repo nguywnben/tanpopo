@@ -1,0 +1,24 @@
+{
+  "checkpoint": "CP129",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 runtime; real Chromium Owner Console; QA004 Test Root Org / default / dev",
+  "scope": "consecutive rotation credential rollover, route/model scope preservation, revoke, and audit",
+  "key_name": "QA004 CP129 Consecutive Key Rotation Retest 2",
+  "key_id": "vky_01m8b8yxb9e008mad34kxqycb3",
+  "scope_restrictions": {"plane": "PROVIDER", "routes": ["/v1/models"], "models": ["qa004-cp121-priced-vision"]},
+  "rotations": [
+    {"action": "real UI rotation #1", "http_status": 200, "generation_order": ["K0 initial", "K1 first rotated"], "cookie_free_model_discovery": [200, 200]},
+    {"action": "real UI rotation #2 during dual-valid grace", "http_status": 200, "generation_order": ["K0 initial", "K1 first rotated", "K2 second rotated"], "cookie_free_model_discovery": [{"credential": "K0 initial", "http_status": 401, "error": "invalid_virtual_key"}, {"credential": "K1 first rotated", "http_status": 200}, {"credential": "K2 second rotated", "http_status": 200}]}
+  ],
+  "after_graceful_revoke": {"state": "REVOKED", "version": 4, "all_three_credentials": [{"http_status": 401, "error": "invalid_virtual_key"}, {"http_status": 401, "error": "invalid_virtual_key"}, {"http_status": 401, "error": "invalid_virtual_key"}]},
+  "audit_events": [
+    {"seq_no": 726, "action": "virtual_key.rotated", "target_id": "vky_01m8b8yxb9e008mad34kxqycb3", "chain_partition": "org_01m895k8pee008b3aeaswvpshy"},
+    {"seq_no": 727, "action": "virtual_key.rotated", "target_id": "vky_01m8b8yxb9e008mad34kxqycb3", "chain_partition": "org_01m895k8pee008b3aeaswvpshy"},
+    {"seq_no": 728, "action": "virtual_key.revoked", "target_id": "vky_01m8b8yxb9e008mad34kxqycb3", "chain_partition": "org_01m895k8pee008b3aeaswvpshy"}
+  ],
+  "screenshots": ["CP129-rotation-first-state.png", "CP129-rotation-second-state.png", "CP129-rotation-revoked-state.png"],
+  "credential_handling": "Three plaintext credential generations were held in process memory only, never printed or persisted. All were invalidated by final revoke. Earlier selector/setup retries created temporary canary keys; these were revoked and confirmed REVOKED before the successful run.",
+  "classification": "PASS (scoped repeated rotation retains only the immediately previous and current credentials; final graceful revoke invalidates every generation; audit target linkage verified).",
+  "product_source_modified": false,
+  "gate": "GATE-REL-07 BLOCKED"
+}
