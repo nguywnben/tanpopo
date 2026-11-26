@@ -15,11 +15,11 @@ The native Ollama `/api/chat` stream returns newline-delimited JSON frames, but 
 1. Start the frozen RC6 isolated runtime with an Ollama-compatible loopback fixture. Configure its `/api/chat` streaming response as `Content-Type: application/x-ndjson`, with one JSON object per line and a final `done:true` object. The CP86 fixture supplied a tool-call frame and terminal usage counters.
 2. In real Chromium, sign in as Org Owner in `default/dev`, issue a PROVIDER Virtual Key restricted to `/native/ollama/*`, and retain its one-time secret only outside the repository.
 3. Send a cookie-free `POST /native/ollama/api/chat` with model `qa004-loopback`, `stream:true`, one synthetic message and a function tool. Set `Accept: application/x-ndjson`.
-4. Read the response headers and body. Repeat with the same isolated fixture and a second authorized test key if needed; CP86 recorded three full streams with the same response type.
+4. Read the response headers and body. Repeat with the same isolated fixture; CP86 recorded three full /api/chat streams with the same response type; CP87 independently reproduced the mismatch on /api/generate.
 5. Read the body as lines. Each line parses as JSON, and none starts with `data:`.
 6. Revoke the test key, verify replay is denied, and restore the original fixture.
 
-Actual response: HTTP 200, `Content-Type: text/event-stream; charset=utf-8`; four plain NDJSON lines containing assistant chunks, `lookup_order` arguments and final usage counters. See [content-type result](../evidence/CP86-ndjson-content-type-check.json), [stream results](../evidence/CP86-native-stream-results.json), and the visually inspected [trace screenshot](../evidence/CP86-native-stream-traces.png). No external provider or real tool was used.
+Actual response: HTTP 200, `Content-Type: text/event-stream; charset=utf-8`; four plain NDJSON lines containing assistant chunks, `lookup_order` arguments and final usage counters. See [CP86 content-type result](../evidence/CP86-ndjson-content-type-check.json), [CP86 stream results](../evidence/CP86-native-stream-results.json), [CP87 Generate results](../evidence/CP87-generate-stream-results.json), and visually inspected [CP86 Traces](../evidence/CP86-native-stream-traces.png) and [CP87 Traces](../evidence/CP87-generate-stream-traces.png). No external provider or real tool was used.
 
 ## Expected versus actual
 

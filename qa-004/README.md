@@ -90,6 +90,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP84 active provider SSE kill-switch](checkpoints/CP84-live-sse-kill-switch.md)
 - [CP85 native Ollama tool call](checkpoints/CP85-native-ollama-tool-call-lifecycle.md)
 - [CP86 native Ollama streaming](checkpoints/CP86-native-ollama-streaming.md)
+- [CP87 native Ollama Generate streaming](checkpoints/CP87-native-ollama-generate-stream.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -178,3 +179,6 @@ CP85 exercised a real cookie-free native Ollama `/api/chat` request with a funct
 
 
 CP86 verified full Ollama native /api/chat NDJSON streams, function-call frames and client cancellation through a loopback fixture. Cancellation propagated to the upstream after three chunks while the client had read two. A new Moderate defect, DEF-070, records a reproducible wire mismatch: Tanpopo labels raw NDJSON as text/event-stream even when the client requests application/x-ndjson; the body has no SSE data frames. This is a streaming interoperability failure; non-streaming native JSON passed in CP85. CP86 also extends existing DEF-051/052 to five streaming calls: traces show Exact/$0 while FinOps shows 0 exact / 5 estimated at $0.000005, and the response usage header was absent. The temporary key was revoked, replay denied, fixture restored, and screenshots visually inspected. Historical status remains 23 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 20 UNVERIFIED; new confirmed failures are DEF-051–070 (20 records). Broader dialect, runtime, platform and release-signing coverage remains. QA continues; GATE-REL-07 remains BLOCKED.
+
+
+CP87 reproduced DEF-070 on the separate native Ollama /api/generate stream. RC6 preserved three NDJSON frames and terminal counters but returned text/event-stream despite Accept: application/x-ndjson. The trace showed Exact/$0, FinOps showed 0 exact / 1 estimated at $0.000001, and the response usage header was absent, extending DEF-051/052. The route-limited key was revoked, replay denied, and the original fixture restored. Traces, FinOps and key-state screenshots were visually inspected. No new defect ID was added; DEF-070 now covers both chat and generate. QA continues; GATE-REL-07 remains BLOCKED.

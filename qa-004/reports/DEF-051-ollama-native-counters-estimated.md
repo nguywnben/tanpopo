@@ -32,6 +32,8 @@ A second authorized cookie-free native dialect journey called `POST /native/olla
 
 CP85 /native/ollama/api/chat returned prompt_eval_count:17 and eval_count:4 with a faithful tool-call response but labeled the response ESTIMATED; FinOps recorded 0 exact / 1 estimated request. CP86 returned the same terminal counter pair in native streaming frames, but the stream response had no X-Tanpopo-Usage-Accuracy header. Five native stream requests (three complete and two canceled) appeared as 0 exact / 5 estimated in FinOps, while all five trace rows remained EXACT / $0. This independently extends the native counter issue to streamed /api/chat; see CP85, CP86, and their machine/UI evidence. No duplicate defect ID is created.
 
+CP87 independently exercised streamed /native/ollama/api/generate with terminal counters 8/3; response accuracy header was absent and FinOps recorded 0 exact / 1 estimated request. This further extends DEF-051. See CP87 checkpoint and evidence.
+
 ## Business impact
 
 Usage-based billing, budget consumption, chargeback, and audit figures can materially diverge from provider-reported Ollama usage while the inference itself succeeds. Byte estimates can understate or overstate token counts and may lead to incorrect customer charges or budget decisions.

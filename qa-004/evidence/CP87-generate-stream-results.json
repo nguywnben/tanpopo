@@ -1,0 +1,43 @@
+{
+  "key": {
+    "id": "vky_01m8akbvy0e00agt1n784m6bqf",
+    "state": "CREATED_ACTIVE",
+    "allowed_routes": [
+      "/native/ollama/*"
+    ]
+  },
+  "result": {
+    "status": 200,
+    "contentType": "text/event-stream; charset=utf-8",
+    "usageAccuracy": null,
+    "lineCount": 3,
+    "allLinesAreJson": true,
+    "sseDataPrefix": false,
+    "body": "{\"model\":\"qa004-loopback\",\"response\":\"Generate \",\"done\":false}\n{\"model\":\"qa004-loopback\",\"response\":\"stream works.\",\"done\":false}\n{\"model\":\"qa004-loopback\",\"response\":\"\",\"done\":true,\"prompt_eval_count\":8,\"eval_count\":3}\n"
+  },
+  "fixture": [
+    {
+      "path": "/api/generate",
+      "model": "qa004-loopback",
+      "stream": true,
+      "auth_present": false,
+      "event": "started"
+    },
+    {
+      "path": "/api/generate",
+      "event": "completed",
+      "chunks_sent": 3
+    }
+  ],
+  "traces": [
+    {
+      "request_id": "trc_01m8akcyy6e00837wngjejhxva",
+      "plane": "NATIVE",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "duration_ms": 465
+    }
+  ]
+}

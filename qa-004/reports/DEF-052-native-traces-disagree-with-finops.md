@@ -45,6 +45,8 @@ A two-target provider route sent a cookie-free streaming request to a local prim
 
 CP85 native /api/chat tool-call response created a trace marked EXACT / $0, while the same key FinOps row showed 0 exact / 1 estimated request at $0.000001. CP86 repeated the mismatch across five native streaming requests: every trace was EXACT / $0, while Virtual Key Chargeback showed 0 exact / 5 estimated requests at $0.000005. The trace and FinOps screens were visually inspected. See CP85 and CP86 checkpoint and evidence links. These extend DEF-052; no duplicate ID is assigned.
 
+CP87 /native/ollama/api/generate streaming again produced an EXACT/$0 trace while the same Virtual Key FinOps row showed 0 exact / 1 estimated request at $0.000001. This further extends DEF-052. See CP87 checkpoint and evidence.
+
 ## Business impact
 
 Operators cannot rely on traces to reconcile customer charges or investigate requests. The UI asserts “Exact” for estimated usage, and request-level zero cost cannot be reconciled to successful nonzero settlements and summary totals.
