@@ -91,6 +91,8 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP85 native Ollama tool call](checkpoints/CP85-native-ollama-tool-call-lifecycle.md)
 - [CP86 native Ollama streaming](checkpoints/CP86-native-ollama-streaming.md)
 - [CP87 native Ollama Generate streaming](checkpoints/CP87-native-ollama-generate-stream.md)
+- [CP88 reserved extension namespace spoofing](checkpoints/CP88-reserved-extension-namespace-spoof.md)
+- [CP89 Console backup verify/restore](checkpoints/CP89-console-backup-verify-restore-and-tamper.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -182,3 +184,9 @@ CP86 verified full Ollama native /api/chat NDJSON streams, function-call frames 
 
 
 CP87 reproduced DEF-070 on the separate native Ollama /api/generate stream. RC6 preserved three NDJSON frames and terminal counters but returned text/event-stream despite Accept: application/x-ndjson. The trace showed Exact/$0, FinOps showed 0 exact / 1 estimated at $0.000001, and the response usage header was absent, extending DEF-051/052. The route-limited key was revoked, replay denied, and the original fixture restored. Traces, FinOps and key-state screenshots were visually inspected. No new defect ID was added; DEF-070 now covers both chat and generate. QA continues; GATE-REL-07 remains BLOCKED.
+
+
+CP88 tested the reserved extension namespace boundary through the real Extensions Stage package dialog on the exact RC6 artifact. An exact-digest local unsigned manifest claiming `@tanpopo-qa004-spoof/canary` received HTTP 202 and became a pending candidate instead of the documented 403 `reserved_namespace_spoofing`, confirming new Major DEF-071. The Console showed the candidate as unverified/unsigned and required explicit consent; no consent or activation occurred. I discarded it in the Console, removed the synthetic archive, checked persistent state and linked stage/cancel audit events, then visually inspected the Console and Audit Log; the RFC 8785 chain verified intact across 17 events. The finding does not imply trusted provenance or authentic release signing. Historical status remains 23 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 20 UNVERIFIED; new confirmed failures are DEF-051–071 (21 records). Production release signing remains BLOCKED; QA continues and GATE-REL-07 remains BLOCKED.
+
+
+CP89 completed one exact-artifact backup journey on the isolated SQLite runtime: the real Console created a backup (201), its file SHA-256 and size matched the immutable SYSTEM receipt, CLI verify returned 0 for nine files, restore with secret-envelope trial-decrypt returned 0 and passed SQLite integrity with 57 application tables, and an encrypted-frame mutation was rejected with GCM authentication failure. Screenshots of the initial empty state and created receipt were visually inspected. Temporary archive, tampered copy and restored database were removed; no backup artifact or DB was committed. This is a scoped PASS and does not resolve CP79’s separate archive, PostgreSQL/Valkey, interruption, concurrency or disaster-recovery coverage. No defect was assigned; QA continues and GATE-REL-07 remains BLOCKED.
