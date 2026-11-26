@@ -62,6 +62,8 @@ CP48–49 added scoped A2A lifecycle and authorization checks on PostgreSQL/thre
 
 CP50 repeated DEF-069 on PostgreSQL/three-node Valkey with an A2A-only key and $0.010000 nonzero hold. The task was visibly Working, then the real Console cancellation returned 200 and persisted Canceled v3; after reload it stayed canceled. The delayed loopback agent nevertheless ran all 15 seconds, completed synthetic work reporting $0.003, and received no cancellation request. Tanpopo returned its create request as canceled/200 and settled zero. A read-only org-scoped PostgreSQL query confirmed the reservation moved to RELEASED_UNUSED and linked active ledger holds were zero; the task row's $0.010000 value is the original task cap and is not evidence of an unreleased hold. The A2A key was revoked. This strengthens the Major defect across storage/fast-state topologies without a new defect. The run used one synchronous fixture, Owner and Data Plane; other worker modes, races, tenant/role boundaries and external interoperability remain open.
 
+CP51 exercised the frozen Valkey-unreachable/PostgreSQL-healthy degraded-mode contract. With all three isolated Valkey primaries stopped, CP and both DPs stayed Ready as the accepted readiness contract specifies while PostgreSQL remained healthy. An rpm_limit=6 key received a two-request local slice on each DP; the next requests were 429, and admitted no-route requests failed with the expected 503 without provider dispatch. Control Plane revocation returned 200 while Valkey was offline and both DPs rejected replay with 401. After Valkey restart, the cluster converged to three nodes and 16,384 healthy slots and all Tanpopo readiness probes returned 200. Screenshots of traces and Operations were visually inspected. Operations did not expose Valkey dependency status while degraded; this is PG-007 because the baseline does not require such a panel and readiness behavior is contract-consistent. Budget checkpoint safety margins, notification latency SLA, replica promotion, DR-02 rebuild, and simultaneous database/Valkey partition remain UNVERIFIED.
+
 ## Baseline identity and evidence integrity
 
 - All QA-005 tests so far use a local Linux amd64 binary built from the exact source commit; SHA-256 is `62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9`. Go build metadata records the frozen revision and `vcs.modified=false`.
@@ -83,7 +85,7 @@ Recommended stabilization sequence:
 5. **DEF-082:** refresh the kill-switch badge after recovery; include stale cache, failure and concurrent operations.
 6. Retest the remaining historical high/major failures and partials against exact acceptance criteria, especially DEF-002/005/007/010, DEF-023, DEF-051–053, DEF-056, DEF-059–060, DEF-063–065 and DEF-067–074. Scoped CP40/41 passes do not close other adapters, rates, modalities or backends. Use [the ledger](DEFECT-REGRESSION-LEDGER.md) and original reports, not engineering claims or unit tests alone.
 7. **DEF-075:** retain a trustworthy one-time old/new pair, test validity during and after grace, version/state/audit, and persistence across restart and multi-node deployment.
-8. Validate PG-001–PG-006 during TEEP-01; these remain product-contract observations unless an accepted requirement establishes a defect.
+8. Validate PG-001–PG-007 during TEEP-01; these remain product-contract observations unless an accepted requirement establishes a defect.
 
 ## Coverage and limitations
 
@@ -122,6 +124,8 @@ Coverage remains incomplete for the 57 unverified historical findings, PostgreSQ
 - CP46: shared RPM admission across two Data Planes over isolated PostgreSQL/Valkey Cluster
 - CP47: cross-Data Plane Virtual Key revocation and replay denial
 - CP48–49: PostgreSQL/Valkey A2A input-required resume and provider-only key denial for discovery/task creation
+- CP50: PostgreSQL/Valkey DEF-069 reproduction with nonzero hold and direct reservation-state readback
+- CP51: full Valkey outage RPM/revocation fallback and cluster recovery
 - CP50: DEF-069 PostgreSQL/Valkey delayed-work cancellation with nonzero hold and durable reservation-state readback
 - [Full evidence directory](evidence/)
 - [Historical campaigns](historical/)
