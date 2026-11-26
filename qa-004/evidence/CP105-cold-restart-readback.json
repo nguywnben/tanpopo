@@ -1,0 +1,69 @@
+{
+  "runtime_port": 18133,
+  "state": {
+    "orgs": {
+      "status": 200,
+      "count": 1,
+      "rows": [
+        {
+          "name": "QA004 CP105 PostgreSQL",
+          "slug": "qa004-cp105-postgresql"
+        }
+      ]
+    },
+    "projects": {
+      "status": 200,
+      "count": 1,
+      "rows": [
+        {
+          "name": "default",
+          "slug": "default",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s"
+        }
+      ]
+    },
+    "environments": {
+      "status": 200,
+      "count": 1,
+      "rows": [
+        {
+          "name": "dev",
+          "slug": "dev",
+          "project_id": "prj_01m8awayeke00bfgn140arcw3y"
+        }
+      ]
+    },
+    "audit": {
+      "status": 200,
+      "count": 8,
+      "actions": [
+        "auth.login_succeeded",
+        "auth.login_succeeded",
+        "auth.login_succeeded",
+        "auth.login_succeeded",
+        "auth.login_succeeded",
+        "environment.created",
+        "project.created",
+        "organization.created"
+      ]
+    },
+    "ops": {
+      "status": 200,
+      "data": {
+        "backup_supported": false,
+        "backup_unavailable_reason": "Console snapshot backups currently support SQLite storage only; use PostgreSQL backup tooling for PostgreSQL deployments",
+        "current_epoch": 1,
+        "nodes": [
+          {
+            "config_epoch": 1,
+            "health": "ok",
+            "id": "primary",
+            "wal_bytes": 0
+          }
+        ],
+        "storage_engine": "postgres"
+      }
+    }
+  },
+  "audit_chain_ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 8 events.\nImmutable audit events\n8\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#8\tauth.login_succeeded\tprc_01m8aw"
+}
