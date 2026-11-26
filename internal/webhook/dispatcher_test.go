@@ -52,6 +52,10 @@ func openWebhookDBWithJournal(t *testing.T, journal string, busyTimeoutMs int) *
 		if stats.InUse != 0 {
 			t.Errorf("webhook test left %d SQLite connection(s) in use at cleanup", stats.InUse)
 		}
+		if journal == "WAL" {
+			_, _ = db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+			_, _ = db.Exec(`PRAGMA journal_mode=DELETE`)
+		}
 		if err := db.Close(); err != nil {
 			t.Errorf("close webhook test database: %v", err)
 		}
