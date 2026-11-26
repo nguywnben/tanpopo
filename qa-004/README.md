@@ -88,6 +88,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP82 A2A active-work cancellation / DEF-069](checkpoints/CP82-a2a-active-work-cancellation.md)
 - [CP83 A2A project-key boundary](checkpoints/CP83-a2a-project-key-boundary.md)
 - [CP84 active provider SSE kill-switch](checkpoints/CP84-live-sse-kill-switch.md)
+- [CP85 native Ollama tool call](checkpoints/CP85-native-ollama-tool-call-lifecycle.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -170,3 +171,6 @@ CP83 tested a project-scope A2A boundary using the active A2A-only key in `defau
 
 
 CP84 exercised an actual active provider SSE stream. A valid route-limited key completed its synthetic positive control; a Security Reviewer then triggered a VKEY switch with active-stream abort enabled while a second stream was live. RC6 reported one severed stream, the fixture observed the downstream disconnect, and the persisted trace showed `mid_stream_abort`. An Org Owner cleared the switch, verified inference recovery, and revoked all temporary keys; the original fixture was restored. Screenshots were visually inspected. This is PASS for one target/runtime/stream slice; MCP, other target levels, distributed behavior and cross-scope permissions remain unverified. No new defect was added. Historical status remains 23 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 20 UNVERIFIED; DEF-051–069 remain 19 confirmed new failures. QA continues; **GATE-REL-07 remains BLOCKED.**
+
+
+CP85 exercised a real cookie-free native Ollama `/api/chat` request with a function tool through the isolated provider fixture. RC6 preserved the tool name and argument JSON; the fixture saw exactly one `/api/chat` dispatch and no client credential. Revocation then denied replay without another upstream call. Response usage was Estimated, persisted trace said Exact/$0, and FinOps recorded Estimated/$0.000001, independently extending existing DEF-051/052. Traces, FinOps and revocation screenshots were visually inspected; the original provider fixture was restored. No new defect was added. Historical status remains 23 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 20 UNVERIFIED; DEF-051–069 remain 19 confirmed open failures. QA continues; **GATE-REL-07 remains BLOCKED.**
