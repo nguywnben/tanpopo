@@ -1,4 +1,4 @@
-# DEF-074 — Native Ollama image inputs are not charged by image-unit price cards
+# DEF-074 — Native Ollama chat and generate images are not charged by image-unit price cards
 
 **Severity:** Major  
 **Status:** FAIL — independently reproduced on frozen RC6 with a healthy synthetic upstream and non-zero image-unit pricing.  
@@ -43,9 +43,11 @@ The successful request trace `trc_01m8b5pv3ve008emhjergfc88e` is labeled `EXACT`
 
 CP122 repeated the image request with an existing Monthly project hard limit of 100 micro-USD, of which 50 micro-USD had already been settled. A correct pre-egress hold for two images at the configured 1,000 micro-USD/image is 2,000 micro-USD and must be rejected before dispatch. Exact RC6 returned HTTP 200; the synthetic fixture received both images. Persistent budget readback remained at exact 36 + estimated 14 micro-USD with zero hold, and VKEY chargeback recorded 0 charge / 1 estimated request. This confirms DEF-074 also allows native image requests to pass a hard project-budget boundary without reserving their image cost. See [CP122](../checkpoints/CP122-image-priced-request-project-budget-boundary.md) and its screenshots/results.
 
-## Root-cause hypothesis (not confirmed)
+## Source facts and remaining root-cause hypotheses
 
-Read-only inspection of RC6's native request media estimator suggests it traverses `messages`, recognizes singular image fields such as `image`, `image_url`, and `image_base64`, but does not appear to recognize Ollama's plural `messages[].images` array of base64 strings. CP125 shows the same missing charge for `/api/generate` top-level `images[]`; the estimator’s handling of that request body remains a separate code-path hypothesis, not confirmed by runtime evidence. The actual FinOps results establish missing charges on both tested endpoints but do not alone prove one shared code path is the sole cause. Confirm request media extraction and the settlement fallback with the responsible engineering owner.
+Read-only source inspection of the frozen RC6 baseline confirms the native media-estimator input shape is limited: `countNativeMediaUnits` only walks root `messages`, `input`, and `contents` collections ([`budget.go`](../../internal/ingress/native/budget.go#L99), [`budget.go`](../../internal/ingress/native/budget.go#L140)). Its image classifier checks singular fields `image_url`, `image`, `image_base64`, and `b64_json`, but not an `images` array ([`budget.go`](../../internal/ingress/native/budget.go#L183), [`budget.go`](../../internal/ingress/native/budget.go#L220)). Therefore native `/api/generate`'s root `images` is outside the enumerated collections; native `/api/chat` `messages[].images[]` reaches the walker but its array-string values are not classified as singular image fields. The session stores the resulting count in `b.media` and uses it for pre-hold ([`budget.go`](../../internal/ingress/native/budget.go#L93), [`budget.go`](../../internal/ingress/native/budget.go#L407)); settlement initializes media from that same estimate and falls back to it when provider-reported image count is zero ([`budget.go`](../../internal/ingress/native/budget.go#L616), [`budget.go`](../../internal/ingress/native/budget.go#L628)). This is source-level evidence of the tested omission paths, not a claim that every native adapter shares the same contract or that all media paths are affected.
+
+The confirmed behavioral facts are narrower: CP121 and CP125 show two valid images were forwarded by native `/api/chat` and `/api/generate` respectively, with zero settled image cost at the configured nonzero price; CP122 shows native `/api/chat` was not blocked by the corresponding project budget; CP123/124 show normalized OpenAI `image_url` was priced and budget-blocked in matching controls. The source facts align with these observations. Remaining hypothesis: whether this single estimator omission fully explains every persistence/trace projection symptom, and whether any other adapter paths have distinct extraction or provider-reported usage behavior. DEF-052 separately tracks trace accuracy/cost projection mismatch. Engineering should confirm the contract for adapter-reported media usage and image-count authority.
 
 ## Business impact
 
@@ -53,7 +55,7 @@ Every accepted native Ollama image request can be undercharged or omitted from i
 
 ## Acceptance criteria
 
-1. For native Ollama `/api/chat`, count each accepted item in `messages[].images[]`, and for `/api/generate` count each accepted item in top-level `images[]`, when deriving request media usage, unless exact upstream `MediaUsage.image_count` is present and authoritative.
+1. For native Ollama `/api/chat`, count each accepted item in `messages[].images[]`, and for `/api/generate` count each accepted item in top-level `images[]`, when deriving request media usage. Define and consistently apply the documented precedence for authoritative upstream `MediaUsage.image_count` rather than silently losing the request-derived count when the provider reports zero.
 2. At the CP121/CP125 fixture and rate card, successful two-image requests through both `/api/chat` and `/api/generate` produce two image units and settle 2,000 micro-USD ($0.002) with zero token charge. At the CP122 100-micro project budget and 50-micro prior use, each such native request is rejected before fixture egress with `429 project_budget_exceeded`.
 3. The settlement accuracy distinguishes request-observed image count from estimated token usage, and the response header, trace, durable ledger, Chargeback UI/API, and exports reconcile per request and in aggregate.
 4. Invalid images or unsuccessful upstream calls follow documented charge/hold-release semantics; a rejected request must not be charged as a completed inference.

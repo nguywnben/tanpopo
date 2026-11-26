@@ -110,6 +110,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP125 native Ollama Generate image pricing](checkpoints/CP125-native-generate-image-unit-settlement.md)
 - [CP126 native Generate malformed image error settlement](checkpoints/CP126-native-generate-malformed-image-error-settlement.md)
 - [CP127 Firefox browser runtime blocker](checkpoints/CP127-firefox-browser-runtime-blocker.md)
+- [CP128 Virtual Key rotation grace and revocation](checkpoints/CP128-virtual-key-rotation-grace-and-revocation.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -309,3 +310,6 @@ CP126 submitted one malformed synthetic image to native Ollama `/api/generate` o
 
 
 CP127 attempted the Owner FinOps budget screen in Firefox at 390×844. The bundled Firefox 1538 browser could not finish Playwright startup within 10 seconds; diagnostics show the sandbox cannot write `/proc/self/uid_map` (`EROFS`) and the software compositor cannot map the default framebuffer. Retrying with `/tmp` XDG cache, `MOZ_WEBRENDER=0`, and `--disable-gpu` failed the same way; direct headless CLI screenshot timed out after 15 seconds and produced no image. Environment status says remote desktop is enabled but state unknown, and this chat exposes no desktop browser control tool. **Firefox coverage is BLOCKED**, not passed, and no product conclusion is drawn. Chromium/WebKit slices are kept separate. No new defect was assigned. See [CP127](checkpoints/CP127-firefox-browser-runtime-blocker.md) and [`sanitized diagnostics`](evidence/CP127-firefox-startup-diagnostics.json). QA continues; **GATE-REL-07 remains BLOCKED.**
+
+
+CP128 exercised the real Owner Access & Keys rotation lifecycle for one route/model-restricted Provider key. The UI stated a 24-hour dual-valid grace period; both old and new secrets independently accessed only the allowed model during grace; graceful revoke changed the key to REVOKED and both credentials then returned 401. `virtual_key.rotated` and `virtual_key.revoked` audit events linked to the same target. All four screenshots were visually inspected. This is a scoped PASS; rotation expiry timing, concurrent/repeated rotation, restart during grace, other roles and write paths remain open. No inference or budget change occurred; temporary keys were revoked. New failures remain DEF-051–074 (24); historical status remains 24 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 19 UNVERIFIED. QA is ongoing; **GATE-REL-07 remains BLOCKED.** Evidence: [CP128](checkpoints/CP128-virtual-key-rotation-grace-and-revocation.md) and [sanitized results](evidence/CP128-key-rotation-results.json).
