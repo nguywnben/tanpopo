@@ -107,6 +107,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP122 image price and project-budget boundary](checkpoints/CP122-image-priced-request-project-budget-boundary.md)
 - [CP123 normalized OpenAI image pricing comparison](checkpoints/CP123-normalized-openai-image-pricing-comparison.md)
 - [CP124 normalized OpenAI project-budget boundary](checkpoints/CP124-normalized-openai-project-budget-boundary.md)
+- [CP125 native Ollama Generate image pricing](checkpoints/CP125-native-generate-image-unit-settlement.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -297,3 +298,6 @@ CP123 compared normalized OpenAI `image_url` content against the CP121 priced vi
 
 
 CP124 checked the normalized OpenAI control after restoring the project hard limit to 100 micro-USD. With settled spend already above the limit, a new two-image request returned 429 `project_budget_exceeded`; the dedicated fixture recorded zero dispatches, trace error readback matched, no Chargeback row or hold was created, and project usage/version stayed unchanged. The temporary key was revoked, original fixture restored, and Traces, budget and Access & Keys screenshots visually inspected. This is a scoped PASS for one normalized project-budget boundary and reinforces DEF-074’s native Ollama `messages[].images[]` scope. No new defect was assigned; 24 confirmed DEF-051–074 failures remain. QA coverage remains incomplete; GATE-REL-07 stays BLOCKED. Evidence: [CP124](checkpoints/CP124-normalized-openai-project-budget-boundary.md) and [`sanitized result`](evidence/CP124-normalized-budget-boundary-results.json).
+
+
+CP125 exercised native Ollama `/api/generate` with its top-level `images` array against the same 1,000,000-nano-USD image price. The local fixture received both ordered image hashes and returned 200; Chargeback again recorded zero exact/estimated micro-USD and one estimated request instead of the expected $0.002, while Traces said Exact/$0. This extends Major DEF-074 across both tested native Ollama `/api/chat` and `/api/generate` request shapes and separately extends DEF-052. The temporary project limit was raised then restored to 100, with no additional settlement; the temporary key was revoked and original fixture health returned. Screenshots were visually inspected. No new defect was assigned; DEF-051–074 remain 24 confirmed failures. Historical status remains 24 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 19 UNVERIFIED. QA continues; **GATE-REL-07 remains BLOCKED.** Evidence: [CP125](checkpoints/CP125-native-generate-image-unit-settlement.md) and [`sanitized result`](evidence/CP125-native-generate-image-pricing-results.json).

@@ -2,7 +2,7 @@
 
 **Severity:** Major  
 **Status:** FAIL — independently reproduced on frozen RC6 with a healthy synthetic upstream and non-zero image-unit pricing.  
-**Affected workflows:** Native Ollama `/api/chat` multimodal inference, image-unit pricing, usage settlement, budgets, Chargeback, and customer/project cost attribution.
+**Affected workflows:** Native Ollama `/api/chat` and `/api/generate` multimodal inference, image-unit pricing, usage settlement, budgets, Chargeback, and customer/project cost attribution.
 
 ## Reproduction
 
@@ -45,7 +45,7 @@ CP122 repeated the image request with an existing Monthly project hard limit of 
 
 ## Root-cause hypothesis (not confirmed)
 
-Read-only inspection of RC6's native request media estimator suggests it traverses `messages`, recognizes singular image fields such as `image`, `image_url`, and `image_base64`, but does not appear to recognize Ollama's plural `messages[].images` array of base64 strings. The actual FinOps result confirms the missing charge but does not alone prove this code path is the sole cause. Confirm request media extraction and the settlement fallback with the responsible engineering owner.
+Read-only inspection of RC6's native request media estimator suggests it traverses `messages`, recognizes singular image fields such as `image`, `image_url`, and `image_base64`, but does not appear to recognize Ollama's plural `messages[].images` array of base64 strings. CP125 shows the same missing charge for `/api/generate` top-level `images[]`; the estimator’s handling of that request body remains a separate code-path hypothesis, not confirmed by runtime evidence. The actual FinOps results establish missing charges on both tested endpoints but do not alone prove one shared code path is the sole cause. Confirm request media extraction and the settlement fallback with the responsible engineering owner.
 
 ## Business impact
 
@@ -53,8 +53,8 @@ Every accepted native Ollama image request can be undercharged or omitted from i
 
 ## Acceptance criteria
 
-1. For native Ollama `/api/chat`, count each accepted item in `messages[].images[]` as one image unit when deriving request media usage, unless exact upstream `MediaUsage.image_count` is present and authoritative.
-2. At the CP121 fixture and rate card, the successful two-image request produces two image units and settles 2,000 micro-USD ($0.002) with zero token charge. With the CP122 100-micro project budget and 50-micro prior use, that request is rejected before fixture egress with `429 project_budget_exceeded`.
+1. For native Ollama `/api/chat`, count each accepted item in `messages[].images[]`, and for `/api/generate` count each accepted item in top-level `images[]`, when deriving request media usage, unless exact upstream `MediaUsage.image_count` is present and authoritative.
+2. At the CP121/CP125 fixture and rate card, successful two-image requests through both `/api/chat` and `/api/generate` produce two image units and settle 2,000 micro-USD ($0.002) with zero token charge. At the CP122 100-micro project budget and 50-micro prior use, each such native request is rejected before fixture egress with `429 project_budget_exceeded`.
 3. The settlement accuracy distinguishes request-observed image count from estimated token usage, and the response header, trace, durable ledger, Chargeback UI/API, and exports reconcile per request and in aggregate.
 4. Invalid images or unsuccessful upstream calls follow documented charge/hold-release semantics; a rejected request must not be charged as a completed inference.
 5. No image is counted twice when provider-reported media usage is present, and multi-image order/count, empty arrays, missing arrays, malformed base64, budget limits, streaming, and restart persistence have regression coverage.
@@ -71,3 +71,10 @@ CP123 used the same model, healthy Ollama-backed deployment, 1,000,000 nano-USD/
 ## Normalized-path hard-budget control (CP124)
 
 With the project’s restored 100-micro-USD hard limit and settled usage already over that limit, CP124 sent a standard OpenAI two-image request through the same model/deployment. RC6 returned 429 `project_budget_exceeded` before the dedicated local fixture recorded any dispatch. The trace retained the rejection; Chargeback had no row; there was no hold or additional project settlement; and the project budget values/version remained unchanged. The temporary key was revoked and the original fixture restored. This provides a scoped normalized-path budget positive control and further narrows the observed budget bypass to native Ollama `messages[].images[]`; it does not cover other adapters, concurrent holds, or clustered enforcement. See [CP124](../checkpoints/CP124-normalized-openai-project-budget-boundary.md), its sanitized result, and visually inspected screenshots.
+
+
+## Native Ollama Generate retest (CP125)
+
+CP125 sent two valid ordered synthetic PNGs through native `POST /native/ollama/api/generate` using Ollama’s top-level `images` array. The same vision model, active loopback deployment, route and 1,000,000-nano-USD/image rate card were used. The local fixture received both exact image hashes and returned 200 with completion counters. The expected media charge is 2,000 micro-USD; persistent Chargeback instead reports zero exact and estimated micro-USD and one estimated request. The trace says Exact/$0. This independently reproduces the missing image-unit charge on `/api/generate` and extends the existing Trace/Chargeback discrepancy DEF-052. See [CP125](../checkpoints/CP125-native-generate-image-unit-settlement.md) and its sanitized evidence.
+
+Together CP121 and CP125 establish the defect on the two tested native Ollama image request shapes. CP123/124 demonstrate that standard OpenAI `image_url` inputs on this same model/deployment were priced and rejected before egress when over the restored project ceiling. Do not generalize the positive controls to other adapters or media formats without testing them.
