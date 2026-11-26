@@ -20,8 +20,9 @@ This creates a reconciliation gap between the spend used for project budget avai
 4. Actual response: budget ledger exact `2043`, estimated `14`, reserved `0`, hard limit `100` micro-USD; project summary exact `2044`, estimated `15`, one row for `default`. The November-filtered summary is unchanged.
 5. In real Chromium, open FinOps → Chargeback and then FinOps → Budgets & Holds for the same `default / dev` scope. The visually inspected Chargeback summary displays `$0.002044` exact / `$0.000015` estimated; the project budget row displays `$0.002043` exact / `$0.000014` estimated. The hard limit is restored to 100 micro-USD.
 6. Historical corroboration: CP136 reports the same November project rollup `2038 / 15`; CP137's initial persisted project budget readback is `2037 / 14`, before CP137's request. CP138/CP139 each add their independently recorded local usage while preserving the same one-micro difference in both fields.
+7. CP140 boundary confirmation: with budget at `2043 / 14` and Chargeback at `2044 / 15`, raised the hard limit to `2058` micro-USD. One `qa004-loopback` request returned HTTP 200. Budget settled at `2044 / 14` (exactly the `2058` limit), while Chargeback rose to `2045 / 15` (`2060` total). The key was revoked and the limit restored to 100. This confirms the visible Chargeback total can end two micro-USD above the configured cap when ledger headroom is one.
 
-Sanitized current readbacks are in [CP139 reconciliation results](../evidence/CP139-finops-budget-reconciliation-results.json). Visually inspected real screens are [Chargeback](../evidence/CP139-control-chargeback.png) and [project budget ledger](../evidence/CP139-budget-vs-usage.png). CP136 and CP137 historical evidence links are in the checkpoint records.
+Sanitized readbacks are in [CP139 reconciliation results](../evidence/CP139-finops-budget-reconciliation-results.json) and [CP140 boundary results](../evidence/CP140-budget-headroom-results.json). Visually inspected real screens include [CP139 Chargeback](../evidence/CP139-control-chargeback.png), [CP139 project budget](../evidence/CP139-budget-vs-usage.png), [CP140 one-micro headroom](../evidence/CP140-budget-one-micro-headroom.png), and [CP140 post-request Chargeback](../evidence/CP140-chargeback-after-headroom.png), and [CP140 revoked key](../evidence/CP140-key-revoked.png). CP136 and CP137 historical evidence links are in the checkpoint records.
 
 ## Expected versus actual
 
@@ -30,7 +31,7 @@ Sanitized current readbacks are in [CP139 reconciliation results](../evidence/CP
 
 ## Business impact
 
-Finance and operations cannot reconcile budget availability to chargeback totals. A persistent undercount in the ledger can overstate remaining headroom; an overcount would incorrectly block inference. The current QA dataset exhibits only a two-micro-USD combined discrepancy, so customer impact magnitude and whether this can grow are not quantified.
+Finance and operations cannot reconcile budget availability to chargeback totals. A persistent undercount in the ledger can overstate remaining headroom; an overcount would incorrectly block inference. The QA dataset exhibits a two-micro-USD combined discrepancy. CP140 demonstrated that a boundary request can be accepted while the displayed Chargeback total ends two micro-USD above the configured hard limit. Customer impact magnitude and whether this accumulates remain unquantified.
 
 ## Facts and root-cause hypotheses
 
@@ -49,10 +50,10 @@ Finance and operations cannot reconcile budget availability to chargeback totals
 1. For a fresh synthetic tenant and populated default project, monthly budget settled totals reconcile exactly with usage settlements for the same period, including exact and estimated buckets.
 2. If a documented accounting rule causes a difference, the API and Console disclose the rule and expose enough period information to reproduce it.
 3. Reconciliation is verified after exact and estimated settlements, errors, retries, scope changes, budget period rollover, and API/UI refresh.
-4. A budget-boundary test proves the enforced available headroom uses the same settled totals shown to operators, with no missing or duplicated spend.
+4. Re-run the CP140 one-micro headroom boundary and prove admission uses the same total shown in Chargeback, with no missing or duplicated spend.
 
 ## Related findings and coverage
 
-DEF-051/052 cover native provider metering and trace-versus-settlement projection mismatches; this report is a separate cross-view discrepancy between the monthly budget ledger and project chargeback summary. Root overlap is unknown. Remaining work includes request-level settlement-to-ledger attribution, other periods and scopes, PostgreSQL, concurrency, and budget-boundary confirmation.
+DEF-051/052 cover native provider metering and trace-versus-settlement projection mismatches; this report is a separate cross-view discrepancy between the monthly budget ledger and project chargeback summary. Root overlap is unknown. Remaining work includes request-level settlement-to-ledger attribution, other periods and scopes, PostgreSQL, and concurrency.
 
 QA-004 remains incomplete. **GATE-REL-07 remains BLOCKED.**
