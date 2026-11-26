@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Макс. выходных токенов",
   "models.modelRegistered": "Логическая модель \"{{slug}}\" зарегистрирована со статусом DECLARED.",
   "models.modelsAria": "Логические модели",
+  "models.noEnvironmentsHint": "В активном проекте ещё нет сред. Создайте среду на верхней панели перед регистрацией развёртывания.",
   "models.providerConnection": "Подключение провайдера",
   "models.rate.audio_sec_nano_usd": "Секунда аудио (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Чтение кэша (nano-USD)",

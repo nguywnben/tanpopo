@@ -49,6 +49,7 @@ type createLogicalModelRequest struct {
 	ID              string                `json:"id"`
 	Slug            string                `json:"slug"`
 	DisplayName     string                `json:"display_name"`
+	ProjectID       string                `json:"project_id"`
 	ModalityKind    string                `json:"modality_kind"`
 	ContextWindow   int64                 `json:"context_window"`
 	MaxOutputTokens int64                 `json:"max_output_tokens"`
@@ -164,7 +165,7 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 	var q strings.Builder
 	args := []any{orgID}
 	q.WriteString(`
-		SELECT id, canonical_slug, context_window, max_output_tokens, base_capabilities_json, created_at_ms
+		SELECT id, canonical_slug, COALESCE(NULLIF(display_name, ''), canonical_slug), context_window, max_output_tokens, base_capabilities_json, created_at_ms
 		FROM logical_models
 		WHERE (org_id = ? OR org_id IS NULL)`)
 	if cur != nil {
@@ -188,11 +189,11 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var (
-				id, slug, capsJSON string
-				ctxWin, maxOut     int64
-				createdMs          int64
+				id, slug, displayName, capsJSON string
+				ctxWin, maxOut                  int64
+				createdMs                       int64
 			)
-			if serr := rows.Scan(&id, &slug, &ctxWin, &maxOut, &capsJSON, &createdMs); serr != nil {
+			if serr := rows.Scan(&id, &slug, &displayName, &ctxWin, &maxOut, &capsJSON, &createdMs); serr != nil {
 				scanErr = serr
 				return nil
 			}
@@ -200,7 +201,7 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 			if strings.TrimSpace(capsJSON) != "" {
 				_ = json.Unmarshal([]byte(capsJSON), &capsMap)
 			}
-			dto := toLogicalModelDTO(id, slug, slug, ctxWin, maxOut, "", capsMap)
+			dto := toLogicalModelDTO(id, slug, displayName, ctxWin, maxOut, "", capsMap)
 			items = append(items, modelRow{dto: dto, createdMs: createdMs})
 		}
 		if ierr := rows.Err(); ierr != nil {
@@ -242,6 +243,28 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func resolveBoundProjectScopeForAction(actor *rbac.Actor, orgID string, action rbac.Action) (string, bool) {
+	if actor == nil || strings.TrimSpace(orgID) == "" {
+		return "", false
+	}
+	for _, b := range actor.Bindings {
+		if b.ScopeType == rbac.ScopeInstance && b.RoleName == rbac.RoleOperator && b.OrgID == nil {
+			return "", false
+		}
+		if b.ScopeType == rbac.ScopeOrg && b.OrgID != nil && *b.OrgID == orgID {
+			return "", false
+		}
+	}
+	for _, b := range actor.Bindings {
+		if b.ScopeType == rbac.ScopeProject && b.OrgID != nil && *b.OrgID == orgID && strings.TrimSpace(b.ScopeID) != "" {
+			if rbac.Authorize(actor, action, rbac.TargetScope{OrgID: orgID, ProjectID: b.ScopeID}) == nil {
+				return b.ScopeID, true
+			}
+		}
+	}
+	return "", false
+}
+
 func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) {
 	sc, ok := s.authenticate(w, r)
 	if !ok {
@@ -255,10 +278,29 @@ func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if !s.authorize(w, r, sc, rbac.ActionModelWrite, rbac.TargetScope{OrgID: orgID}) {
+	projectID := strings.TrimSpace(req.ProjectID)
+	targetScope := rbac.TargetScope{OrgID: orgID}
+	if projectID != "" {
+		targetScope.ProjectID = projectID
+	} else if pid, hasBoundProj := resolveBoundProjectScopeForAction(sc.Actor, orgID, rbac.ActionModelWrite); hasBoundProj {
+		targetScope.ProjectID = pid
+	}
+	if !s.authorize(w, r, sc, rbac.ActionModelWrite, targetScope) {
 		return
 	}
-	if !s.requireActiveOrg(w, r, orgID) {
+	if projectID != "" {
+		if _, err := s.storage.Tenancy().GetProject(r.Context(), orgID, projectID); err != nil {
+			if errors.Is(err, port.ErrNotFound) {
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+				return
+			}
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating project", true, nil)
+			return
+		}
+		if !s.requireActiveOrgAndProject(w, r, orgID, projectID) {
+			return
+		}
+	} else if !s.requireActiveOrg(w, r, orgID) {
 		return
 	}
 
@@ -331,10 +373,10 @@ func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) 
 
 	if _, err := tx.ExecContext(r.Context(), s.rebind(`
 		INSERT INTO logical_models (
-			id, org_id, canonical_slug, modality_kind, context_window,
+			id, org_id, canonical_slug, display_name, modality_kind, context_window,
 			max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
-		modelID, orgID, slug, modality, req.ContextWindow, req.MaxOutputTokens, string(capsJSON), now, now,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
+		modelID, orgID, slug, displayName, modality, req.ContextWindow, req.MaxOutputTokens, string(capsJSON), now, now,
 	); err != nil {
 		var pgErr *pgconn.PgError
 		if (errors.As(err, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "unique") {

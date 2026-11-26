@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "最大輸出權杖數",
   "models.modelRegistered": "已將邏輯模型「{{slug}}」註冊為已宣告 (DECLARED)。",
   "models.modelsAria": "邏輯模型列表",
+  "models.noEnvironmentsHint": "目前專案中尚無環境。請先於頂部列建立環境，再註冊部署。",
   "models.providerConnection": "供應商連線",
   "models.rate.audio_sec_nano_usd": "音訊每秒（奈美元）",
   "models.rate.cache_read_token_nano_usd": "快取讀取（奈美元）",

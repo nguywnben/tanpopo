@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "最大输出令牌数",
   "models.modelRegistered": "已将逻辑模型“{{slug}}”注册为已声明 (DECLARED)。",
   "models.modelsAria": "逻辑模型列表",
+  "models.noEnvironmentsHint": "当前项目中尚无环境。请先在顶部栏创建环境，然后再注册部署。",
   "models.providerConnection": "提供商连接",
   "models.rate.audio_sec_nano_usd": "音频每秒（纳美元）",
   "models.rate.cache_read_token_nano_usd": "缓存读取（纳美元）",

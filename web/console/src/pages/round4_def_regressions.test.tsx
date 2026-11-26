@@ -9,7 +9,10 @@ import {FinOpsPage} from './finops/FinOpsPage';
 import {ExtensionsPage} from './extensions/ExtensionsPage';
 import {ModelsPage} from './models/ModelsPage';
 import {OperationsPage} from './operations/OperationsPage';
+import {ProvidersPage} from './providers/ProvidersPage';
+import {RoutingPage} from './routes/RoutingPage';
 import {TracesPage} from './traces/TracesPage';
+import {ConsoleShell} from '../shell/ConsoleShell';
 
 function jsonResponse(body: unknown, status = 200, headers?: Record<string, string>) {
   return new Response(JSON.stringify(body), {
@@ -437,5 +440,208 @@ describe('Engineering Round 4 UI regressions (Slices A & B)', () => {
 
     const res = await axe.run(container);
     expect(res.violations).toHaveLength(0);
+  });
+
+  it('DEF-054/066: DEVELOPER & TEAM_ADMIN skip unauthorized connection/secret/org-policy calls without errors or WCAG violations', async () => {
+    const requested: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      const parsed = new URL(url, 'http://localhost');
+      requested.push(parsed.pathname + parsed.search);
+      if (parsed.pathname === '/admin/v1/models') {
+        return jsonResponse({
+          data: [{
+            id: 'lmd_1',
+            slug: 'qwen-custom',
+            display_name: 'Qwen Custom Enterprise',
+            context_window: 32768,
+            max_output_tokens: 4096,
+            assurance_tier: 'DECLARED',
+            capabilities: {
+              streaming: true, tool_calling: false, parallel_tool_calls: false, strict_json_schema: false,
+              json_object: false, vision: false, audio_input: false, document_input: false,
+              reasoning: false, prompt_caching: false, embeddings: false, rerank: false,
+            },
+          }],
+          next_cursor: null,
+          has_more: false,
+        });
+      }
+      if (parsed.pathname === '/admin/v1/routes' || parsed.pathname === '/admin/v1/deployments' || parsed.pathname === '/admin/v1/secrets' || parsed.pathname === '/admin/v1/connections' || parsed.pathname === '/admin/v1/provider-adapters') {
+        return jsonResponse({data: [], next_cursor: null, has_more: false});
+      }
+      if (parsed.pathname === '/admin/v1/policies/effective') {
+        if (!parsed.searchParams.get('project_id')) {
+          return jsonResponse({error: {code: 'permission_denied', message: 'org policy denied'}}, 403);
+        }
+        return jsonResponse({
+          id: 'pol_prj_1',
+          scope_type: 'PROJECT',
+          scope_id: 'prj_1',
+          version: 1,
+          rpm_ceiling: 1000,
+          tpm_ceiling: 100000,
+          max_concurrent_streams: 10,
+          allowed_data_regions: ['US'],
+          min_plugin_trust: 'ANY_APPROVED',
+          min_capability_assurance: 'DECLARED',
+          allowed_models: ['*'],
+          guardrail_hooks: [],
+          deny_all: false,
+        }, 200, {ETag: '"v1"'});
+      }
+      return jsonResponse({data: []});
+    });
+
+    const devModels = render(wrap(<ModelsPage projectId="prj_1" environmentId="env_1" roles={['DEVELOPER']} />));
+    const modelsTab = await screen.findByRole('tab', {name: /Logical models/i});
+    fireEvent.click(modelsTab);
+    await screen.findAllByText('Qwen Custom Enterprise');
+    expect(requested.some(r => r.startsWith('/admin/v1/connections'))).toBe(false);
+    expect(await axe.run(devModels.container)).toHaveProperty('violations', []);
+    devModels.unmount();
+
+    requested.length = 0;
+    const devProviders = render(wrap(<ProvidersPage pathname="/providers/connections" projectId="prj_1" roles={['DEVELOPER']} />));
+    await screen.findByRole('heading', {level: 1});
+    await waitFor(() => expect(devProviders.container.querySelector('[aria-busy="true"]')).toBeNull());
+    expect(requested.some(r => r.startsWith('/admin/v1/connections') || r.startsWith('/admin/v1/secrets'))).toBe(false);
+    expect(await axe.run(devProviders.container)).toHaveProperty('violations', []);
+    devProviders.unmount();
+
+    requested.length = 0;
+    const taProviders = render(wrap(<ProvidersPage pathname="/providers/connections" projectId="prj_1" roles={['TEAM_ADMIN']} />));
+    await waitFor(() => expect(requested.includes('/admin/v1/secrets?project_id=prj_1&limit=100')).toBe(true));
+    taProviders.unmount();
+
+    requested.length = 0;
+    const taRouting = render(wrap(<RoutingPage pathname="/routes" projectId="prj_1" environmentId="env_1" roles={['TEAM_ADMIN']} />));
+    await waitFor(() => expect(requested.some(r => r.includes('/admin/v1/policies/effective?project_id=prj_1'))).toBe(true));
+    expect(requested.some(r => r === '/admin/v1/policies/effective')).toBe(false);
+    expect(await axe.run(taRouting.container)).toHaveProperty('violations', []);
+  });
+
+  it('DEF-025: ModelsPage deployment drawer warns clearly and disables submit when project has zero environments', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({data: [], next_cursor: null, has_more: false}));
+    const {container} = render(wrap(<ModelsPage projectId="prj_empty" environmentId="" environments={[]} roles={['ORG_OWNER']} />));
+    const addDepBtn = await screen.findByRole('button', {name: /Add deployment/i});
+    fireEvent.click(addDepBtn);
+    await screen.findByText(/No environments exist in the active project yet/i);
+    const saveBtn = screen.getByRole('button', {name: /Save deployment/i});
+    expect(saveBtn.getAttribute('aria-disabled')).toBe('true');
+
+    const res = await axe.run(container);
+    expect(res.violations).toHaveLength(0);
+  });
+
+  it('DEF-068: ConsoleShell preserves CryptoShredReceipt banner across active-org switch remount', async () => {
+    window.history.replaceState(null, '', '/ops/organizations');
+    rememberCsrfToken('csrf-shell');
+    let orgs = [
+      {id: 'org_1', slug: 'alpha-org', name: 'Alpha Org', status: 'ACTIVE', min_plugin_trust: 'ANY_APPROVED', four_eyes_enabled: false, version: 1, created_at: '2026-11-26T00:00:00Z'},
+      {id: 'org_2', slug: 'beta-org', name: 'Beta Org', status: 'ACTIVE', min_plugin_trust: 'ANY_APPROVED', four_eyes_enabled: false, version: 1, created_at: '2026-11-26T00:00:00Z'},
+    ];
+    let currentOrg = 'org_1';
+
+    let deleteMode: 'immediate' | 'pending' | 'error' = 'immediate';
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const req = input instanceof Request ? input : null;
+      const url = req ? req.url : typeof input === 'string' ? input : String(input);
+      const parsed = new URL(url, 'http://localhost');
+      const method = (init?.method ?? req?.method ?? 'GET').toUpperCase();
+      if (parsed.pathname === '/admin/v1/auth/session') {
+        return jsonResponse({
+          authenticated: true,
+          principal_id: 'prc_op_1',
+          email: 'op@tanpopo.test',
+          org_id: currentOrg,
+          org_name: orgs.find(o => o.id === currentOrg)?.name ?? 'Beta Org',
+          roles: ['OPERATOR', 'ORG_OWNER'],
+          requires_password_rotation: false,
+          csrf_token: 'csrf-shell',
+        });
+      }
+      if (parsed.pathname === '/admin/v1/organizations' && method === 'GET') {
+        return jsonResponse({data: orgs, next_cursor: null, has_more: false});
+      }
+      if (parsed.pathname === '/admin/v1/organizations/org_1' && method === 'DELETE') {
+        if (deleteMode === 'pending') {
+          return jsonResponse({approval_id: 'apr_1', status: 'PENDING_APPROVAL'}, 202);
+        }
+        if (deleteMode === 'error') {
+          return jsonResponse({error: {code: 'erasure_failed', message: 'KMS unavailable'}}, 500);
+        }
+        orgs = orgs.filter(o => o.id !== 'org_1');
+        currentOrg = 'org_2';
+        return jsonResponse({
+          target_type: 'ORGANIZATION',
+          target_id: 'org_1',
+          destroyed_dek_id: 'dek_shred_alpha_01',
+          revoked_virtual_keys_count: 3,
+          audit_event_id: 'aud_shred_1',
+        });
+      }
+      if (parsed.pathname === '/admin/v1/bootstrap/status') {
+        return jsonResponse({completed: true, offline_mode: false, multi_org_enabled: true});
+      }
+      if (parsed.pathname === '/admin/v1/projects') {
+        return jsonResponse({data: [{id: 'prj_2', org_id: currentOrg, slug: 'default', name: 'Default', version: 1, created_at: '2026-11-26T00:00:00Z'}], next_cursor: null, has_more: false});
+      }
+      if (parsed.pathname.endsWith('/environments')) {
+        return jsonResponse({data: [{id: 'env_2', org_id: currentOrg, project_id: 'prj_2', slug: 'prod', name: 'Production', version: 1, created_at: '2026-11-26T00:00:00Z'}]});
+      }
+      return jsonResponse({data: [], next_cursor: null, has_more: false});
+    });
+
+    const {container} = render(wrap(<ConsoleShell />));
+    await screen.findAllByText('Alpha Org');
+
+    const shredBtns = await screen.findAllByRole('button', {name: /Crypto-shred/i});
+    fireEvent.click(shredBtns[0]!);
+    const shredModal = await screen.findByRole('dialog');
+    const shredInputs = shredModal.querySelectorAll('input');
+    fireEvent.change(shredInputs[shredInputs.length - 1]!, {target: {value: 'alpha-org'}});
+    const confirmBtns = Array.from(shredModal.querySelectorAll('button')).filter(b => b.textContent?.includes('Crypto-shred'));
+    fireEvent.click(confirmBtns[confirmBtns.length - 1]!);
+
+    await screen.findByText(/Organization crypto-shredded/i);
+    await screen.findByText(/dek_shred_alpha_01/);
+
+    const res = await axe.run(container);
+    expect(res.violations).toHaveLength(0);
+    cleanup();
+
+    // Verify 202 Accepted (pending approval) clears/omits the receipt banner.
+    orgs = [
+      {id: 'org_1', slug: 'alpha-org', name: 'Alpha Org', status: 'ACTIVE', min_plugin_trust: 'ANY_APPROVED', four_eyes_enabled: true, version: 1, created_at: '2026-11-26T00:00:00Z'},
+      {id: 'org_2', slug: 'beta-org', name: 'Beta Org', status: 'ACTIVE', min_plugin_trust: 'ANY_APPROVED', four_eyes_enabled: false, version: 1, created_at: '2026-11-26T00:00:00Z'},
+    ];
+    currentOrg = 'org_1';
+    deleteMode = 'pending';
+    render(wrap(<ConsoleShell />));
+    await screen.findAllByText('Alpha Org');
+    fireEvent.click((await screen.findAllByRole('button', {name: /Crypto-shred/i}))[0]!);
+    const pendingModal = await screen.findByRole('dialog');
+    const pendingInputs = pendingModal.querySelectorAll('input');
+    fireEvent.change(pendingInputs[pendingInputs.length - 1]!, {target: {value: 'alpha-org'}});
+    const pendingConfirm = Array.from(pendingModal.querySelectorAll('button')).filter(b => b.textContent?.includes('Crypto-shred'));
+    fireEvent.click(pendingConfirm[pendingConfirm.length - 1]!);
+    await screen.findByText(/Pending approval/i);
+    expect(screen.queryByText(/Organization crypto-shredded/i)).toBeNull();
+    cleanup();
+
+    // Verify DELETE error response also clears/omits the receipt banner.
+    deleteMode = 'error';
+    render(wrap(<ConsoleShell />));
+    await screen.findAllByText('Alpha Org');
+    fireEvent.click((await screen.findAllByRole('button', {name: /Crypto-shred/i}))[0]!);
+    const errModal = await screen.findByRole('dialog');
+    const errInputs = errModal.querySelectorAll('input');
+    fireEvent.change(errInputs[errInputs.length - 1]!, {target: {value: 'alpha-org'}});
+    const errConfirm = Array.from(errModal.querySelectorAll('button')).filter(b => b.textContent?.includes('Crypto-shred'));
+    fireEvent.click(errConfirm[errConfirm.length - 1]!);
+    await screen.findByText(/KMS unavailable/i);
+    expect(screen.queryByText(/Organization crypto-shredded/i)).toBeNull();
   });
 });

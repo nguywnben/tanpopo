@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Jetons max. en sortie",
   "models.modelRegistered": "Modèle logique « {{slug}} » enregistré comme DÉCLARÉ.",
   "models.modelsAria": "Modèles logiques",
+  "models.noEnvironmentsHint": "Aucun environnement n'existe encore dans le projet actif. Créez un environnement dans la barre supérieure avant d'enregistrer un déploiement.",
   "models.providerConnection": "Connexion fournisseur",
   "models.rate.audio_sec_nano_usd": "Seconde audio (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Lecture de cache (nano-USD)",

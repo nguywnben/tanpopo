@@ -115,6 +115,9 @@ export function RoutingPage({
   editScopeRef.current = editScope;
 
   const canManage = roles.some(role => manageRoles.includes(role));
+  const canReadConnections = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER'].includes(role));
+  const canReadTraces = roles.some(role => role !== 'FINOPS_VIEWER');
+  const canReadOrgPolicy = roles.some(role => ['OPERATOR', 'ORG_OWNER'].includes(role));
   const scopeLabel = useCallback((scope: PolicyScope) => {
     if (scope === 'ORGANIZATION') return t('common.organization');
     if (scope === 'PROJECT') return t('common.project');
@@ -138,39 +141,54 @@ export function RoutingPage({
     setLoading(true);
     setError('');
     try {
-      const [routeRows, depRows, modelRows, connRows, traceRows, orgRes, projRes, envRes] = await Promise.all([
+      const [routesRes, depsRes, modelsRes, connsRes, tracesRes, orgPolRes, projPolRes, envPolRes] = await Promise.allSettled([
         hasEnvScope ? listRoutesForEnvironment(environmentId) : Promise.resolve([] as Route[]),
         hasEnvScope ? listDeployments(environmentId) : Promise.resolve([] as Deployment[]),
         listAdminModels(),
-        listConnections(),
-        hasEnvScope && canManage
-          ? listRecentTraces(environmentId).catch(() => [] as components['schemas']['TraceSummary'][])
+        canReadConnections ? listConnections() : Promise.resolve([] as Connection[]),
+        hasEnvScope && canManage && canReadTraces
+          ? listRecentTraces(environmentId)
           : Promise.resolve([] as components['schemas']['TraceSummary'][]),
-        getEffectivePolicy(),
+        canReadOrgPolicy ? getEffectivePolicy() : Promise.resolve(null),
         projectId ? getEffectivePolicy(projectId) : Promise.resolve(null),
         hasEnvScope ? getEffectivePolicy(projectId, environmentId) : Promise.resolve(null),
       ]);
       if (refreshSeqRef.current !== seq) return;
+      const primaryFail = [routesRes, depsRes, modelsRes].find(res => res.status === 'rejected');
+      if (primaryFail && primaryFail.status === 'rejected') {
+        setError(errText(primaryFail.reason, t));
+      }
+      const routeRows = routesRes.status === 'fulfilled' ? routesRes.value : [];
+      const depRows = depsRes.status === 'fulfilled' ? depsRes.value : [];
+      const modelRows = modelsRes.status === 'fulfilled' ? modelsRes.value : [];
+      const connRows = connsRes.status === 'fulfilled' ? connsRes.value : [];
+      const traceRows = tracesRes.status === 'fulfilled' ? tracesRes.value : [];
+      const orgRes = orgPolRes.status === 'fulfilled' ? orgPolRes.value : null;
+      const projRes = projPolRes.status === 'fulfilled' ? projPolRes.value : null;
+      const envRes = envPolRes.status === 'fulfilled' ? envPolRes.value : null;
       setRoutes(routeRows);
       setDeployments(depRows);
       setModels(modelRows);
       setConnections(connRows);
       setTraces(traceRows);
-      setOrgPolicy(orgRes.policy);
+      setOrgPolicy(orgRes ? orgRes.policy : null);
       setProjPolicy(projRes ? projRes.policy : null);
       setEnvPolicy(envRes ? envRes.policy : null);
       setEtags({
-        ORGANIZATION: orgRes.etag,
+        ORGANIZATION: orgRes ? orgRes.etag : '',
         PROJECT: projRes ? projRes.etag : '',
         ENVIRONMENT: envRes ? envRes.etag : '',
       });
       const activeScope = editScopeRef.current;
+      const orgPol = orgRes ? orgRes.policy : null;
+      const projPol = projRes ? projRes.policy : null;
+      const envPol = envRes ? envRes.policy : null;
       const activePol =
         activeScope === 'ORGANIZATION'
-          ? orgRes.policy
+          ? orgPol
           : activeScope === 'PROJECT'
-            ? (projRes?.policy ?? orgRes.policy)
-            : (envRes?.policy ?? projRes?.policy ?? orgRes.policy);
+            ? (projPol ?? orgPol)
+            : (envPol ?? projPol ?? orgPol);
       setPolicyDraft(activePol);
     } catch (cause) {
       if (refreshSeqRef.current !== seq) return;
@@ -178,7 +196,7 @@ export function RoutingPage({
     } finally {
       if (refreshSeqRef.current === seq) setLoading(false);
     }
-  }, [projectId, environmentId, canManage, t]);
+  }, [projectId, environmentId, canManage, canReadConnections, canReadTraces, canReadOrgPolicy, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -372,8 +390,8 @@ export function RoutingPage({
     ? [
         {id: 'regions', rule: t('routing.rule.regions'), value: (effectiveDisplayPolicy.allowed_data_regions ?? []).join(', ') || t('common.noneConfigured'), source: regionSource(orgPolicy, projPolicy, effectiveDisplayPolicy, t, scopeLabel)},
         {id: 'models', rule: t('routing.rule.models'), value: (effectiveDisplayPolicy.allowed_models ?? ['*']).join(', ') || t('routing.rule.denyAll'), source: modelSource(orgPolicy, projPolicy, effectiveDisplayPolicy, t, scopeLabel)},
-        {id: 'trust', rule: t('routing.rule.trust'), value: t(`routing.trust.${effectiveDisplayPolicy.min_plugin_trust}`), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'min_plugin_trust', t, scopeLabel)},
-        {id: 'assurance', rule: t('routing.rule.assurance'), value: formatOperationalState(effectiveDisplayPolicy.min_capability_assurance), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'min_capability_assurance', t, scopeLabel)},
+        {id: 'trust', rule: t('routing.rule.trust'), value: t(`routing.trust.${effectiveDisplayPolicy.min_plugin_trust ?? 'ANY_APPROVED'}`), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'min_plugin_trust', t, scopeLabel)},
+        {id: 'assurance', rule: t('routing.rule.assurance'), value: formatOperationalState(effectiveDisplayPolicy.min_capability_assurance ?? 'DECLARED'), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'min_capability_assurance', t, scopeLabel)},
         {id: 'rpm', rule: t('routing.rule.rpm'), value: effectiveDisplayPolicy.rpm_ceiling != null ? formatNumber(effectiveDisplayPolicy.rpm_ceiling) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'rpm_ceiling', t, scopeLabel)},
         {id: 'tpm', rule: t('routing.rule.tpm'), value: effectiveDisplayPolicy.tpm_ceiling != null ? formatNumber(effectiveDisplayPolicy.tpm_ceiling) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'tpm_ceiling', t, scopeLabel)},
         {id: 'streams', rule: t('routing.rule.streams'), value: effectiveDisplayPolicy.max_concurrent_streams != null ? formatNumber(effectiveDisplayPolicy.max_concurrent_streams) : t('common.unspecified'), source: scalarSource(orgPolicy, projPolicy, effectiveDisplayPolicy, 'max_concurrent_streams', t, scopeLabel)},

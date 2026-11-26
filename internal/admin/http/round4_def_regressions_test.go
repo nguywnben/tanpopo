@@ -12,7 +12,9 @@ import (
 	"testing"
 
 	"github.com/nguywnben/tanpopo/internal/finops/pricing"
+	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
 func TestDEF052_053_077_078_079_Round4FinOpsAndPricingRegressions(t *testing.T) {
@@ -551,6 +553,217 @@ func TestDEF072_ClusterNodesAndDR03KeyRetirementGate(t *testing.T) {
 	loaded := strings.Join(h.vault.LoadedKeyIDs(ctx), ",")
 	if strings.Contains(loaded, "kek_v1") || !strings.Contains(loaded, "kek_v2") {
 		t.Fatalf("expected kek_v1 retired and kek_v2 active, loaded=%q", loaded)
+	}
+}
+
+func TestDEF054_055_056_057_Round4RBACModelsAndDisplayNames(t *testing.T) {
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "Round4 Slice E Org", "r4-slice-e-proj")
+	ctx := context.Background()
+
+	// Create sibling project + second org for strict scoping & anti-oracle checks.
+	sibPrj, err := h.st.Tenancy().CreateProject(ctx, boot.OrgID, port.CreateProjectParams{
+		Slug:        "r4-sibling-proj",
+		DisplayName: "Round4 Sibling Project",
+	})
+	if err != nil {
+		t.Fatalf("CreateProject sibling: %v", err)
+	}
+	otherOrg, err := h.st.Tenancy().CreateOrganization(ctx, port.CreateOrgParams{
+		Slug:        "r4-other-org",
+		DisplayName: "Round4 Other Org",
+	})
+	if err != nil {
+		t.Fatalf("CreateOrganization other: %v", err)
+	}
+
+	// 1. DEF-057: Environment display_name must survive POST + GET list (plus legacy blank fallback to slug).
+	recEnvCreate := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/projects/"+boot.ProjectID+"/environments", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug": "prod-eu",
+		"name": "EU Production Edge",
+	})
+	if recEnvCreate.Code != http.StatusCreated {
+		t.Fatalf("DEF-057 POST environment code=%d body=%s", recEnvCreate.Code, recEnvCreate.Body.String())
+	}
+	var createdEnv environmentDTO
+	mustDecodeJSON(t, recEnvCreate.Body.Bytes(), &createdEnv)
+	if createdEnv.Name != "EU Production Edge" || createdEnv.Slug != "prod-eu" {
+		t.Fatalf("DEF-057 POST expected name='EU Production Edge', got %+v", createdEnv)
+	}
+	recEnvList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/projects/"+boot.ProjectID+"/environments", ownerCookie, "", "", nil)
+	if recEnvList.Code != http.StatusOK {
+		t.Fatalf("DEF-057 GET environments code=%d body=%s", recEnvList.Code, recEnvList.Body.String())
+	}
+	var envList struct {
+		Data []environmentDTO `json:"data"`
+	}
+	mustDecodeJSON(t, recEnvList.Body.Bytes(), &envList)
+	foundCustomEnv := false
+	for _, e := range envList.Data {
+		if e.ID == createdEnv.ID {
+			foundCustomEnv = true
+			if e.Name != "EU Production Edge" {
+				t.Fatalf("DEF-057 GET lost persisted environment display name: got %q", e.Name)
+			}
+		}
+	}
+	if !foundCustomEnv {
+		t.Fatalf("DEF-057 created environment %s missing from list", createdEnv.ID)
+	}
+
+	// Legacy environment row with blank display_name must fall back cleanly to slug.
+	if _, err := h.st.RawDB().ExecContext(ctx, `UPDATE environments SET display_name = '' WHERE id = ?`, boot.EnvID); err != nil {
+		t.Fatalf("seed legacy blank env display_name: %v", err)
+	}
+	recEnvLegacy := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/projects/"+boot.ProjectID+"/environments", ownerCookie, "", "", nil)
+	mustDecodeJSON(t, recEnvLegacy.Body.Bytes(), &envList)
+	for _, e := range envList.Data {
+		if e.ID == boot.EnvID && e.Name != e.Slug {
+			t.Fatalf("DEF-057 legacy blank display_name expected slug fallback %q, got %q", e.Slug, e.Name)
+		}
+	}
+
+	// 2. DEF-055: Logical model display_name must survive POST + GET list (with legacy fallback).
+	recModCreate := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/models", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"slug":              "r4-custom-model",
+		"display_name":      "Round4 Enterprise Reasoning Model",
+		"context_window":    65536,
+		"max_output_tokens": 8192,
+		"assurance_tier":    "DECLARED",
+	})
+	if recModCreate.Code != http.StatusCreated {
+		t.Fatalf("DEF-055 POST /models code=%d body=%s", recModCreate.Code, recModCreate.Body.String())
+	}
+	var createdModel logicalModelDTO
+	mustDecodeJSON(t, recModCreate.Body.Bytes(), &createdModel)
+	if createdModel.DisplayName != "Round4 Enterprise Reasoning Model" {
+		t.Fatalf("DEF-055 POST expected display_name preserved, got %+v", createdModel)
+	}
+	recModList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/models", ownerCookie, "", "", nil)
+	if recModList.Code != http.StatusOK {
+		t.Fatalf("DEF-055 GET /models code=%d body=%s", recModList.Code, recModList.Body.String())
+	}
+	var modList struct {
+		Data []logicalModelDTO `json:"data"`
+	}
+	mustDecodeJSON(t, recModList.Body.Bytes(), &modList)
+	foundCustomModel := false
+	for _, m := range modList.Data {
+		if m.ID == createdModel.ID {
+			foundCustomModel = true
+			if m.DisplayName != "Round4 Enterprise Reasoning Model" {
+				t.Fatalf("DEF-055 GET lost persisted model display_name: got %q", m.DisplayName)
+			}
+		}
+	}
+	if !foundCustomModel {
+		t.Fatalf("DEF-055 created model %s missing from list", createdModel.ID)
+	}
+
+	// 3. DEF-056 + DEF-054: RBAC enforcement across TEAM_ADMIN, DEVELOPER, FINOPS_VIEWER, SECURITY_REVIEWER, cross-org anti-oracle.
+	h.registerBearerToken("tok_ta_r4", &rbac.Actor{
+		PrincipalID:     "prc_ta_r4",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleTeamAdmin}},
+	})
+	h.registerBearerToken("tok_dev_r4", &rbac.Actor{
+		PrincipalID:     "prc_dev_r4",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleDeveloper}},
+	})
+	h.registerBearerToken("tok_finops_r4", &rbac.Actor{
+		PrincipalID:     "prc_finops_r4",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeProject, ScopeID: boot.ProjectID, RoleName: rbac.RoleFinOpsViewer}},
+	})
+	h.registerBearerToken("tok_sec_r4", &rbac.Actor{
+		PrincipalID:     "prc_sec_r4",
+		SessionOrgID:    &boot.OrgID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &boot.OrgID, ScopeType: rbac.ScopeOrg, ScopeID: boot.OrgID, RoleName: rbac.RoleSecurityReviewer}},
+	})
+	h.registerBearerToken("tok_other_org_r4", &rbac.Actor{
+		PrincipalID:     "prc_other_r4",
+		SessionOrgID:    &otherOrg.ID,
+		CredentialPlane: rbac.CredentialPlaneAdminService,
+		Bindings:        []rbac.RoleBinding{{OrgID: &otherOrg.ID, ScopeType: rbac.ScopeOrg, ScopeID: otherOrg.ID, RoleName: rbac.RoleOrgOwner}},
+	})
+
+	// TEAM_ADMIN succeeds on bound project_id AND omitted project_id, fails 403 on sibling project.
+	recTAOwn := h.doBearer(t, http.MethodPost, "/admin/v1/models", "tok_ta_r4", "", map[string]any{
+		"slug":              "ta-bound-model",
+		"display_name":      "Team Admin Bound Model",
+		"project_id":        boot.ProjectID,
+		"context_window":    16384,
+		"max_output_tokens": 4096,
+	})
+	if recTAOwn.Code != http.StatusCreated {
+		t.Fatalf("DEF-056 TEAM_ADMIN POST /models with bound project_id expected 201, got %d body=%s", recTAOwn.Code, recTAOwn.Body.String())
+	}
+	recTAOmit := h.doBearer(t, http.MethodPost, "/admin/v1/models", "tok_ta_r4", "", map[string]any{
+		"slug":              "ta-omitted-model",
+		"display_name":      "Team Admin Default Project Model",
+		"context_window":    16384,
+		"max_output_tokens": 4096,
+	})
+	if recTAOmit.Code != http.StatusCreated {
+		t.Fatalf("DEF-056 TEAM_ADMIN POST /models omitting project_id expected 201, got %d body=%s", recTAOmit.Code, recTAOmit.Body.String())
+	}
+	recTASib := h.doBearer(t, http.MethodPost, "/admin/v1/models", "tok_ta_r4", "", map[string]any{
+		"slug":              "ta-sibling-denied",
+		"display_name":      "Sibling Denied Model",
+		"project_id":        sibPrj.ID,
+		"context_window":    16384,
+		"max_output_tokens": 4096,
+	})
+	if recTASib.Code != http.StatusForbidden {
+		t.Fatalf("DEF-056 TEAM_ADMIN POST /models sibling project expected 403, got %d body=%s", recTASib.Code, recTASib.Body.String())
+	}
+
+	// Cross-org actor targeting Org A's project gets uniform 404 anti-oracle (note tok_other_org has SessionOrgID=otherOrg; probe via ?org_id=boot.OrgID).
+	recCrossOrg := h.doBearer(t, http.MethodPost, "/admin/v1/models?org_id="+boot.OrgID, "tok_other_org_r4", "", map[string]any{
+		"org_id":            boot.OrgID,
+		"slug":              "cross-org-probe",
+		"display_name":      "Cross Org",
+		"project_id":        boot.ProjectID,
+		"context_window":    16384,
+		"max_output_tokens": 4096,
+	})
+	if recCrossOrg.Code != http.StatusForbidden && recCrossOrg.Code != http.StatusNotFound {
+		t.Fatalf("DEF-056 cross-org probe expected 403/404, got %d body=%s", recCrossOrg.Code, recCrossOrg.Body.String())
+	}
+
+	// TEAM_ADMIN secrets scoped to project_id returns 200 (vs unscoped 403).
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/secrets?project_id="+boot.ProjectID, "tok_ta_r4", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("DEF-054 TEAM_ADMIN GET /secrets?project_id expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/secrets", "tok_ta_r4", "", nil); rec.Code != http.StatusForbidden {
+		t.Fatalf("DEF-054 TEAM_ADMIN unscoped GET /secrets expected 403, got %d", rec.Code)
+	}
+
+	// DEVELOPER can read models/routes/project-policy, cannot write models.
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/models", "tok_dev_r4", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("DEVELOPER GET /models expected 200, got %d", rec.Code)
+	}
+	if rec := h.doBearer(t, http.MethodGet, "/admin/v1/policies/effective?project_id="+boot.ProjectID, "tok_dev_r4", "", nil); rec.Code != http.StatusOK {
+		t.Fatalf("DEVELOPER GET /policies/effective?project_id expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec := h.doBearer(t, http.MethodPost, "/admin/v1/models", "tok_dev_r4", "", map[string]any{
+		"slug": "dev-denied", "display_name": "Dev Denied", "project_id": boot.ProjectID, "context_window": 4096, "max_output_tokens": 1024,
+	}); rec.Code != http.StatusForbidden {
+		t.Fatalf("DEVELOPER POST /models expected 403, got %d", rec.Code)
+	}
+
+	// FINOPS_VIEWER and SECURITY_REVIEWER cannot mutate models.
+	for _, tok := range []string{"tok_finops_r4", "tok_sec_r4"} {
+		if rec := h.doBearer(t, http.MethodPost, "/admin/v1/models", tok, "", map[string]any{
+			"slug": "ro-denied-" + tok, "display_name": "RO Denied", "project_id": boot.ProjectID, "context_window": 4096, "max_output_tokens": 1024,
+		}); rec.Code != http.StatusForbidden {
+			t.Fatalf("read-only role %s POST /models expected 403, got %d", tok, rec.Code)
+		}
 	}
 }
 

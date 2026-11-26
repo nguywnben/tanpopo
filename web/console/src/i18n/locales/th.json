@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "โทเค็นผลลัพธ์สูงสุด",
   "models.modelRegistered": "ลงทะเบียนโมเดลเชิงตรรกะ \"{{slug}}\" ในสถานะ DECLARED แล้ว",
   "models.modelsAria": "โมเดลเชิงตรรกะ",
+  "models.noEnvironmentsHint": "ยังไม่มีสภาพแวดล้อมในโปรเจกต์ที่เลือก กรุณาสร้างสภาพแวดล้อมที่แถบด้านบนก่อนลงทะเบียน deployment",
   "models.providerConnection": "การเชื่อมต่อผู้ให้บริการ",
   "models.rate.audio_sec_nano_usd": "เสียงต่อวินาที (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "อ่านแคช (nano-USD)",

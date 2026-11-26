@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Token đầu ra tối đa",
   "models.modelRegistered": "Đã đăng ký mô hình logic \"{{slug}}\" ở trạng thái DECLARED.",
   "models.modelsAria": "Mô hình logic",
+  "models.noEnvironmentsHint": "Dự án hiện tại chưa có môi trường nào. Hãy tạo môi trường ở thanh trên cùng trước khi đăng ký triển khai.",
   "models.providerConnection": "Kết nối nhà cung cấp",
   "models.rate.audio_sec_nano_usd": "Giây âm thanh (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Đọc bộ nhớ đệm (nano-USD)",

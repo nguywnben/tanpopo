@@ -88,6 +88,7 @@ CREATE TABLE environments (
     org_id              VARCHAR(40) NOT NULL,
     project_id          VARCHAR(40) NOT NULL,
     slug                VARCHAR(32) NOT NULL, -- 'dev' | 'staging' | 'prod'
+    display_name        VARCHAR(128) NOT NULL DEFAULT '',
     require_tested_caps BOOLEAN NOT NULL DEFAULT FALSE,
     version             BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
     created_at_ms       BIGINT NOT NULL,
@@ -613,6 +614,7 @@ CREATE TABLE logical_models (
     id                     VARCHAR(40) PRIMARY KEY, -- 'lmd_<26_base32>'
     org_id                 VARCHAR(40) REFERENCES organizations(id) ON DELETE CASCADE,
     canonical_slug         VARCHAR(128) NOT NULL,
+    display_name           VARCHAR(128) NOT NULL DEFAULT '',
     modality_kind          VARCHAR(32) NOT NULL
                            CHECK (modality_kind IN ('CHAT', 'EMBEDDING', 'RERANK', 'MULTIMODAL')),
     context_window         INTEGER NOT NULL CHECK (context_window > 0),

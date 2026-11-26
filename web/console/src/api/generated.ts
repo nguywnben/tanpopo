@@ -1951,6 +1951,7 @@ export interface components {
             id: string;
             slug: string;
             display_name: string;
+            project_id?: string;
             context_window: number;
             max_output_tokens: number;
             /** @enum {string} */

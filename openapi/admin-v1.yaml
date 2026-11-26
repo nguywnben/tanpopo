@@ -669,6 +669,7 @@ components:
         id: { type: string }
         slug: { type: string }
         display_name: { type: string }
+        project_id: { type: string }
         context_window: { type: integer, minimum: 1 }
         max_output_tokens: { type: integer, minimum: 1 }
         assurance_tier: { type: string, enum: [DECLARED, TESTED, VERIFIED] }

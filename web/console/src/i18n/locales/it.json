@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Token max. output",
   "models.modelRegistered": "Modello logico «{{slug}}» registrato come DICHIARATO.",
   "models.modelsAria": "Modelli logici",
+  "models.noEnvironmentsHint": "Non esistono ancora ambienti nel progetto attivo. Crea un ambiente nella barra superiore prima di registrare un deployment.",
   "models.providerConnection": "Connessione provider",
   "models.rate.audio_sec_nano_usd": "Secondo audio (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Lettura cache (nano-USD)",

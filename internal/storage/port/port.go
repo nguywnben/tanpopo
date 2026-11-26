@@ -339,6 +339,7 @@ type Environment struct {
 	OrgID             string
 	ProjectID         string
 	Slug              string
+	DisplayName       string
 	RequireTestedCaps bool
 	Version           int64
 	CreatedAtMs       int64
@@ -425,12 +426,14 @@ type UpdateProjectParams struct {
 type CreateEnvironmentParams struct {
 	ID                string
 	Slug              string
+	DisplayName       string
 	RequireTestedCaps bool
 }
 
 // UpdateEnvironmentParams specifies mutable fields for an optimistic-locked Environment update.
 type UpdateEnvironmentParams struct {
 	Slug              *string
+	DisplayName       *string
 	RequireTestedCaps *bool
 }
 

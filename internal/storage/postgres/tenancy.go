@@ -702,17 +702,21 @@ func (r *tenancyRepo) CreateEnvironment(ctx context.Context, orgID, projectID st
 		return nil, err
 	}
 	now := r.nowMs()
+	displayName := strings.TrimSpace(params.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(params.Slug)
+	}
 	var out *port.Environment
 	err := r.withOrgExec(ctx, orgID, func(exec sqlExecQuery) error {
 		row := exec.QueryRowContext(
 			ctx,
 			`INSERT INTO environments (
-				id, org_id, project_id, slug, require_tested_caps,
+				id, org_id, project_id, slug, display_name, require_tested_caps,
 				version, created_at_ms, updated_at_ms
-			) VALUES ($1, $2, $3, $4, $5, 1, $6, $6)
-			RETURNING id, org_id, project_id, slug, require_tested_caps,
+			) VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $7)
+			RETURNING id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps,
 				version, created_at_ms, updated_at_ms`,
-			id, orgID, projectID, params.Slug, params.RequireTestedCaps, now,
+			id, orgID, projectID, params.Slug, displayName, params.RequireTestedCaps, now,
 		)
 		env, scanErr := scanEnvironment(row)
 		if scanErr != nil {
@@ -741,7 +745,7 @@ func (r *tenancyRepo) GetEnvironment(ctx context.Context, orgID, envID string) (
 	err := r.withOrgExec(ctx, orgID, func(exec sqlExecQuery) error {
 		row := exec.QueryRowContext(
 			ctx,
-			`SELECT id, org_id, project_id, slug, require_tested_caps,
+			`SELECT id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps,
 				version, created_at_ms, updated_at_ms
 			 FROM environments WHERE org_id = $1 AND id = $2`,
 			orgID, envID,
@@ -767,7 +771,7 @@ func (r *tenancyRepo) ListEnvironments(ctx context.Context, orgID, projectID str
 	err := r.withOrgExec(ctx, orgID, func(exec sqlExecQuery) error {
 		rows, err := exec.QueryContext(
 			ctx,
-			`SELECT id, org_id, project_id, slug, require_tested_caps,
+			`SELECT id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps,
 				version, created_at_ms, updated_at_ms
 			 FROM environments WHERE org_id = $1 AND project_id = $2
 			 ORDER BY id ASC`,
@@ -800,7 +804,7 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 	err := r.withOrgExec(ctx, orgID, func(exec sqlExecQuery) error {
 		cur, err := scanEnvironment(exec.QueryRowContext(
 			ctx,
-			`SELECT id, org_id, project_id, slug, require_tested_caps,
+			`SELECT id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps,
 				version, created_at_ms, updated_at_ms
 			 FROM environments WHERE org_id = $1 AND id = $2 FOR UPDATE`,
 			orgID, envID,
@@ -818,6 +822,13 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 			}
 			slug = *params.Slug
 		}
+		displayName := cur.DisplayName
+		if params.DisplayName != nil {
+			displayName = strings.TrimSpace(*params.DisplayName)
+		}
+		if displayName == "" {
+			displayName = slug
+		}
 		reqCaps := cur.RequireTestedCaps
 		if params.RequireTestedCaps != nil {
 			reqCaps = *params.RequireTestedCaps
@@ -826,12 +837,12 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 		row := exec.QueryRowContext(
 			ctx,
 			`UPDATE environments
-			 SET slug = $1, require_tested_caps = $2,
-				 version = version + 1, updated_at_ms = $3
-			 WHERE org_id = $4 AND id = $5 AND version = $6
-			 RETURNING id, org_id, project_id, slug, require_tested_caps,
+			 SET slug = $1, display_name = $2, require_tested_caps = $3,
+				 version = version + 1, updated_at_ms = $4
+			 WHERE org_id = $5 AND id = $6 AND version = $7
+			 RETURNING id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps,
 				version, created_at_ms, updated_at_ms`,
-			slug, reqCaps, now, orgID, envID, expectedVersion,
+			slug, displayName, reqCaps, now, orgID, envID, expectedVersion,
 		)
 		updated, err := scanEnvironment(row)
 		if err != nil {
@@ -1201,7 +1212,7 @@ func scanProject(row rowScanner) (*port.Project, error) {
 func scanEnvironment(row rowScanner) (*port.Environment, error) {
 	var env port.Environment
 	if err := row.Scan(
-		&env.ID, &env.OrgID, &env.ProjectID, &env.Slug, &env.RequireTestedCaps,
+		&env.ID, &env.OrgID, &env.ProjectID, &env.Slug, &env.DisplayName, &env.RequireTestedCaps,
 		&env.Version, &env.CreatedAtMs, &env.UpdatedAtMs,
 	); err != nil {
 		return nil, mapPGError(err)

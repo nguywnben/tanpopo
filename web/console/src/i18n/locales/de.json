@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Max. Ausgabe-Tokens",
   "models.modelRegistered": "Logisches Modell „{{slug}}“ als DEKLARIERT registriert.",
   "models.modelsAria": "Logische Modelle",
+  "models.noEnvironmentsHint": "Im aktiven Projekt sind noch keine Umgebungen vorhanden. Erstellen Sie zuerst oben eine Umgebung, bevor Sie ein Deployment anlegen.",
   "models.providerConnection": "Anbieterverbindung",
   "models.rate.audio_sec_nano_usd": "Audiosekunde (Nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Cache-Lesezugriff (Nano-USD)",

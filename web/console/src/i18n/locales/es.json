@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Tokens máx. de salida",
   "models.modelRegistered": "Modelo lógico «{{slug}}» registrado como DECLARADO.",
   "models.modelsAria": "Modelos lógicos",
+  "models.noEnvironmentsHint": "Aún no existen entornos en el proyecto activo. Cree un entorno en la barra superior antes de registrar un despliegue.",
   "models.providerConnection": "Conexión de proveedor",
   "models.rate.audio_sec_nano_usd": "Segundo de audio (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Lectura de caché (nano-USD)",

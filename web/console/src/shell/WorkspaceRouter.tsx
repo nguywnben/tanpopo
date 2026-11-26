@@ -30,6 +30,8 @@ export function WorkspaceRouter({
   multiOrgEnabled,
   onSelectOrg,
   onOrganizationsChanged,
+  shredReceipt,
+  onShredReceiptChange,
   projects,
   environments,
   projectId,
@@ -43,6 +45,8 @@ export function WorkspaceRouter({
   multiOrgEnabled: boolean;
   onSelectOrg: (orgId: string) => void;
   onOrganizationsChanged: () => void | Promise<void>;
+  shredReceipt: components['schemas']['CryptoShredReceipt'] | null;
+  onShredReceiptChange: (receipt: components['schemas']['CryptoShredReceipt'] | null) => void;
   projects: Project[];
   environments: Environment[];
   projectId: string;
@@ -107,6 +111,8 @@ export function WorkspaceRouter({
           multiOrgEnabled={multiOrgEnabled}
           onSelectOrg={onSelectOrg}
           onOrganizationsChanged={onOrganizationsChanged}
+          receipt={shredReceipt}
+          onReceiptChange={onShredReceiptChange}
         />
       ) : route.path === '/ops/health' ? (
         <OperationsPage pathname={pathname} projectId={projectId} roles={roles} />

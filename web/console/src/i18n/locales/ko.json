@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "최대 출력 토큰",
   "models.modelRegistered": "논리 모델 \"{{slug}}\"을(를) DECLARED 상태로 등록했습니다.",
   "models.modelsAria": "논리 모델",
+  "models.noEnvironmentsHint": "활성 프로젝트에 환경이 아직 없습니다. 배포를 등록하기 전에 상단 바에서 환경을 먼저 생성하세요.",
   "models.providerConnection": "프로바이더 연결",
   "models.rate.audio_sec_nano_usd": "오디오 초당(nano-USD)",
   "models.rate.cache_read_token_nano_usd": "캐시 읽기(nano-USD)",

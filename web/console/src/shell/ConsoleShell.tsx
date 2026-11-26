@@ -116,6 +116,7 @@ export function ConsoleShell() {
   const [pendingApprovals, setPendingApprovals] = useState(0);
   const [activeSwitches, setActiveSwitches] = useState(0);
   const [signingOut, setSigningOut] = useState(false);
+  const [shredReceipt, setShredReceipt] = useState<components['schemas']['CryptoShredReceipt'] | null>(null);
 
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -134,6 +135,9 @@ export function ConsoleShell() {
 
   useEffect(() => {
     setRailOpen(false);
+    if (!pathname.startsWith('/ops/organizations')) {
+      setShredReceipt(null);
+    }
   }, [pathname]);
 
   useEffect(() => {
@@ -770,6 +774,8 @@ export function ConsoleShell() {
                 multiOrgEnabled={multiOrgEnabled}
                 onSelectOrg={id => void handleSelectOrg(id)}
                 onOrganizationsChanged={refreshOrganizations}
+                shredReceipt={shredReceipt}
+                onShredReceiptChange={setShredReceipt}
                 projects={projects}
                 environments={environments}
                 projectId={projectId}

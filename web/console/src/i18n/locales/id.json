@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Token keluaran maks.",
   "models.modelRegistered": "Model logis \"{{slug}}\" didaftarkan sebagai DIDEKLARASIKAN.",
   "models.modelsAria": "Model logis",
+  "models.noEnvironmentsHint": "Belum ada lingkungan di proyek aktif. Buat lingkungan di bilah atas sebelum mendaftarkan deployment.",
   "models.providerConnection": "Koneksi penyedia",
   "models.rate.audio_sec_nano_usd": "Detik audio (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Baca cache (nano-USD)",

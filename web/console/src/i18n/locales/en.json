@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Max output tokens",
   "models.modelRegistered": "Registered logical model \"{{slug}}\" as DECLARED.",
   "models.modelsAria": "Logical models",
+  "models.noEnvironmentsHint": "No environments exist in the active project yet. Create an environment in the top bar before registering a deployment.",
   "models.providerConnection": "Provider connection",
   "models.rate.audio_sec_nano_usd": "Audio second (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Cache read (nano-USD)",

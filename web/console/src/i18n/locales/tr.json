@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "Maks. çıktı belirteci",
   "models.modelRegistered": "\"{{slug}}\" mantıksal modeli DECLARED olarak kaydedildi.",
   "models.modelsAria": "Mantıksal modeller",
+  "models.noEnvironmentsHint": "Etkin projede henüz bir ortam yok. Dağıtım kaydetmeden önce üst çubuktan bir ortam oluşturun.",
   "models.providerConnection": "Sağlayıcı bağlantısı",
   "models.rate.audio_sec_nano_usd": "Ses saniyesi (nano-USD)",
   "models.rate.cache_read_token_nano_usd": "Önbellek okuma (nano-USD)",

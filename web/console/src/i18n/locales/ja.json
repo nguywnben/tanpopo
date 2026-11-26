@@ -542,6 +542,7 @@
   "models.maxOutputTokens": "最大出力トークン数",
   "models.modelRegistered": "論理モデル「{{slug}}」を宣言済み (DECLARED) として登録しました。",
   "models.modelsAria": "論理モデル",
+  "models.noEnvironmentsHint": "アクティブなプロジェクトに環境がまだありません。デプロイメントを登録する前に上部バーから環境を作成してください。",
   "models.providerConnection": "プロバイダー接続",
   "models.rate.audio_sec_nano_usd": "音声秒（ナノ USD）",
   "models.rate.cache_read_token_nano_usd": "キャッシュ読込（ナノ USD）",

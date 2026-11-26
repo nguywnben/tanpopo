@@ -134,6 +134,7 @@ export function ModelsPage({
   const reloadSeqRef = useRef(0);
 
   const canManage = roles.some(role => manageRoles.includes(role));
+  const canReadConnections = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER'].includes(role));
   const fallbackEnvId = environments[0]?.id ?? '';
 
   useEffect(() => {
@@ -145,14 +146,21 @@ export function ModelsPage({
     setLoading(true);
     setError('');
     try {
-      const [modelRows, depRows, connRows] = await Promise.all([
+      const [modelsRes, depsRes, connsRes] = await Promise.allSettled([
         listAdminModels(),
         environmentId || (projectId && environments.length > 0)
           ? listDeployments(environmentId || undefined, projectId || undefined)
           : Promise.resolve([] as Deployment[]),
-        listConnections(),
+        canReadConnections ? listConnections() : Promise.resolve([] as Connection[]),
       ]);
       if (reloadSeqRef.current !== seq) return;
+      const modelRows = modelsRes.status === 'fulfilled' ? modelsRes.value : [];
+      const depRows = depsRes.status === 'fulfilled' ? depsRes.value : [];
+      const connRows = connsRes.status === 'fulfilled' ? connsRes.value : [];
+      const primaryFail = modelsRes.status === 'rejected' ? modelsRes : depsRes.status === 'rejected' ? depsRes : null;
+      if (primaryFail && primaryFail.status === 'rejected') {
+        setError(errText(primaryFail.reason, t));
+      }
       setModels(modelRows);
       setDeployments(depRows);
       setConnections(connRows);
@@ -164,7 +172,7 @@ export function ModelsPage({
     } finally {
       if (reloadSeqRef.current === seq) setLoading(false);
     }
-  }, [projectId, environmentId, environments.length, t]);
+  }, [projectId, environmentId, environments.length, canReadConnections, t]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -210,6 +218,7 @@ export function ModelsPage({
         id: slug.trim(),
         slug: slug.trim(),
         display_name: displayName.trim(),
+        project_id: projectId || undefined,
         context_window: Number(contextWindow),
         max_output_tokens: Number(maxOutput),
         assurance_tier: 'DECLARED',
@@ -661,7 +670,15 @@ export function ModelsPage({
         footer={
           <>
             <Button variant="secondary" onClick={() => setDepDrawerOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" form="tp-add-deployment-form" variant="primary" loading={busy}>{t('models.saveDeployment')}</Button>
+            <Button
+              type="submit"
+              form="tp-add-deployment-form"
+              variant="primary"
+              loading={busy}
+              disabled={!(deployEnvId || environmentId).trim()}
+            >
+              {t('models.saveDeployment')}
+            </Button>
           </>
         }
       >
@@ -675,6 +692,8 @@ export function ModelsPage({
               onChange={setDeployEnvId}
               options={environments.map(env => ({value: env.id, label: `${env.name} (${env.slug})`}))}
             />
+          ) : !environmentId ? (
+            <Banner tone="warn">{t('models.noEnvironmentsHint')}</Banner>
           ) : null}
           <SelectField
             label={t('models.logicalModel')}

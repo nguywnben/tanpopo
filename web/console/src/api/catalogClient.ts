@@ -31,11 +31,13 @@ export async function listConnections() {
   return rows;
 }
 
-export async function listSecretMetadata() {
+export async function listSecretMetadata(projectId?: string) {
   const rows: components['schemas']['SecretMetadata'][] = [];
   let cursor: string | undefined;
   do {
-    const result = await api.GET('/admin/v1/secrets', {params: {query: {limit: 100, cursor}}});
+    const result = await api.GET('/admin/v1/secrets', {
+      params: {query: {project_id: projectId || undefined, limit: 100, cursor}},
+    });
     if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
     rows.push(...result.data.data);
     cursor = result.data.next_cursor ?? undefined;
