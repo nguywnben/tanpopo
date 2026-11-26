@@ -84,3 +84,8 @@ The successful instrumented `/native/ollama/api/chat` image request has a persis
 ### Multiple-image success and malformed-image rejection retest (CP120)
 
 Through the authorized native Ollama route, a synthetic two-image request returned 200 and a separate malformed-base64 request reached the local fixture, which returned 400; Tanpopo surfaced `upstream_bad_request`. Persistent Traces labeled both the successful and rejected requests Exact/$0. This adds a successful multiple-image request and an upstream-error row to the same trace-projection pattern. The zero-rate test does not establish nonzero settlement behavior. See [CP120](../checkpoints/CP120-ollama-multiple-and-malformed-images.md), `../evidence/CP120-native-image-boundary-results.json`, and the visually inspected Traces screenshot.
+
+
+### Non-zero-rate native image settlement test (CP121)
+
+The actual successful two-image trace reports `EXACT` / `$0`, while persistent VKEY Chargeback reports one Estimated request / `$0.000000`; the configured card should charge `$0.002` for the two images alone. This both reinforces the trace/chargeback disagreement in DEF-052 and exposes a distinct image-unit underbilling defect (DEF-074). See [CP121](../checkpoints/CP121-native-ollama-image-unit-settlement.md) and sanitized persistent/API evidence.

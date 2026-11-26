@@ -63,3 +63,6 @@ Model catalogs become harder to scan and distinguish when names are technical id
 ### Native vision setup retest (CP119)
 
 The real Models form accepted the human label `QA004 CP119 Ollama Vision Canary` with slug `qa004-cp119-vision-canary`. After create/readback, the actual catalog showed the slug as the display text. This independently repeats the display-name loss while creating a native multimodal model. The model was then successfully used by the isolated image request. See [CP119](../checkpoints/CP119-ollama-native-multimodal-image.md) and its model registration screenshot.
+
+
+CP121 again entered a human label (`QA004 CP121 Priced Vision`) and received the canonical slug as authenticated `display_name` readback while setting up the non-zero image billing test; see [CP121](../checkpoints/CP121-native-ollama-image-unit-settlement.md).

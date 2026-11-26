@@ -1,0 +1,92 @@
+{
+  "checkpoint": "CP121",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "127.0.0.1:18128",
+  "scope": "QA004 Test Root Org / default / dev; local synthetic provider only",
+  "model": {
+    "id": "lmd_01m8b5dxrxe0081zg56x1hzz58",
+    "slug": "qa004-cp121-priced-vision",
+    "declared_capability": "vision"
+  },
+  "deployment": {
+    "id": "dpl_01m8b5ke10e00ayywg90zeryye",
+    "state": "ACTIVE_HEALTHY",
+    "connection_id": "con_01m896465xe008d8daqh65qzth",
+    "upstream_model": "qa004-mock",
+    "rate_card": {
+      "input_token_nano_usd": 0,
+      "output_token_nano_usd": 0,
+      "cache_read_token_nano_usd": 0,
+      "cache_write_token_nano_usd": 0,
+      "reasoning_token_nano_usd": 0,
+      "image_unit_nano_usd": 1000000,
+      "audio_sec_nano_usd": 0,
+      "document_page_nano_usd": 0,
+      "self_hosted_zero_rate": false
+    }
+  },
+  "route": {
+    "id": "rte_01m8b5mkjne00ase6ez6y1f8fc",
+    "slug": "qa004-cp121-priced-vision",
+    "targets": ["dpl_01m8b5ke10e00ayywg90zeryye"]
+  },
+  "request": {
+    "method": "POST",
+    "path": "/native/ollama/api/chat",
+    "virtual_key_id": "vky_01m8b5ptmre00akbr5zt7tvf5a",
+    "status_code": 200,
+    "error_code": null,
+    "prompt_eval_count": 8,
+    "eval_count": 7,
+    "images": [
+      {
+        "sha256": "b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640"
+      },
+      {
+        "sha256": "9d9e18e597b11d30abba0dcc7f27ca50b050fe431596f06da7d6f9524208cc00"
+      }
+    ],
+    "fixture_authorization_header_present": false,
+    "prompt_or_image_bytes_stored": false,
+    "external_provider_contacted": false
+  },
+  "expected_image_pricing": {
+    "image_count": 2,
+    "nano_usd_per_image": 1000000,
+    "expected_total_nano_usd": 2000000,
+    "expected_total_micro_usd": 2000,
+    "expected_usd": "0.002000"
+  },
+  "trace_readback": {
+    "http_status": 200,
+    "request_id": "trc_01m8b5pv3ve008emhjergfc88e",
+    "status_code": 200,
+    "usage_accuracy": "EXACT",
+    "total_cost_micros": 0
+  },
+  "persistent_chargeback_readback": {
+    "endpoint": "/admin/v1/usage/summary?group_by=key",
+    "http_status": 200,
+    "group_key": "QA004 CP121 Priced Ollama Image Count",
+    "exact_micro_usd": 0,
+    "estimated_micro_usd": 0,
+    "exact_request_count": 0,
+    "estimated_request_count": 1,
+    "unmetered_request_count": 0,
+    "real_ui_value": "Estimated $0.000000; 0 exact / 1 estimated request"
+  },
+  "test_virtual_key": {
+    "state_after_test": "REVOKED",
+    "version": 2
+  },
+  "fixture_restoration": {
+    "original_qa_fixture_restored": true,
+    "tags_http_status": 200
+  },
+  "status": {
+    "image_price_settlement": "FAIL",
+    "new_defect": "DEF-074",
+    "existing_related_evidence": ["DEF-051", "DEF-052"],
+    "release_gate": "BLOCKED"
+  }
+}

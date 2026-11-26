@@ -56,3 +56,8 @@ CP96 repeated the meter reconciliation with two synchronous native idempotency V
 ### Native multimodal image retest (CP119)
 
 A real Chromium-created vision model, active zero-rate deployment, single-target route and PROVIDER-plane VKEY completed one cookie-free `POST /native/ollama/api/chat` with a synthetic 1×1 PNG. The local Ollama-compatible fixture confirmed one forwarded image and returned `prompt_eval_count: 8` / `eval_count: 7`; the request returned HTTP 200. Virtual-Key Chargeback classified the request as one Estimated and zero Exact request despite the provider counters. This extends DEF-051 to a native image-bearing request. The zero-rate test does not establish nonzero bill correctness or image comprehension. See [CP119](../checkpoints/CP119-ollama-native-multimodal-image.md) and its sanitized evidence.
+
+
+### Non-zero-rate native image settlement test (CP121)
+
+CP121 returned Ollama `prompt_eval_count: 8` and `eval_count: 7` for a successful two-image native request. Chargeback retained one Estimated request. Token rates were deliberately zero, so this does not measure token underbilling; CP121 independently found the two image units were also omitted under a non-zero image rate (new DEF-074). The fixture and persistent evidence are in [CP121](../checkpoints/CP121-native-ollama-image-unit-settlement.md).
