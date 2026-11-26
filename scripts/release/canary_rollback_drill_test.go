@@ -162,6 +162,7 @@ func startTanpopoNode(t *testing.T, binPath, addr, dataDir, masterKeyHex string)
 		"TANPOPO_BOOTSTRAP_TOKEN_FILE="+tokenFile,
 		"TANPOPO_ADMIN_LISTEN_ADDR=",
 		"TANPOPO_OTEL_ENABLED=false",
+		"TANPOPO_METRICS_LISTEN=127.0.0.1:0",
 		"TANPOPO_TEST_HERMETIC=1",
 	)
 	cmd.Stdout = logBuf

@@ -1201,6 +1201,7 @@ def main() -> int:
         env_srv["TANPOPO_BOOTSTRAP_TOKEN_FILE"] = str(boot_file)
         env_srv["TANPOPO_MASTER_KEY"] = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
         env_srv["TANPOPO_ALLOWED_ORIGINS"] = f"https://127.0.0.1:{tls_port}"
+        env_srv["TANPOPO_METRICS_LISTEN"] = "127.0.0.1:0"
         if not env_srv.get("TANPOPO_RELEASE_ROOT_PUBKEYS"):
             rel_sig_file = tmpdir / "release-signatures.json"
             pub_res = subprocess.run(

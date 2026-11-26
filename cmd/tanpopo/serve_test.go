@@ -729,6 +729,7 @@ func TestStandaloneBinaryServesWithoutSourceAssets(t *testing.T) {
 	t.Setenv("TANPOPO_DATA_DIR", dataDir)
 	t.Setenv("TANPOPO_MASTER_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	t.Setenv("TANPOPO_MASTER_KEY_FILE", "")
+	t.Setenv("TANPOPO_METRICS_LISTEN", "127.0.0.1:0")
 	command := exec.CommandContext(ctx, standalone, "serve", "--listen", address)
 	command.Dir = emptyDir
 	command.Env = os.Environ()
