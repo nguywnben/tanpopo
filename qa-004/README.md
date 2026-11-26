@@ -113,6 +113,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP128 Virtual Key rotation grace and revocation](checkpoints/CP128-virtual-key-rotation-grace-and-revocation.md)
 - [CP129 consecutive Virtual Key rotation](checkpoints/CP129-consecutive-virtual-key-rotation.md)
 - [CP130 stale-ETag rotation conflict](checkpoints/CP130-stale-rotation-optimistic-conflict.md)
+- [CP131 Virtual Key scope change during rotation](checkpoints/CP131-virtual-key-scope-change-during-rotation.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -321,3 +322,6 @@ CP129 exercised a second real-UI key rotation before the prior grace elapsed. Af
 
 
 CP130 replayed the original v1 rotation request after the real UI had advanced the key to v2. RC6 returned the documented 409 `optimistic_lock_conflict` and ETag v2; state and both current credentials remained unchanged/valid, then UI revoke denied both. Audit sequences 730–731 target the same key. The screenshots were visually inspected and the key revoked. This is a scoped concurrency-control PASS; simultaneous live writes, expiration, restart and other roles remain unverified. No new defect; defect totals unchanged and QA remains ongoing. **GATE-REL-07 remains BLOCKED.** Evidence: [CP130](checkpoints/CP130-stale-rotation-optimistic-conflict.md) and [sanitized results](evidence/CP130-stale-rotation-conflict-results.json).
+
+
+CP131 changed the route grant while a key was dual-valid after rotation. The real Console saved `/v1/chat/completions`; both old and new credentials then received 403 on `/v1/models`, with persistent version increment and a same-target `virtual_key.updated` audit event. Graceful revoke denied both credentials. All UI screenshots were visually inspected, and the key is revoked. No defect was assigned. Broader plane/model/scope combinations and concurrent grant writes remain open; historical and new-defect totals are unchanged. QA continues; **GATE-REL-07 remains BLOCKED.** Evidence: [CP131](checkpoints/CP131-virtual-key-scope-change-during-rotation.md) and [sanitized results](evidence/CP131-rotation-scope-edit-results.json).

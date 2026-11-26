@@ -1,0 +1,31 @@
+{
+  "checkpoint": "CP131",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6; real Chromium Owner Console; QA004 Test Root Org / default / dev",
+  "key_name": "QA004 CP131 Rotation Scope Edit",
+  "key_id": "vky_01m8b9afv4e00be21q5d5wpce8",
+  "lifecycle": [
+    {"action": "create PROVIDER Virtual Key", "allowed_routes": ["/v1/models"], "allowed_models": ["qa004-cp121-priced-vision"]},
+    {"action": "rotate through UI", "http_status": 200, "state": "ROTATING_DUAL_VALID", "old_and_new_credentials_allowed_for_GET_v1_models": true},
+    {"action": "edit plane/route grants through UI during dual-valid grace", "new_allowed_routes": ["/v1/chat/completions"], "http_status": 200, "state": "ROTATING_DUAL_VALID", "version": 3, "audit_action": "virtual_key.updated"}
+  ],
+  "after_grant_change": [
+    {"credential_generation": "old", "method": "GET", "path": "/v1/models", "http_status": 403, "error": "scope_or_plane_denied"},
+    {"credential_generation": "new", "method": "GET", "path": "/v1/models", "http_status": 403, "error": "scope_or_plane_denied"}
+  ],
+  "after_graceful_revoke": {
+    "state": "REVOKED",
+    "version": 4,
+    "old_and_new_credentials": [{"http_status": 401, "error": "invalid_virtual_key"}, {"http_status": 401, "error": "invalid_virtual_key"}]
+  },
+  "audit_events": [
+    {"seq_no": 733, "action": "virtual_key.rotated", "target_id": "vky_01m8b9afv4e00be21q5d5wpce8", "chain_partition": "org_01m895k8pee008b3aeaswvpshy"},
+    {"seq_no": 734, "action": "virtual_key.updated", "target_id": "vky_01m8b9afv4e00be21q5d5wpce8", "chain_partition": "org_01m895k8pee008b3aeaswvpshy"},
+    {"seq_no": 735, "action": "virtual_key.revoked", "target_id": "vky_01m8b9afv4e00be21q5d5wpce8", "chain_partition": "org_01m895k8pee008b3aeaswvpshy"}
+  ],
+  "screenshots": ["CP131-edit-grants-dialog.png", "CP131-dual-key-updated-scope.png", "CP131-dual-key-revoked.png"],
+  "credential_handling": "Plaintext credentials remained in process memory only and were not printed or persisted.",
+  "classification": "PASS (scoped route-grant update is enforced equally for both credentials during rotation; revoke invalidates both).",
+  "product_source_modified": false,
+  "gate": "GATE-REL-07 BLOCKED"
+}
