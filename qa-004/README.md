@@ -98,6 +98,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP92 native dialect authorization and traversal](checkpoints/CP92-native-dialect-authorization-and-traversal.md)
 - [CP94 native idempotency replay and per-key isolation](checkpoints/CP94-native-idempotency-per-key-replay.md)
 - [CP95 native same-dialect mismatch guard](checkpoints/CP95-native-dialect-mismatch-guard.md)
+- [CP96 idempotency trace/chargeback reconciliation](checkpoints/CP96-idempotency-trace-chargeback-reconciliation.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -209,3 +210,6 @@ CP92 used a real Owner-issued PROVIDER key restricted to `/native/anthropic/*`. 
 CP94 verified synchronous native idempotency in default/dev against the real loopback synthetic route: identical replay returned the same body without a second upstream call; modified payload returned 422 without dispatch; the same key under another VKEY caused its own call; both keys were revoked and post-revoke replay returned 401. The default/dev Access & Keys screenshot was visually inspected. The preliminary canary-scope 503 is preserved and excluded because that scope has no provider route.
 
 CP95 repeated the native cross-dialect request in the correct default/dev scope against the one-target Ollama route. RC6 returned the contractual 400 `dialect_mismatch`; the temporary `/native/anthropic/*` key was revoked. This verifies negative routing only, not successful Anthropic/Gemini interoperability. CP92's prior 503 is corrected as a no-route workspace-scope result. No new defect was added; QA continues and GATE-REL-07 remains BLOCKED.
+
+
+CP96 reconciled persisted CP94 rows. Each VKEY had one 1-micro-USD Estimated FinOps charge for its single upstream dispatch; replay did not add a charge, payload mismatch remained zero-settlement, and revoked-key replay was denied. The real Traces screen labels all five request/replay/error rows Exact/$0, while Chargeback groups one Estimated request per key. Screenshots were visually inspected. This confirms and extends DEF-051/052; it is not a new defect. QA continues and GATE-REL-07 remains BLOCKED.

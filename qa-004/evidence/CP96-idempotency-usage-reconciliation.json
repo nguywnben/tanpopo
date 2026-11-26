@@ -1,0 +1,84 @@
+{
+  "keys": [
+    {
+      "id": "vky_01m8apj95ye0089jvq8cd04bmc",
+      "name": "QA004 CP94 idempotency key B",
+      "state": "REVOKED"
+    },
+    {
+      "id": "vky_01m8apj85ze009mfrrdbnkkk30",
+      "name": "QA004 CP94 idempotency key A",
+      "state": "REVOKED"
+    }
+  ],
+  "traces": [
+    {
+      "trace_id": "trc_01m8apj9z4e009tjg9xdbje8gx",
+      "virtual_key_id": "vky_01m8apj85ze009mfrrdbnkkk30",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "/native/{dialect}",
+      "created_at": "2026-11-26T01:12:22.756Z"
+    },
+    {
+      "trace_id": "trc_01m8apj9ype00awv8shzn88v78",
+      "virtual_key_id": "vky_01m8apj95ye0089jvq8cd04bmc",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "qa004-mock",
+      "created_at": "2026-11-26T01:12:22.753Z"
+    },
+    {
+      "trace_id": "trc_01m8apj9yje00b1d8ynntjb6rc",
+      "virtual_key_id": "vky_01m8apj85ze009mfrrdbnkkk30",
+      "status_code": 422,
+      "error_code": "idempotency_key_reused_mismatch",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "/native/{dialect}",
+      "created_at": "2026-11-26T01:12:22.738Z"
+    },
+    {
+      "trace_id": "trc_01m8apj9yde00ap4w803v1v7xc",
+      "virtual_key_id": "vky_01m8apj85ze009mfrrdbnkkk30",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "/native/{dialect}",
+      "created_at": "2026-11-26T01:12:22.734Z"
+    },
+    {
+      "trace_id": "trc_01m8apj9xwe00bb1dcrfgp9z24",
+      "virtual_key_id": "vky_01m8apj85ze009mfrrdbnkkk30",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "qa004-mock",
+      "created_at": "2026-11-26T01:12:22.729Z"
+    }
+  ],
+  "chargeback": [
+    {
+      "group_key": "QA004 CP94 idempotency key A",
+      "exact_micro_usd": 0,
+      "estimated_micro_usd": 1,
+      "exact_request_count": 0,
+      "estimated_request_count": 1,
+      "unmetered_request_count": 0
+    },
+    {
+      "group_key": "QA004 CP94 idempotency key B",
+      "exact_micro_usd": 0,
+      "estimated_micro_usd": 1,
+      "exact_request_count": 0,
+      "estimated_request_count": 1,
+      "unmetered_request_count": 0
+    }
+  ]
+}

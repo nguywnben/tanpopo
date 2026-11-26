@@ -61,3 +61,6 @@ The trace projection may read a separate/empty usage field, default accuracy to 
 - Nonzero or partial-stream settlements never appear as zero in trace detail; estimated and partial rows remain marked estimated.
 - Traces UI, API, FinOps summary/export, and persisted ledger reconcile per request and in aggregate.
 - Regression covers estimated and exact native requests, streaming success and partial failure, provider-plane requests, errors, retries, and missing settlement rows.
+
+
+CP96 independently reproduced the cross-screen mismatch during an idempotency lifecycle. Persistent Traces contains five rows for the key-A first dispatch, replay, payload-mismatch denial, later replay, and key-B first dispatch; all are Exact/$0, including cache-replay/error rows. Virtual Key Chargeback records one Estimated request / 1 micro-USD for each of the two keys, matching only the two actual fixture dispatches. This confirms no replay double charge but extends DEF-052 to replay and rejected-payload traces. The real Traces and FinOps Chargeback screenshots were visually inspected; see CP96 evidence.

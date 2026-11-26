@@ -48,3 +48,6 @@ The Ollama manifest's usage extraction may only map OpenAI-style `usage.prompt_t
 - Missing, malformed, overflow, and conflicting counters are handled explicitly and reported as estimated/unmetered according to the published policy; never silently labeled exact.
 - Response headers, traces, settlement rows, and FinOps aggregates agree on usage accuracy and token counts.
 - Regression covers zero counters, stream terminal usage, interrupted streams, provider errors, and counter overflow.
+
+
+CP96 repeated the meter reconciliation with two synchronous native idempotency VKEYs. Each actual first dispatch returned Estimated and generated one Estimated usage request in FinOps (1 micro-USD). Same-key replay added no second settlement. The trace rows for successful first dispatches, replays, and the 422 payload mismatch were all labeled Exact; trace cost stayed $0. This adds a business-workflow context to DEF-051 and confirms the settlement-side estimate is retained once per upstream dispatch. See CP94/CP96 and `evidence/CP96-idempotency-usage-reconciliation.json`.
