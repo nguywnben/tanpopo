@@ -1,0 +1,127 @@
+{
+  "tab": {
+    "key_id": "vky_01m8bepkqne009seaex7pjh6w8",
+    "input_value_codepoints": [
+      9,
+      61,
+      67,
+      80,
+      49,
+      51,
+      57,
+      45,
+      116,
+      97,
+      98
+    ],
+    "returned_name_codepoints": [
+      61,
+      67,
+      80,
+      49,
+      51,
+      57,
+      45,
+      116,
+      97,
+      98
+    ],
+    "request": {
+      "status": 200,
+      "error": null,
+      "reply_present": true
+    }
+  },
+  "cr": {
+    "key_id": "vky_01m8bepne9e00aqwrpfrv8mj6k",
+    "input_value_codepoints": [
+      32,
+      61,
+      67,
+      80,
+      49,
+      51,
+      57,
+      45,
+      99,
+      114
+    ],
+    "returned_name_codepoints": [
+      61,
+      67,
+      80,
+      49,
+      51,
+      57,
+      45,
+      99,
+      114
+    ],
+    "request": {
+      "status": 200,
+      "error": null,
+      "reply_present": true
+    }
+  },
+  "exports": {
+    "CSV": {
+      "filename": "tanpopo-chargeback-key.csv",
+      "bytes": 1988,
+      "sha256": "b64f99a3fd28f0fb69aaae73c9be0109bccf50f9cda2069370bc6a0fa1e173ef",
+      "matches": {
+        "tab": {
+          "marker_present": true,
+          "context": "1,0,0\n'=CP139-tab,1,0,1,0"
+        },
+        "cr": {
+          "marker_present": true,
+          "context": "1,0,0\n'=CP139-cr,1,0,1,0"
+        }
+      }
+    },
+    "JSON": {
+      "filename": "tanpopo-chargeback-key.json",
+      "bytes": 10120,
+      "sha256": "83f2962bb18890a4254948f485284cb0d819e99224c2800a576d594799d4e5b1",
+      "matches": {
+        "tab": {
+          "marker_present": true,
+          "context": "key\": \"=CP139-tab\",\n    \""
+        },
+        "cr": {
+          "marker_present": true,
+          "context": "key\": \"=CP139-cr\",\n    \""
+        }
+      }
+    }
+  },
+  "keys": [
+    {
+      "id": "vky_01m8bepkqne009seaex7pjh6w8",
+      "tag": "tab",
+      "selector": "CP139-tab",
+      "revoke_status": 200
+    },
+    {
+      "id": "vky_01m8bepne9e00aqwrpfrv8mj6k",
+      "tag": "cr",
+      "selector": "CP139-cr",
+      "revoke_status": 200
+    }
+  ],
+  "restored_budget": {
+    "limit": 100,
+    "exact": 2043,
+    "estimated": 14,
+    "reserved": 0,
+    "version": 181
+  },
+  "starting_budget": {
+    "limit": 100,
+    "exact": 2041,
+    "estimated": 14,
+    "reserved": 0,
+    "version": 175
+  },
+  "external_provider_spend_usd": 0
+}
