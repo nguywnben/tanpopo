@@ -133,9 +133,10 @@ type ServerConfig struct {
 	ProviderRuntimeFactory  func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	MarketplaceCatalog      []MarketplaceCatalogEntry
 	ArchiveResolver         ExtensionArchiveResolver
-	WebhookEnqueue          WebhookEnqueue
-	OnConfigChange          func(context.Context, snapshot.ChangeEvent)
-	LockfilePath            string
+	WebhookEnqueue           WebhookEnqueue
+	OnConfigChange           func(context.Context, snapshot.ChangeEvent)
+	OnExtensionUnquarantined func(installationID string)
+	LockfilePath             string
 	ConfigPath              string
 	ProbeRateLimitPerMinute int
 	Audit                   port.AuditSink
@@ -259,9 +260,10 @@ type Server struct {
 	providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	marketplace            []MarketplaceCatalogEntry
 	archiveResolver        ExtensionArchiveResolver
-	webhookEnqueue         WebhookEnqueue
-	onConfigChange         func(context.Context, snapshot.ChangeEvent)
-	lockfilePath           string
+	webhookEnqueue           WebhookEnqueue
+	onConfigChange           func(context.Context, snapshot.ChangeEvent)
+	onExtensionUnquarantined func(installationID string)
+	lockfilePath             string
 	configPath             string
 	probeLimiter           *slidingWindowLimiter
 	audit                  port.AuditSink
@@ -449,9 +451,10 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		providerRuntimeFactory: cfg.ProviderRuntimeFactory,
 		marketplace:            marketplace,
 		archiveResolver:        cfg.ArchiveResolver,
-		webhookEnqueue:         cfg.WebhookEnqueue,
-		onConfigChange:         cfg.OnConfigChange,
-		lockfilePath:           strings.TrimSpace(cfg.LockfilePath),
+		webhookEnqueue:           cfg.WebhookEnqueue,
+		onConfigChange:           cfg.OnConfigChange,
+		onExtensionUnquarantined: cfg.OnExtensionUnquarantined,
+		lockfilePath:             strings.TrimSpace(cfg.LockfilePath),
 		configPath:             strings.TrimSpace(cfg.ConfigPath),
 		probeLimiter:           newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
 		audit:                  auditSink,

@@ -1463,3 +1463,92 @@ func TestServerCloseConcurrentRuntimeLoadRaceClean(t *testing.T) {
 	wg.Wait()
 }
 
+func TestAuditRound4_ExtensionQuarantineCallbackAndSnapshotRecovery(t *testing.T) {
+	h := setupIngressHarness(t, 0)
+
+	setInstallState := func(ctx context.Context, installationID, state string) error {
+		tx, err := h.store.RawDB().BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = tx.Rollback() }()
+		if _, err := tx.ExecContext(ctx, `UPDATE extension_installations SET state = ?, version = version + 1 WHERE id = ?`, state, installationID); err != nil {
+			return err
+		}
+		if _, err := storageport.AppendConfigChangelogTx(ctx, tx, storageport.DialectSQLite, "", "extension_installation", installationID, storageport.MutationUpsert, state == installer.StateQuarantined, h.clk.Now().UnixMilli()); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+
+	var quarantinedID string
+	var quarMu sync.Mutex
+	srv, err := ingresshttp.NewServer(ingresshttp.ServerConfig{
+		Snapshots:  h.snapshots,
+		Broker:     h.broker,
+		PluginsDir: h.pluginsD,
+		Audit:      h.audit,
+		NowMs:      func() int64 { return h.clk.Now().UnixMilli() },
+		ExtensionQuarantine: func(ctx context.Context, installationID, reason, actorID string) error {
+			quarMu.Lock()
+			quarantinedID = installationID
+			quarMu.Unlock()
+			return setInstallState(ctx, installationID, installer.StateQuarantined)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = srv.Close(context.Background()) }()
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	// Trip > DefaultFaultThreshold (20) faults via srv.FaultGuard() to verify ExtensionQuarantine callback persists DB quarantine.
+	for i := 0; i < 21; i++ {
+		srv.FaultGuard().RecordFault(h.ctx, h.instID, wasm.FaultKindTrap, "simulated wasm trap")
+	}
+	quarMu.Lock()
+	gotQuarID := quarantinedID
+	quarMu.Unlock()
+	if gotQuarID != h.instID || !srv.FaultGuard().IsQuarantined(h.instID) {
+		t.Fatalf("expected ExtensionQuarantine callback and RAM latch for %s, got %q quarantined=%v", h.instID, gotQuarID, srv.FaultGuard().IsQuarantined(h.instID))
+	}
+
+	// Refresh snapshot so server observes QUARANTINED state.
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	sendReq := func() *http.Response {
+		req, _ := http.NewRequestWithContext(h.ctx, http.MethodPost, ts.URL+"/v1/chat/completions", strings.NewReader(`{"model":"acme/chat-1","messages":[{"role":"user","content":"recover check"}]}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+h.vkeyRaw)
+		resp, doErr := h.client.Do(req)
+		if doErr != nil {
+			t.Fatalf("chat request: %v", doErr)
+		}
+		return resp
+	}
+	rQuar := sendReq()
+	rQuarBody, _ := io.ReadAll(rQuar.Body)
+	_ = rQuar.Body.Close()
+	assertErrorCode(t, rQuar, rQuarBody, http.StatusServiceUnavailable, "extension_quarantined")
+
+	// Simulate operator unquarantine + re-enable in Control Plane followed by snapshot refresh (split-role recovery).
+	if err := setInstallState(h.ctx, h.instID, installer.StateEnabledActive); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatal(err)
+	}
+	rOK := sendReq()
+	rOKBody, _ := io.ReadAll(rOK.Body)
+	_ = rOK.Body.Close()
+	if rOK.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK after QUARANTINED -> ENABLED_ACTIVE recovery, got %d body=%s", rOK.StatusCode, string(rOKBody))
+	}
+	if srv.FaultGuard().IsQuarantined(h.instID) {
+		t.Fatalf("expected FaultGuard RAM latch to reset after ENABLED_ACTIVE snapshot recovery")
+	}
+}
+
+

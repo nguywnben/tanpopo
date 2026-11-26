@@ -63,7 +63,7 @@ type Project = components['schemas']['Project'];
 type Environment = components['schemas']['Environment'];
 
 const emergencyRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
-const approvalRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
+const approvalRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 const scopeAdminRoles: Role[] = ['OPERATOR', 'ORG_OWNER'];
 
 function toSlug(raw: string): string {

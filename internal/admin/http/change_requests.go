@@ -223,13 +223,13 @@ func (s *Server) handleDecideChangeRequest(w http.ResponseWriter, r *http.Reques
 		case errors.Is(err, foureyes.ErrInvalidStateTransition), errors.Is(err, foureyes.ErrRequestExpired):
 			writeErrorEnvelope(w, r, http.StatusConflict, "invalid_state_transition", "conflict_error", err.Error(), false, nil)
 		default:
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "change_request_apply_failed", "upstream_error", err.Error(), true, nil)
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "change_request_apply_failed", "upstream_error", "failed applying approved change request", true, nil)
 		}
 		return
 	}
 	if postApproveFinalize != nil {
 		if ferr := postApproveFinalize(r.Context()); ferr != nil {
-			writeErrorEnvelope(w, r, http.StatusInternalServerError, "change_request_apply_failed", "upstream_error", ferr.Error(), true, nil)
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "change_request_apply_failed", "upstream_error", "failed finalizing approved change request", true, nil)
 			return
 		}
 	}

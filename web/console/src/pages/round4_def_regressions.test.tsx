@@ -11,6 +11,7 @@ import {ModelsPage} from './models/ModelsPage';
 import {OperationsPage} from './operations/OperationsPage';
 import {ProvidersPage} from './providers/ProvidersPage';
 import {RoutingPage} from './routes/RoutingPage';
+import {SecurityPage} from './security/SecurityPage';
 import {TracesPage} from './traces/TracesPage';
 import {ConsoleShell} from '../shell/ConsoleShell';
 
@@ -643,5 +644,92 @@ describe('Engineering Round 4 UI regressions (Slices A & B)', () => {
     fireEvent.click(errConfirm[errConfirm.length - 1]!);
     await screen.findByText(/KMS unavailable/i);
     expect(screen.queryByText(/Organization crypto-shredded/i)).toBeNull();
+  });
+
+  it('OPERATOR receives full console write and approval controls aligned with backend rbac.Authorizer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/admin/v1/policies/effective') || url.includes('/admin/v1/policies/scopes')) {
+        return jsonResponse({
+          data: [{
+            id: 'pol_org_1',
+            scope_type: 'ORGANIZATION',
+            scope_id: 'org_1',
+            version: 1,
+            rpm_ceiling: 100,
+            tpm_ceiling: 10000,
+            max_concurrent_streams: 10,
+            allowed_data_regions: ['US'],
+            min_plugin_trust: 'ANY_APPROVED',
+            min_capability_assurance: 'DECLARED',
+            allowed_models: ['*'],
+            guardrail_hooks: [],
+            deny_all: false,
+          }],
+          next_cursor: null,
+          has_more: false,
+        });
+      }
+      if (url.includes('/admin/v1/budgets')) {
+        return jsonResponse({
+          data: [{
+            id: 'bdg_org_1',
+            org_id: 'org_1',
+            scope_tier: 'ORGANIZATION',
+            scope_id: 'org_1',
+            period: 'MONTHLY',
+            hard_limit_micros: 100000000,
+            warning_thresholds_pct: [50, 80, 95],
+            version: 1,
+            created_at: '2026-11-26T00:00:00Z',
+          }],
+          next_cursor: null,
+          has_more: false,
+        });
+      }
+      if (url.includes('/admin/v1/approvals')) {
+        return jsonResponse({
+          data: [{
+            id: 'apr_1',
+            org_id: 'org_1',
+            target_kind: 'MCP_TOOL_CALL',
+            target_id: 'mcp_1',
+            action_kind: 'MCP_DESTRUCTIVE_TOOL',
+            status: 'PENDING',
+            requested_by: 'prc_other',
+            reason: 'review needed',
+            approval_binding_hash: 'sha256:abc123',
+            schema_drift_locked: false,
+            version: 1,
+            created_at: '2026-11-26T00:00:00Z',
+            expires_at: '2026-11-27T00:00:00Z',
+          }],
+          next_cursor: null,
+          has_more: false,
+        });
+      }
+      return jsonResponse({data: [], next_cursor: null, has_more: false});
+    });
+
+    const prov = render(wrap(<ProvidersPage pathname="/providers/connections" projectId="prj_1" roles={['OPERATOR']} />));
+    await screen.findByRole('button', {name: /New connection/i});
+    prov.unmount();
+
+    const mods = render(wrap(<ModelsPage projectId="prj_1" environmentId="env_1" environments={[{id: 'env_1', org_id: 'org_1', project_id: 'prj_1', slug: 'prod', name: 'Prod', created_at: '2026-11-26T00:00:00Z'}]} roles={['OPERATOR']} />));
+    await screen.findByRole('button', {name: /Add deployment/i});
+    mods.unmount();
+
+    const fin = render(wrap(<FinOpsPage pathname="/finops/budgets" activeOrgId="org_1" projects={[]} projectId="prj_1" environmentId="env_1" roles={['OPERATOR']} />));
+    await screen.findByRole('button', {name: /Create budget/i});
+    expect((await screen.findAllByRole('button', {name: /^Save$/i})).length).toBeGreaterThan(0);
+    fin.unmount();
+
+    const sec = render(wrap(<SecurityPage pathname="/security/approvals" roles={['OPERATOR']} />));
+    await screen.findByRole('button', {name: /^Approve$/i});
+    sec.unmount();
+
+    const rts = render(wrap(<RoutingPage pathname="/routes" projectId="prj_1" environmentId="env_1" roles={['OPERATOR']} />));
+    await screen.findByRole('button', {name: /Create route/i});
+    expect(await axe.run(rts.container)).toHaveProperty('violations', []);
   });
 });

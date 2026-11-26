@@ -49,7 +49,7 @@ const allRegions: DataRegion[] = ['EU', 'US', 'APAC', 'ON_PREM'];
 const trustLevels: Policy['min_plugin_trust'][] = ['OFFICIAL_ONLY', 'VERIFIED_OR_ENTERPRISE_SIGNED', 'VERIFIED_ONLY', 'ANY_APPROVED'];
 const trustRank: Record<Policy['min_plugin_trust'], number> = {ANY_APPROVED: 0, VERIFIED_OR_ENTERPRISE_SIGNED: 1, VERIFIED_ONLY: 2, OFFICIAL_ONLY: 3};
 const assuranceRank: Record<Policy['min_capability_assurance'], number> = {DECLARED: 0, TESTED: 1, VERIFIED: 2};
-const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
+const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 
 export function RoutingPage({
   pathname,
@@ -332,7 +332,7 @@ export function RoutingPage({
   const effectiveDisplayPolicy = envPolicy ?? projPolicy ?? orgPolicy;
   const selectedPolicy = editScope === 'ORGANIZATION' ? orgPolicy : editScope === 'PROJECT' ? projPolicy : envPolicy;
   const parentPolicy = editScope === 'ENVIRONMENT' ? projPolicy : editScope === 'PROJECT' ? orgPolicy : null;
-  const canEditPolicy = Boolean(selectedPolicy && (editScope === 'ORGANIZATION' ? roles.includes('ORG_OWNER') : canManage));
+  const canEditPolicy = Boolean(selectedPolicy && (editScope === 'ORGANIZATION' ? (roles.includes('OPERATOR') || roles.includes('ORG_OWNER')) : canManage));
   const parentModels = parentPolicy?.allowed_models;
   const modelRelaxesParent = Boolean(policyDraft && parentModels && !isSubset(policyDraft.allowed_models ?? ['*'], parentModels));
   const parentRegions = parentPolicy?.allowed_data_regions ?? allRegions;

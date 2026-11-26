@@ -82,7 +82,7 @@ const emptyCapabilities: components['schemas']['CapabilityProfile'] = {
   rerank: false,
 };
 
-const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
+const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 
 export function ModelsPage({
   projectId = '',

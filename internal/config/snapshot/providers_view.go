@@ -48,6 +48,7 @@ type ProviderAdapterView struct {
 	ExtensionKind           string
 	ExecutionTier           string
 	ExtensionState          string
+	ExtensionVersion        int64
 	ActiveVersionID         string
 	BundleSHA256            string
 	ManifestJSON            string
@@ -294,6 +295,19 @@ func (s *ConfigSnapshot) LookupProviderAdapter(adapterID string) (*ProviderAdapt
 		return nil, false
 	}
 	return v.clone(), true
+}
+
+// LookupProviderAdapterByInstallationID returns the adapter view bound to installationID, if present.
+func (s *ConfigSnapshot) LookupProviderAdapterByInstallationID(installationID string) (*ProviderAdapterView, bool) {
+	if s == nil || s.providers == nil || installationID == "" {
+		return nil, false
+	}
+	for _, v := range s.providers.adaptersByID {
+		if v != nil && v.InstallationID == installationID {
+			return v.clone(), true
+		}
+	}
+	return nil, false
 }
 
 // LookupProviderConnection performs an O(1) tenant-isolated lookup of a ProviderConnection.
@@ -707,6 +721,7 @@ func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView)
 		       COALESCE(ep.canonical_name, ''),
 		       COALESCE(ep.extension_kind, ''),
 		       COALESCE(ei.state, ''),
+		       COALESCE(ei.version, 0),
 		       COALESCE(ei.active_version_id, ''),
 		       COALESCE(ei.approved_permissions_json, '{}'),
 		       COALESCE(ev.execution_tier, ''),
@@ -732,7 +747,7 @@ func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView)
 		if err := rows.Scan(
 			&a.ID, &a.InstallationID, &a.AdapterSlug, &nativePrefix,
 			&dialectsJSON, &hostsJSON, &a.Version, &a.CreatedAtMs,
-			&a.CanonicalName, &a.ExtensionKind, &a.ExtensionState, &a.ActiveVersionID,
+			&a.CanonicalName, &a.ExtensionKind, &a.ExtensionState, &a.ExtensionVersion, &a.ActiveVersionID,
 			&a.ApprovedPermissionsJSON, &a.ExecutionTier, &a.BundleSHA256, &a.ManifestJSON,
 		); err != nil {
 			return fmt.Errorf("snapshot: scan provider_adapters: %w", err)

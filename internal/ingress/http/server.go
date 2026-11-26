@@ -89,6 +89,7 @@ type ServerConfig struct {
 	Snapshots                *snapshot.Manager
 	Broker                   *broker.BlindHostCredentialBroker
 	FaultGuard               *wasm.FaultGuard
+	ExtensionQuarantine      wasm.QuarantineFunc
 	KillSwitch               *killswitch.Registry
 	PluginsDir               string
 	Audit                    storageport.AuditSink
@@ -223,12 +224,14 @@ type Server struct {
 
 	wasmCache wazero.CompilationCache
 
-	rtMu       sync.Mutex
-	rtLoadWG   sync.WaitGroup
-	closed     atomic.Bool
-	runtimes   map[runtimeCacheKey]*cachedAdapterEntry
-	mux        *http.ServeMux
-	rootRouter http.Handler
+	rtMu              sync.Mutex
+	rtLoadWG          sync.WaitGroup
+	closed            atomic.Bool
+	runtimes          map[runtimeCacheKey]*cachedAdapterEntry
+	trippedMu         *sync.Mutex
+	trippedExtVersion map[string]int64
+	mux               *http.ServeMux
+	rootRouter        http.Handler
 }
 
 // NewServer constructs a fail-closed Data Plane HTTP Server.
@@ -276,6 +279,20 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 	if nowFn == nil {
 		nowFn = func() int64 { return time.Now().UTC().UnixMilli() }
 	}
+	trippedExtVersion := make(map[string]int64)
+	var trippedMu sync.Mutex
+	recordTrippedExt := func(installationID string) {
+		var extVer int64
+		if snap := cfg.Snapshots.Current(); snap != nil {
+			if adp, ok := snap.LookupProviderAdapterByInstallationID(installationID); ok {
+				extVer = adp.ExtensionVersion
+			}
+		}
+		trippedMu.Lock()
+		trippedExtVersion[installationID] = extVer
+		trippedMu.Unlock()
+	}
+
 	faultGuard := cfg.FaultGuard
 	if faultGuard == nil {
 		var onTrap func(installationID string, kind wasm.FaultKind)
@@ -285,7 +302,17 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 				tel.Metrics.RecordSandboxTrap(installationID, mapFaultKindToTrapReason(kind))
 			}
 		}
+		origQuarantine := cfg.ExtensionQuarantine
+		var quarantineHook wasm.QuarantineFunc
+		quarantineHook = func(ctx context.Context, installationID, reason, actorID string) error {
+			recordTrippedExt(installationID)
+			if origQuarantine != nil {
+				return origQuarantine(ctx, installationID, reason, actorID)
+			}
+			return nil
+		}
 		faultGuard = wasm.NewFaultGuard(wasm.FaultGuardConfig{
+			Quarantine: quarantineHook,
 			AuditSink:  cfg.Audit,
 			EntryPoint: wasm.DefaultAuditEntryPoint,
 			OnTrap:     onTrap,
@@ -371,6 +398,8 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		sidecarFactory:           cfg.SidecarRuntimeFactory,
 		wasmCache:                wazero.NewCompilationCache(),
 		runtimes:                 make(map[runtimeCacheKey]*cachedAdapterEntry),
+		trippedMu:                &trippedMu,
+		trippedExtVersion:        trippedExtVersion,
 		mux:                      http.NewServeMux(),
 	}
 	if cfg.Telemetry != nil && cfg.Telemetry.Metrics != nil && cfg.Snapshots != nil {
@@ -864,10 +893,30 @@ func (s *Server) getOrLoadAdapterRuntime(ctx context.Context, target *snapshot.R
 	if strings.TrimSpace(adp.ActiveVersionID) == "" {
 		return nil, fmt.Errorf("%w: adapter %q has no active_version_id", port.ErrExecutionFault, adp.AdapterSlug)
 	}
-	if strings.EqualFold(adp.ExtensionState, installer.StateQuarantined) || s.faultGuard.IsQuarantined(adp.InstallationID) {
+	if strings.EqualFold(adp.ExtensionState, installer.StateQuarantined) {
 		return nil, &wasm.ExecutionFaultError{
 			Kind:   wasm.FaultKindQuarantined,
 			Reason: fmt.Sprintf("adapter %q quarantined", adp.AdapterSlug),
+		}
+	}
+	if s.faultGuard.IsQuarantined(adp.InstallationID) {
+		if strings.EqualFold(adp.ExtensionState, installer.StateEnabledActive) {
+			s.trippedMu.Lock()
+			trippedVer, tracked := s.trippedExtVersion[adp.InstallationID]
+			recovered := tracked && adp.ExtensionVersion > trippedVer
+			if recovered {
+				delete(s.trippedExtVersion, adp.InstallationID)
+			}
+			s.trippedMu.Unlock()
+			if recovered {
+				s.faultGuard.Reset(adp.InstallationID)
+			}
+		}
+		if s.faultGuard.IsQuarantined(adp.InstallationID) {
+			return nil, &wasm.ExecutionFaultError{
+				Kind:   wasm.FaultKindQuarantined,
+				Reason: fmt.Sprintf("adapter %q quarantined", adp.AdapterSlug),
+			}
 		}
 	}
 

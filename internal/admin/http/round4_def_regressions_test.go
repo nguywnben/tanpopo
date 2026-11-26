@@ -14,6 +14,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/finops/pricing"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -766,4 +767,94 @@ func TestDEF054_055_056_057_Round4RBACModelsAndDisplayNames(t *testing.T) {
 		}
 	}
 }
+
+func TestAuditRound4_UnquarantineOrgSwitchAndConnectionSecretKinds(t *testing.T) {
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "Audit Round4 Org", "audit-r4-proj")
+
+	// 1. Seed extension, approve + enable, trigger org-scoped EXTENSION kill switch, quarantine, then unquarantine.
+	v1URI := "https://marketplace.tanpopo.dev/acme-audit-r4.tpkg"
+	v1SHA := h.registerSignedProviderTPKG(t, v1URI, "@acme/audit-r4", "1.0.0", []string{"api.openai.com"}, false, true)
+	recStage := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/install", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"source_uri": v1URI, "expected_sha256": v1SHA,
+	})
+	if recStage.Code != http.StatusAccepted {
+		t.Fatalf("stage code=%d body=%s", recStage.Code, recStage.Body.String())
+	}
+	var stResp struct {
+		InstallationID string `json:"installation_id"`
+	}
+	mustDecodeJSON(t, recStage.Body.Bytes(), &stResp)
+	if rec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+stResp.InstallationID+"/approve-permissions", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"enable_immediately": true, "ack_unverified": false,
+	}); rec.Code != http.StatusOK {
+		t.Fatalf("approve code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var inst extensionInstallationDTO
+	_ = h.doAuthedCookie(t, http.MethodGet, "/admin/v1/extensions/installations", ownerCookie, "", "", nil)
+	recQuar := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+stResp.InstallationID+"/quarantine", ownerCookie, boot.CSRFToken, `"v2"`, map[string]any{
+		"reason": "quarantine test",
+	})
+	if recQuar.Code != http.StatusOK {
+		t.Fatalf("quarantine code=%d body=%s", recQuar.Code, recQuar.Body.String())
+	}
+	mustDecodeJSON(t, recQuar.Body.Bytes(), &inst)
+
+	// Trigger an org-scoped EXTENSION kill-switch (as happens for non-operator or org-targeted switches).
+	orgScopedID := boot.OrgID
+	if _, err := h.killSwitch.Trigger(context.Background(), killswitch.TriggerParams{
+		OrgID:                  &orgScopedID,
+		Level:                  killswitch.LevelExtensionInstallation,
+		TargetID:               stResp.InstallationID,
+		Reason:                 "org extension freeze",
+		TriggeredByPrincipalID: boot.OwnerPrincipalID,
+	}); err != nil {
+		t.Fatalf("trigger org-scoped EXTENSION kill switch: %v", err)
+	}
+
+	var resetCalledFor string
+	h.srv.onExtensionUnquarantined = func(id string) { resetCalledFor = id }
+
+	recUnq := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+stResp.InstallationID+"/unquarantine", ownerCookie, boot.CSRFToken, FormatETag(inst.Version), map[string]any{
+		"reason": "verified clean recovery",
+	})
+	if recUnq.Code != http.StatusOK {
+		t.Fatalf("unquarantine code=%d body=%s", recUnq.Code, recUnq.Body.String())
+	}
+	if resetCalledFor != stResp.InstallationID {
+		t.Fatalf("expected onExtensionUnquarantined hook for %q, got %q", stResp.InstallationID, resetCalledFor)
+	}
+	activeSwitches, err := h.killSwitch.ListWithFilter(context.Background(), killswitch.ListFilter{AllowInstanceScope: true, ActiveOnly: true})
+	if err != nil {
+		t.Fatalf("list switches: %v", err)
+	}
+	for _, sw := range activeSwitches {
+		if sw.TargetID == stResp.InstallationID {
+			t.Fatalf("expected org-scoped EXTENSION switch to be cleared on unquarantine, found active switch %+v", sw)
+		}
+	}
+
+	// 2. Reject non-provider secret kinds (WEBHOOK_HMAC_SECRET, OCI_REGISTRY_AUTH) on provider connection create/update.
+	adpID := seedLocalOpenAIAdapter(t, h, "api.openai.com")
+	for _, kind := range []string{"WEBHOOK_HMAC_SECRET", "OCI_REGISTRY_AUTH"} {
+		recSec := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/secrets", ownerCookie, boot.CSRFToken, "", map[string]any{
+			"name": "non-prov-" + kind, "secret_kind": kind, "secret_value": "secret-val-123456",
+		})
+		if recSec.Code != http.StatusCreated {
+			t.Fatalf("create secret %s code=%d body=%s", kind, recSec.Code, recSec.Body.String())
+		}
+		var sec secretMetadataDTO
+		mustDecodeJSON(t, recSec.Body.Bytes(), &sec)
+
+		recConn := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/connections", ownerCookie, boot.CSRFToken, "", map[string]any{
+			"name": "bad-kind-" + kind, "adapter_id": adpID, "billing_mode": "COMMERCIAL_API",
+			"endpoint_url": "https://api.openai.com/v1", "data_region": "US",
+			"secret_bindings": map[string]string{"api_key": sec.CredentialID},
+		})
+		if recConn.Code != http.StatusBadRequest || !strings.Contains(recConn.Body.String(), "credential_kind_mismatch") {
+			t.Fatalf("expected 400 credential_kind_mismatch binding %s to connection, got %d body=%s", kind, recConn.Code, recConn.Body.String())
+		}
+	}
+}
+
 

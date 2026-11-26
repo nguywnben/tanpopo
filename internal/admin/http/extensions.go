@@ -931,19 +931,32 @@ func (s *Server) handleUnquarantineExtension(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if s.onExtensionUnquarantined != nil {
+		s.onExtensionUnquarantined(insID)
+	}
+
 	if s.killSwitch != nil {
-		activeSwitches, lErr := s.killSwitch.ListInstance(r.Context(), true)
-		if lErr == nil {
-			for _, sw := range activeSwitches {
-				if sw.Active && sw.Level == killswitch.LevelExtensionInstallation && sw.TargetID == insID {
-					_, _ = s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
-						KillSwitchID:         sw.ID,
-						ExpectedVersion:      sw.Version,
-						ClearedByPrincipalID: sc.Actor.PrincipalID,
-						ClearReason:          "extension unquarantined: " + reason,
-						EntryPoint:           port.AuditEntryPointAdminAPI,
-						RequestID:            ptrOrNil(requestIDFromContext(r.Context())),
-					})
+		activeSwitches, lErr := s.killSwitch.ListWithFilter(r.Context(), killswitch.ListFilter{
+			AllowInstanceScope: true,
+			ActiveOnly:         true,
+		})
+		if lErr != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "kill_switch_clear_failed", "upstream_error", "extension unquarantined cleanly, but clearing emergency kill switch failed", true, nil)
+			return
+		}
+		for _, sw := range activeSwitches {
+			if sw.Active && sw.Level == killswitch.LevelExtensionInstallation && sw.TargetID == insID {
+				if _, cErr := s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
+					OrgID:                sw.OrgID,
+					KillSwitchID:         sw.ID,
+					ExpectedVersion:      sw.Version,
+					ClearedByPrincipalID: sc.Actor.PrincipalID,
+					ClearReason:          "extension unquarantined: " + reason,
+					EntryPoint:           port.AuditEntryPointAdminAPI,
+					RequestID:            ptrOrNil(requestIDFromContext(r.Context())),
+				}); cErr != nil && !errors.Is(cErr, killswitch.ErrAlreadyCleared) {
+					writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "kill_switch_clear_failed", "upstream_error", "extension unquarantined cleanly, but clearing emergency kill switch failed", true, nil)
+					return
 				}
 			}
 		}
@@ -1701,19 +1714,19 @@ func permissionSetFromManifest(manifest installer.ExtensionManifest, executionTi
 func (s *Server) writeInstallerError(w http.ResponseWriter, r *http.Request, err error, currentResource any) {
 	switch {
 	case errors.Is(err, installer.ErrReservedNamespaceSpoof):
-		writeErrorEnvelope(w, r, http.StatusForbidden, "reserved_namespace_spoofing", "permission_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusForbidden, "reserved_namespace_spoofing", "permission_error", "reserved namespace is restricted to official root-signed packages", false, nil)
 	case errors.Is(err, installer.ErrPermissionDenied):
-		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "extension installation permission denied", false, nil)
 	case errors.Is(err, installer.ErrRevokedExtension):
-		writeErrorEnvelope(w, r, http.StatusForbidden, "extension_revoked", "extension_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusForbidden, "extension_revoked", "extension_error", "extension package or version has been revoked", false, nil)
 	case errors.Is(err, installer.ErrDigestMismatch), errors.Is(err, lockfile.ErrDigestMismatch):
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "hash_mismatch", "extension_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "hash_mismatch", "extension_error", "extension package SHA-256 digest does not match expected value", false, nil)
 	case errors.Is(err, installer.ErrUnsupportedContractVersion), errors.Is(err, installer.ErrIncompatibleCoreVersion):
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "contract_version_incompatible", "extension_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "contract_version_incompatible", "extension_error", "extension contract or core version is incompatible", false, nil)
 	case errors.Is(err, installer.ErrUnpinnedGitReference):
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "mutable_git_ref_forbidden", "invalid_request_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "mutable_git_ref_forbidden", "invalid_request_error", "mutable git references are forbidden; pin a 40-hex commit SHA", false, nil)
 	case errors.Is(err, installer.ErrUnpinnedOCIDigest), errors.Is(err, installer.ErrUnpinnedReference):
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "unpinned_source_reference", "invalid_request_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "unpinned_source_reference", "invalid_request_error", "source reference must be immutably pinned by digest", false, nil)
 	case errors.Is(err, installer.ErrManifestInvalid),
 		errors.Is(err, installer.ErrInvalidArchive),
 		errors.Is(err, installer.ErrArchivePathTraversal),
@@ -1725,11 +1738,11 @@ func (s *Server) writeInstallerError(w http.ResponseWriter, r *http.Request, err
 		errors.Is(err, installer.ErrProhibitedCapabilityTier),
 		errors.Is(err, installer.ErrEntrypointMismatch),
 		errors.Is(err, installer.ErrInvalidSignature):
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_extension_package", "extension_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_extension_package", "extension_error", "extension package failed archive, manifest, permission, or signature validation", false, nil)
 	case errors.Is(err, port.ErrNotFound):
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension package or installation not found", false, nil)
 	case errors.Is(err, installer.ErrMarketplaceArchiveResolverUnavailable):
-		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "marketplace_archive_resolver_unavailable", "extension_error", err.Error(), true, nil)
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "marketplace_archive_resolver_unavailable", "extension_error", "marketplace archive resolver is unavailable", true, nil)
 	case errors.Is(err, port.ErrVersionConflict):
 		ver := int64(1)
 		if ins, ok := currentResource.(extensionInstallationDTO); ok && ins.Version > 0 {
@@ -1737,15 +1750,15 @@ func (s *Server) writeInstallerError(w http.ResponseWriter, r *http.Request, err
 		}
 		writeOptimisticConflict(w, r, ver, currentResource)
 	case errors.Is(err, port.ErrResourceInUse):
-		writeErrorEnvelope(w, r, http.StatusConflict, "extension_referenced_by_active_connections", "conflict_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusConflict, "extension_referenced_by_active_connections", "conflict_error", "extension installation is still referenced by active connections", false, nil)
 	case errors.Is(err, port.ErrAlreadyExists):
-		writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusConflict, "resource_already_exists", "conflict_error", "extension package or candidate version already exists", false, nil)
 	case errors.Is(err, installer.ErrNoRollbackTarget):
-		writeErrorEnvelope(w, r, http.StatusConflict, "no_rollback_target", "conflict_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusConflict, "no_rollback_target", "conflict_error", "no previous pinned extension version is available for rollback", false, nil)
 	case errors.Is(err, installer.ErrInvalidStateTransition):
-		writeErrorEnvelope(w, r, http.StatusConflict, "invalid_state_transition", "conflict_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusConflict, "invalid_state_transition", "conflict_error", "extension installation state transition is not permitted", false, nil)
 	case errors.Is(err, port.ErrInvalidInput):
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "invalid extension request parameters", false, nil)
 	default:
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "extension_error", "extension installer operation failed", true, nil)
 	}

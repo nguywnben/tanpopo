@@ -232,10 +232,10 @@ func (s *Server) handleRetireMasterKEK(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.vault.RetireKEK(r.Context(), keyID); err != nil {
 		if errors.Is(err, vault.ErrInvalidMasterKey) {
-			writeErrorEnvelope(w, r, http.StatusConflict, "cannot_retire_active_key", "conflict_error", err.Error(), false, nil)
+			writeErrorEnvelope(w, r, http.StatusConflict, "cannot_retire_active_key", "conflict_error", "cannot retire active or invalid Master KEK", false, nil)
 			return
 		}
-		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error(), false, nil)
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed retiring Master KEK", true, nil)
 		return
 	}
 	if err := s.appendOpsAudit(r, sc.Actor.PrincipalID, "ops.kek_retired", keyID, map[string]any{

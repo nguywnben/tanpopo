@@ -403,7 +403,10 @@ adapter:
 	if normalized.Usage["search_units"] != 3 {
 		t.Fatalf("route response search_units=%d, want 3: %s", normalized.Usage["search_units"], response.Body.String())
 	}
-	if observedUsage == nil || observedUsage.MediaUsage == nil || observedUsage.MediaUsage.RerankSearchUnits != 3 {
-		t.Fatalf("route usage observer did not receive exact rerank billing units: %+v", observedUsage)
+	if acc := response.Header().Get("X-Tanpopo-Usage-Accuracy"); acc != "EXACT" {
+		t.Fatalf("rerank X-Tanpopo-Usage-Accuracy=%q, want EXACT (body=%s)", acc, response.Body.String())
+	}
+	if observedUsage == nil || observedUsage.MediaUsage == nil || observedUsage.MediaUsage.RerankSearchUnits != 3 || observedUsage.InputTokens != 0 {
+		t.Fatalf("route usage observer did not receive exact rerank billing units without synthetic tokens: %+v", observedUsage)
 	}
 }

@@ -851,6 +851,7 @@ func buildRuntimeDetailed(ctx context.Context, role, listen string, beforeSQLite
 		}
 		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
 			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
+			ExtensionQuarantine:      installerService.QuarantineInstallation,
 			RateLimiter:              vkRateLimiter,
 			BudgetLedger:             ledgerService,
 			Telemetry:                telemetryPipeline,
@@ -1009,6 +1010,11 @@ func buildRuntimeDetailed(ctx context.Context, role, listen string, beforeSQLite
 				return enqueueErr
 			},
 			OnConfigChange: publishChangeFn,
+			OnExtensionUnquarantined: func(installationID string) {
+				if dataServer != nil {
+					dataServer.FaultGuard().Reset(installationID)
+				}
+			},
 			Broker:         blindBroker, OAuth: oauthService, A2ACoordinator: a2aCoordinator, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
 			OfflineMode: offlineMode, MultiOrgDisabled: multiOrgDisabled,
 			TrustedProxyCIDRs: parseEnvCSV("TANPOPO_TRUSTED_PROXY_CIDRS"),

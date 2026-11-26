@@ -40,7 +40,7 @@ type Connection = components['schemas']['ProviderConnection'];
 type SecretMetadata = components['schemas']['SecretMetadata'];
 type Adapter = components['schemas']['ProviderAdapterSummary'];
 
-const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
+const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 
 export function ProvidersPage({pathname, projectId, roles}: {pathname: string; projectId: string; roles: Role[]}) {
   const {navigate, search} = useRouter();

@@ -582,8 +582,9 @@ func resolveEffectiveUsageAndAccuracy(rate RateCard, in UsageInput) (UsageInput,
 	}
 
 	// FMEA-04 invariant: never stamp EXACT=0 when non-empty prompt/output payloads exist
-	// (including multimodal requests whose media units are non-zero while text tokens are zero).
-	if allTextTokensZero && (in.FallbackTextBytes > 0 || in.FallbackOutputBytes > 0) {
+	// (including multimodal requests whose media units are non-zero while text tokens are zero),
+	// except unit-billed rerank requests where search_units is the authoritative upstream counter.
+	if allTextTokensZero && in.Media.RerankSearchUnits == 0 && (in.FallbackTextBytes > 0 || in.FallbackOutputBytes > 0) {
 		if in.FallbackTextBytes > 0 {
 			effective.InputTokens = EstimateTokensFromUTF8Bytes(in.FallbackTextBytes)
 		}

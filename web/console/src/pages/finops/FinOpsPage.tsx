@@ -23,7 +23,7 @@ type Environment = components['schemas']['Environment'];
 type VirtualKey = components['schemas']['VirtualKeySummary'];
 type GroupBy = 'project' | 'env' | 'key' | 'model';
 
-const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
+const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 
 export function FinOpsPage({
   pathname,
@@ -65,7 +65,7 @@ export function FinOpsPage({
   const [duplicateExisting, setDuplicateExisting] = useState<Budget | null>(null);
   const refreshSeqRef = useRef(0);
 
-  const isOrgOwner = roles.includes('ORG_OWNER');
+  const isOrgOwner = roles.includes('OPERATOR') || roles.includes('ORG_OWNER');
   const canManage = roles.some(role => manageRoles.includes(role));
 
   const refresh = useCallback(async () => {
