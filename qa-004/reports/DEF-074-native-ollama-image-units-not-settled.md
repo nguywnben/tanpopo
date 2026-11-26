@@ -58,6 +58,11 @@ Every accepted native Ollama image request can be undercharged or omitted from i
 3. The settlement accuracy distinguishes request-observed image count from estimated token usage, and the response header, trace, durable ledger, Chargeback UI/API, and exports reconcile per request and in aggregate.
 4. Invalid images or unsuccessful upstream calls follow documented charge/hold-release semantics; a rejected request must not be charged as a completed inference.
 5. No image is counted twice when provider-reported media usage is present, and multi-image order/count, empty arrays, missing arrays, malformed base64, budget limits, streaming, and restart persistence have regression coverage.
-6. Test the normalized OpenAI image path and every declared native adapter with their respective request shapes; preserve size/capability pre-egress checks.
+6. Preserve the CP123 normalized OpenAI `image_url` positive control (two images settled 2,000 exact micro-USD on this same Ollama-backed model/deployment) while fixing native Ollama media extraction. Test every declared native adapter with its own request shape and preserve size/capability pre-egress checks.
 
 No source was modified. No production credential or external provider was used. **GATE-REL-07 remains BLOCKED.**
+
+
+## Normalized OpenAI image control and scope refinement (CP123)
+
+CP123 used the same model, healthy Ollama-backed deployment, 1,000,000 nano-USD/image rate card, and two image files, but submitted standard OpenAI `image_url` content. After correcting a local fixture that initially returned a harness-generated 404 for `/v1/chat/completions`, a valid retry delivered both expected image SHA-256 values to the synthetic upstream. The request returned 200 and durable Chargeback recorded exactly 2,000 micro-USD, one exact request. This is a positive control: it narrows DEF-074 to the native Ollama `messages[].images[]` path for the tested shape and shows the same price/deployment can settle normalized OpenAI images. It does not establish all OpenAI media variants or other adapters. The same request Trace reads Exact/$0, separately reinforcing DEF-052. See [CP123](../checkpoints/CP123-normalized-openai-image-pricing-comparison.md) and its sanitized results/screenshots.

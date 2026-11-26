@@ -89,3 +89,8 @@ Through the authorized native Ollama route, a synthetic two-image request return
 ### Non-zero-rate native image settlement test (CP121)
 
 The actual successful two-image trace reports `EXACT` / `$0`, while persistent VKEY Chargeback reports one Estimated request / `$0.000000`; the configured card should charge `$0.002` for the two images alone. This both reinforces the trace/chargeback disagreement in DEF-052 and exposes a distinct image-unit underbilling defect (DEF-074). See [CP121](../checkpoints/CP121-native-ollama-image-unit-settlement.md) and sanitized persistent/API evidence.
+
+
+### Normalized OpenAI image settlement retest (CP123)
+
+A restricted PROVIDER key sent two synthetic `image_url` blocks through `POST /v1/chat/completions` to the same healthy Ollama-backed vision route used for the CP121 native-media tests. The local fixture verified the two expected image hashes and returned HTTP 200. The trace API for `trc_01m8b6qppke00akgdd1jkkz6xg` reports `EXACT` / `total_cost_micros: 0`, but the authenticated per-key Chargeback API and real Chargeback screen report one exact request / 2,000 micro-USD ($0.002). This independently confirms the per-request projection mismatch with a nonzero media settlement. The initially misconfigured fixture attempt returned its own 404 and is excluded. Both test keys were revoked; see [CP123](../checkpoints/CP123-normalized-openai-image-pricing-comparison.md), [`sanitized readback`](../evidence/CP123-openai-image-pricing-results.json), and the visually inspected CP123 Traces/Chargeback screenshots. No duplicate finding was created.
