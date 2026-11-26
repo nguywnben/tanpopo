@@ -1,0 +1,86 @@
+{
+  "ready": {
+    "status": 200,
+    "body": "{\"status\":\"ready\"}"
+  },
+  "login": "success; authenticated Owner Overview rendered",
+  "api": {
+    "organizations": {
+      "status": 200,
+      "count": 1,
+      "items": [
+        {
+          "name": "QA004 CP105 PostgreSQL",
+          "slug": "qa004-cp105-postgresql"
+        }
+      ]
+    },
+    "projects": {
+      "status": 200,
+      "count": 2,
+      "items": [
+        {
+          "name": "QA004 CP107 PostgreSQL Scope",
+          "slug": "qa004-cp107-pg-scope"
+        },
+        {
+          "name": "default",
+          "slug": "default"
+        }
+      ]
+    },
+    "members": {
+      "status": 200,
+      "count": 2,
+      "items": [
+        {
+          "email": "qa004-cp110-developer@example.invalid",
+          "roles": [
+            "DEVELOPER"
+          ],
+          "project_ids": [
+            "prj_01m8awtt8we00b41f10ekb4bxt"
+          ],
+          "enrollment_pending": false,
+          "has_password": true
+        },
+        {
+          "email": "qa004-pg-owner@example.invalid",
+          "roles": [
+            "ORG_OWNER"
+          ],
+          "project_ids": [],
+          "enrollment_pending": false,
+          "has_password": true
+        }
+      ]
+    },
+    "environments": [
+      {
+        "project": "qa004-cp107-pg-scope",
+        "status": 200,
+        "count": 1,
+        "envs": [
+          {
+            "name": "qa004-cp107-qa",
+            "slug": "qa004-cp107-qa"
+          }
+        ]
+      },
+      {
+        "project": "default",
+        "status": 200,
+        "count": 1,
+        "envs": [
+          {
+            "name": "dev",
+            "slug": "dev"
+          }
+        ]
+      }
+    ]
+  },
+  "memberScreen": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n3\nMembers & Roles\n2\nOrganization members\n2\nPrincipal\tKind\tAssigned roles\tActions\n\nqa004-cp110-developer@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa004-pg-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t",
+  "operations": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nReadiness (/readyz)\nReady\nServing traffic\nConfig epoch\n9\nCopy-on-write snapshot\nSnapshot age\n—\nLast config refresh\nStorage engine\npostgres\nActive persistence backend\nCluster nodes\n1\nNode ID\tConfig epoch\tSnapshot age\tHealth\nprimary\t9\t0 ms\tOK",
+  "clientErrors": []
+}
