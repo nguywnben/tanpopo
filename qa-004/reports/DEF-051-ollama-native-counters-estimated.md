@@ -28,6 +28,10 @@ Actual: the response is HTTP 200 and faithfully preserves the Ollama JSON; its `
 
 A second authorized cookie-free native dialect journey called `POST /native/ollama/api/generate` on the same frozen RC6 baseline. The fixture returned `prompt_eval_count:6` and `eval_count:3`; Tanpopo preserved both fields in the HTTP 200 Ollama JSON response but marked the response `ESTIMATED`. FinOps shows one estimated request at `$0.000001`. This confirms the defect extends beyond `/api/chat` to `/api/generate`; no new defect ID is assigned. See `../evidence/CP38-native-generate-results.json`, `../evidence/CP38-native-generate-trace.png`, and `../evidence/CP38-native-generate-finops.png`.
 
+### Native tool-call and streaming retest (CP85/CP86)
+
+CP85 /native/ollama/api/chat returned prompt_eval_count:17 and eval_count:4 with a faithful tool-call response but labeled the response ESTIMATED; FinOps recorded 0 exact / 1 estimated request. CP86 returned the same terminal counter pair in native streaming frames, but the stream response had no X-Tanpopo-Usage-Accuracy header. Five native stream requests (three complete and two canceled) appeared as 0 exact / 5 estimated in FinOps, while all five trace rows remained EXACT / $0. This independently extends the native counter issue to streamed /api/chat; see CP85, CP86, and their machine/UI evidence. No duplicate defect ID is created.
+
 ## Business impact
 
 Usage-based billing, budget consumption, chargeback, and audit figures can materially diverge from provider-reported Ollama usage while the inference itself succeeds. Byte estimates can understate or overstate token counts and may lead to incorrect customer charges or budget decisions.

@@ -41,6 +41,10 @@ A real browser issued a cookie-free streaming request through the existing singl
 
 A two-target provider route sent a cookie-free streaming request to a local primary that emitted one SSE content chunk and then closed without usage or `[DONE]`. Tanpopo returned HTTP 200 with the partial chunk followed by a canonical `mid_stream_abort` error event and correctly made zero calls to the healthy secondary. The same request trace `trc_01m89m26w4e009j53p9m01tmav` reports `usage_accuracy=EXACT`, `total_cost_micros=0`; FinOps group-by-key reports 0 exact requests and 1 estimated request at 1 micro-USD. The real Traces and Chargeback screenshots were visually inspected. This broadens DEF-052 to failed partial streams while confirming the durable settlement is estimated. See `evidence/CP34-midstream-abort-results.json`, `evidence/CP34-midstream-trace.png`, and `evidence/CP34-finops-midstream.png`.
 
+### Native Ollama tool-call and streaming retest (CP85/CP86)
+
+CP85 native /api/chat tool-call response created a trace marked EXACT / $0, while the same key FinOps row showed 0 exact / 1 estimated request at $0.000001. CP86 repeated the mismatch across five native streaming requests: every trace was EXACT / $0, while Virtual Key Chargeback showed 0 exact / 5 estimated requests at $0.000005. The trace and FinOps screens were visually inspected. See CP85 and CP86 checkpoint and evidence links. These extend DEF-052; no duplicate ID is assigned.
+
 ## Business impact
 
 Operators cannot rely on traces to reconcile customer charges or investigate requests. The UI asserts “Exact” for estimated usage, and request-level zero cost cannot be reconciled to successful nonzero settlements and summary totals.
