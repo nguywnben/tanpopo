@@ -1,0 +1,13 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "actor_role": ["OPERATOR"],
+  "endpoint": "http://[::ffff:127.0.0.1]:19125/mcp",
+  "allow_private_ip": true,
+  "explicit_allowed_cidr": "::ffff:127.0.0.1/128",
+  "ui_registration_status": 403,
+  "error_code": "egress_private_ip_blocked",
+  "error_message": "IPv4-mapped IPv6 address ::ffff:127.0.0.1 is forbidden",
+  "persisted_server_count": 0,
+  "fixture_request_count": 0,
+  "classification": "Mapped loopback form was blocked before persistence or endpoint contact. This is fail-closed security behavior; whether explicit mapped-CIDR support is part of the product contract remains UNVERIFIED. A normal IPv4 loopback endpoint succeeded separately in CP41."
+}

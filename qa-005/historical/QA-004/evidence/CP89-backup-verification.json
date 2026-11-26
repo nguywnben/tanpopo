@@ -1,0 +1,30 @@
+{
+  "archive_sha256": "007d2635d2a5219c4180614e2bbe27293a3890291dc6539f449a71d1967102e2",
+  "archive_bytes": 28647,
+  "verify_exit_code": 0,
+  "verify_stdout": "{\"backup_id\":\"38f9c5c57cc187d26e09283ce6dabbca\",\"created_at\":\"2026-11-26T00:30:38.713Z\",\"files\":9}\n",
+  "verify_stderr": "",
+  "restore_exit_code": 0,
+  "restore_stdout": "{\"backup_id\":\"38f9c5c57cc187d26e09283ce6dabbca\",\"created_at\":\"2026-11-26T00:30:38.713Z\",\"path\":\"/tmp/qa004-cp89-restore2\"}\n",
+  "restore_stderr": "",
+  "restore_files": [
+    "database.sqlite",
+    "extensions/exv_01m89x55nhe008sjjxn2h239b0/manifest.yaml",
+    "extensions/exv_01m89xa1jye00aqbzjmj6ysk8v/manifest.yaml",
+    "extensions/exv_01m89xdyqqe00bv9tp38tzd08v/manifest.yaml",
+    "extensions/exv_01m89xkmkqe00b4amgphxr6bxz/manifest.yaml",
+    "extensions/exv_01m8aksq1ne0090sp1ec5kcw92/manifest.yaml",
+    "manifest.json",
+    "tanpopo.lock",
+    "tanpopo.yaml"
+  ],
+  "sqlite_integrity_check": "ok",
+  "application_tables": 57,
+  "tamper": {
+    "mutation": "flipped one byte inside encrypted frame 0 ciphertext",
+    "verify_exit_code": 14,
+    "stdout": "",
+    "stderr": "tanpopo: Backup verification failed: backup: read tar entry: backup: authenticate encrypted frame 0: cipher: message authentication failed\n"
+  },
+  "cleanup": "Original encrypted archive, tampered copy, restored database and temporary working directories removed after validation; immutable UI receipt/audit record retained in isolated test runtime."
+}

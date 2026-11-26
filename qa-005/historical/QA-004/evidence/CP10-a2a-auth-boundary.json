@@ -1,0 +1,16 @@
+{
+  "a2a_only": {
+    "status": 200,
+    "request_id": null,
+    "error": null,
+    "agent_count": 1
+  },
+  "provider_only": {
+    "status": 403,
+    "request_id": "trc_01m898m0bxe008f6m516z1zbnk",
+    "error": {
+      "code": "scope_or_plane_denied",
+      "message": "Virtual Key is not permitted on A2A plane."
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "installations": [
+    {
+      "id": "ins_01m89x55nhe008skng4b6kv0qe",
+      "canonical_name": "@qa004/lifecycle-canary",
+      "package_id": "ext_01m89x55nhe008sh9e22wwvcvx",
+      "state": "ENABLED_ACTIVE",
+      "version": 9
+    }
+  ],
+  "audit_verified": {
+    "status": 200,
+    "total_returned": 17,
+    "events": [
+      {
+        "seq_no": 16,
+        "action": "extension.staged_pending_approval",
+        "target_id": "ins_01m8aksq1ne0090tv6hv4s1kt4",
+        "metadata": {
+          "canonical_name": "@tanpopo-qa004-spoof/canary",
+          "origin_trust_tier": "unverified_external",
+          "signature_verified": false
+        }
+      },
+      {
+        "seq_no": 17,
+        "action": "extension.staged_install_cancelled",
+        "target_id": "ins_01m8aksq1ne0090tv6hv4s1kt4"
+      }
+    ]
+  }
+}

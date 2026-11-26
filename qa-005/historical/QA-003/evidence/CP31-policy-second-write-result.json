@@ -1,0 +1,29 @@
+{
+  "before": {
+    "projectId": "prj_01m87y8xb6e00btm7gj98bjcc3",
+    "status": 200,
+    "etag": "\"v1\"",
+    "version": 1,
+    "regions": [
+      "EU",
+      "ON_PREM",
+      "US"
+    ]
+  },
+  "usChecked": true,
+  "put": {
+    "ifMatch": "\"v1\"",
+    "status": 200,
+    "etag": "\"v2\""
+  },
+  "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nSaved Project policy.\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, ON_PREM\tProject floor\nAllowed models\t*\tProject policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hooks\tNone attached\tProject policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy",
+  "after": {
+    "status": 200,
+    "etag": "\"v2\"",
+    "version": 2,
+    "regions": [
+      "EU",
+      "ON_PREM"
+    ]
+  }
+}

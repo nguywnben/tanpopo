@@ -1,0 +1,42 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "artifact_run": "45581179274",
+  "runtime": "exact RC6 on isolated PostgreSQL restored database and three-primary Valkey cluster; standalone control/data listener 18137 and separate data-plane listener 18138 both healthy",
+  "synthetic_key": {
+    "id": "vky_01m8b200sme00bz3qavae5hwjn",
+    "name": "QA004 CP116 Valkey TPM Admission",
+    "create_http_status": 201,
+    "tpm_limit": 1,
+    "allowed_models": ["qa004-cp116-no-route"],
+    "plaintext_key": "redacted; response retained only in the temporary process and not logged or saved"
+  },
+  "native_request": {
+    "listener_port": 18138,
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "request_model": "qa004-cp116-no-route",
+    "synthetic_long_prompt": true,
+    "http_status": 429,
+    "error_code": "rate_limit_exceeded",
+    "retry_after_seconds": "60",
+    "provider_route_configured": false,
+    "provider_dispatch_or_spend": false
+  },
+  "cleanup": {
+    "console_action": "Owner Access & Keys -> Revoke key -> Revoke (graceful drain)",
+    "revoke_http_status": 200,
+    "metadata_readback_http_status": 200,
+    "state": "REVOKED",
+    "version": 2,
+    "tpm_limit_after_revoke": 1,
+    "revoke_success_ui_visible": true
+  },
+  "screenshots_visually_inspected": ["CP116-tpm-key-revoked.png"],
+  "result": "PASS (scoped) for pre-route TPM limit rejection and persisted UI revocation. No new defect assigned.",
+  "limits": [
+    "One TPM threshold and one model were tested; this does not verify token-estimator accuracy, post-route settlement reconciliation, TPM recovery after window rollover, multi-node TPM fairness, or upstream usage handling.",
+    "A first browser automation pass hit an ambiguous locator after the request result. A new authenticated browser session completed the visible revoke and persistent-state readback; no product failure was observed."
+  ],
+  "product_source_modified": false,
+  "gate_rel_07": "BLOCKED"
+}

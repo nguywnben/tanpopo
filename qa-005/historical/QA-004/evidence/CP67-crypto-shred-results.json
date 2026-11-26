@@ -1,0 +1,91 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 SQLite runtime at 127.0.0.1:18128; offline; no provider connections configured",
+  "test_org": {
+    "id": "org_01m8a833jxe00ahft1pharg45y",
+    "slug": "qa004-cp67-crypto-shred",
+    "project_id": "prj_01m8a8dat2e009xqwn19dakkc7",
+    "environment_id": "env_01m8a8gnqye00as8hejt158g0j",
+    "credential_id": "sec_01m8a8jww8e008554aeqmse8zm"
+  },
+  "synthetic_secret": {
+    "created_through_real_console": true,
+    "project_scoped": true,
+    "kind": "API_KEY",
+    "plaintext": "redacted; synthetic-only value; never captured in evidence",
+    "create_notice": "Plaintext cannot be read again",
+    "refresh_metadata_read": {
+      "http_status": 200,
+      "returned_fields": ["credential_id", "project_id", "name", "secret_kind", "trailing_fingerprint", "version", "created_at"],
+      "secret_value_field_present": false,
+      "records": 1
+    },
+    "no_provider_connection_or_inference": true
+  },
+  "active_org_shred": {
+    "initiated_through_real_operations_console": true,
+    "confirmation_slug_matched": true,
+    "http_status": 200,
+    "destroyed_dek_id": "org_01m8a833jxe00ahft1pharg45y:v1:g1",
+    "revoked_virtual_keys_count": 0,
+    "organization_list_after": {
+      "http_status": 200,
+      "remaining": [
+        {"id": "org_01m89ezzx6e0083hrjy2r7s14f", "slug": "qa004-cross-tenant-boundary", "status": "ACTIVE"},
+        {"id": "org_01m895k8pee008b3aeaswvpshy", "slug": "qa004-test-root-org", "status": "ACTIVE"}
+      ]
+    },
+    "shredded_org_project_list": {"http_status": 200, "records": 0},
+    "shredded_org_secret_metadata_list": {"http_status": 200, "records": 0},
+    "audit_receipt": {
+      "http_status": 200,
+      "records": 1,
+      "sequence": 5,
+      "event_type": "organization.crypto_shredded",
+      "target_id": "org_01m8a833jxe00ahft1pharg45y",
+      "destroyed_dek_id_present": true,
+      "reason": "QA-004 CP67 isolated synthetic crypto-shred verification"
+    },
+    "tenant_audit_chain_verification": {"http_status": 200, "intact": true, "checked_events_count": 5},
+    "unaffected_root_org_projects": {"http_status": 200, "records": 2},
+    "operations_console_after": "organization removed; scope switched to the other active synthetic organization; no crypto-shred success receipt/banner was visible"
+  },
+  "inactive_org_control": {
+    "id": "org_01m8a8w6n1e009z30yn17jtytb",
+    "slug": "qa004-cp67-inactive-control",
+    "data": "empty synthetic organization",
+    "initiated_through_real_operations_console": true,
+    "http_status": 200,
+    "destroyed_dek_id": "org_01m8a8w6n1e009z30yn17jtytb:v1:g1",
+    "active_scope_preserved": true,
+    "success_receipt_banner_visible": true
+  },
+  "post_shred_backup": {
+    "created_with_exact_rc6_cli": true,
+    "backup_id": "bc0e6549a5c42c9934ac34bb3546b49b",
+    "archive_sha256": "f4ed7c561313676a7b5c99fa07fca6f9e5db7293c018dd9fcd6e1403691204f7",
+    "archive_bytes": 131859,
+    "verify": {"exit_code": 0, "verified_files": 11},
+    "restore_with_secret_decrypt_verification": {
+      "exit_code": 0,
+      "restored_audit_chain_validation": "PASS; restore validates every restored audit partition before publish",
+      "secret_envelope_validation": "PASS for all surviving organization and project DEKs using the runtime-matching local test KEK",
+      "sqlite_integrity_check": "ok",
+      "surviving_organizations": 2,
+      "shredded_org_rows": 0,
+      "shredded_org_dek_rows": 0,
+      "shredded_project_rows": 0,
+      "shredded_secret_rows": 0,
+      "crypto_shred_audit_rows": 1
+    },
+    "initial_wrong_key_attempt": {
+      "result": "failed while verifying a surviving root organization's DEK envelope",
+      "error": "vault: AEAD decryption failed: cipher: message authentication failed",
+      "resolution": "retried with the existing runtime-matching test-root KEK file; secret-envelope verification then passed. This initial setup error is not a product failure."
+    },
+    "archives_and_restored_database": "removed from /tmp after sanitized checks"
+  },
+  "duration_sla": "UNVERIFIED; request-to-completion timing was not instrumented",
+  "pre_shred_cold_backup_recovery": "UNVERIFIED; no pre-shred archive of this canary was retained",
+  "product_source_modified": false
+}

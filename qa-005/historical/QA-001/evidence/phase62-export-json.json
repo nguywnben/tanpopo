@@ -1,0 +1,19 @@
+{
+  "api": {
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "[{\"group_key\":\"qa-fresh-project\",\"exact_micro_usd\":1,\"estimated_micro_usd\":0,\"exact_request_count\":1,\"estimated_request_count\":0,\"unmetered_request_count\":0}]\n"
+  },
+  "download": "tanpopo-chargeback.json",
+  "data": [
+    {
+      "group_key": "qa-fresh-project",
+      "exact_micro_usd": 1,
+      "estimated_micro_usd": 0,
+      "exact_request_count": 1,
+      "estimated_request_count": 0,
+      "unmetered_request_count": 0
+    }
+  ],
+  "visibleText": " estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nBudgets & Holds\nChargeback\nExported JSON chargeback report.\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n1\nGroup by\nProject\nProject\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nqa-fresh-project\t\nExact\n$0.000001\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0"
+}

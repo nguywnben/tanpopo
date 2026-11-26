@@ -1,0 +1,37 @@
+{
+  "ui": "Overview\n\nUpdated 8:18:19 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n2\nWindow: 24h\nError rate\n50.00%\nInternal & upstream\np95 proxy overhead\n5.517 ms\nGateway added latency\nSettled spend\n$0.012001\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+  "data": [
+    {
+      "path": "/admin/v1/overview/summary?window=24h",
+      "status": 200,
+      "body": {
+        "window": "24h",
+        "total_requests": 2,
+        "error_rate_ratio": 0.5,
+        "p95_overhead_ms": 5.517,
+        "settled_micro_usd": 12001,
+        "active_hold_micros": 0,
+        "unmetered_request_count": 0,
+        "active_alerts_count": 0,
+        "sync_lag_warning": false,
+        "updated_at": "2026-11-24T08:18:20.545Z"
+      }
+    },
+    {
+      "path": "/admin/v1/alerts/active?limit=100",
+      "status": 200,
+      "body": {
+        "data": [],
+        "has_more": false
+      }
+    },
+    {
+      "path": "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=100",
+      "status": 200,
+      "body": {
+        "data": [],
+        "has_more": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,249 @@
+{
+  "date": "2026-11-23",
+  "keyCreated": true,
+  "keyID": "vky_01m846aghge00a4g0wfr5bcxhh",
+  "version": 1,
+  "actions": [
+    {
+      "text": "",
+      "aria": "Close navigation",
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Sign out",
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Open navigation menu",
+      "title": ""
+    },
+    {
+      "text": "Default Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)",
+      "aria": null,
+      "title": "Default Organization / QA Isolation 2026-11-23 / qa-sandbox"
+    },
+    {
+      "text": "",
+      "aria": "Manage organizations",
+      "title": ""
+    },
+    {
+      "text": "QA Boundary Organization",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Default Organization",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "New project",
+      "title": ""
+    },
+    {
+      "text": "QA Isolation 2026-11-23",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "default",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "No project",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "New environment",
+      "title": ""
+    },
+    {
+      "text": "qa-sandbox",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "No env",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Close popover",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Jump\nCtrl\nK",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "English",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Switch to dark theme",
+      "title": ""
+    },
+    {
+      "text": "Kill Switch",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Issue key",
+      "aria": "Issue key",
+      "title": ""
+    },
+    {
+      "text": "Virtual Keys\n4",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Members & Roles\n4",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Actions for qa-cp36-key-rotation",
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Actions for qa-cp36-key-rotation",
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Close",
+      "title": ""
+    },
+    {
+      "text": "Cancel",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Create key",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "I stored it \u2014 close & erase",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Cancel",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Rotate key",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Close",
+      "title": ""
+    },
+    {
+      "text": "Graceful drain (allow active streams to finish)",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Cancel",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Revoke (graceful drain)",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Close",
+      "title": ""
+    },
+    {
+      "text": "Developer",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Clear all Assign roles",
+      "title": ""
+    },
+    {
+      "text": "Cancel",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Add member",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Close",
+      "title": ""
+    },
+    {
+      "text": "Cancel",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Save roles",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Close",
+      "title": ""
+    },
+    {
+      "text": "Cancel",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Create project",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "",
+      "aria": "Close",
+      "title": ""
+    },
+    {
+      "text": "Cancel",
+      "aria": null,
+      "title": ""
+    },
+    {
+      "text": "Create environment",
+      "aria": null,
+      "title": ""
+    }
+  ],
+  "credentialHandling": "Original key was held temporarily in a mode-0600 file under /tmp to drive the rotation test; temporary copy removed after testing. No plaintext saved in qa/evidence."
+}

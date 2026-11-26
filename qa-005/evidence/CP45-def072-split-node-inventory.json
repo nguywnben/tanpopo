@@ -1,0 +1,49 @@
+{
+  "checkpoint": "CP45",
+  "historical_defect": "DEF-072",
+  "fresh_classification": "PARTIAL",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "control_plane": "127.0.0.1:18151",
+    "data_plane": "127.0.0.1:18152"
+  },
+  "environment": "disposable PostgreSQL 16 database and least-privilege app role in isolated local qa005-postgres container; fresh QA-only CP/DP and Master KEK under /tmp/qa005-cp45; Chromium; synthetic Owner. No Valkey configured for this run; existing container was standalone, not a cluster.",
+  "healthy_split_role_reproduction": {
+    "steps": [
+      "Provision an isolated PostgreSQL database and app role.",
+      "Start exact-source control-plane role and complete fresh setup in Chromium.",
+      "Start a separate exact-source data-plane process against the same PostgreSQL database and Master KEK.",
+      "Verify both /readyz listeners, send unauthenticated GET /v1/models to the Data Plane, and inspect authenticated cluster-status API and Operations UI."
+    ],
+    "control_plane_ready_http": 200,
+    "data_plane_ready_http": 200,
+    "unauthenticated_dataplane_models": {"http": 401, "error": "invalid_virtual_key"},
+    "cluster_status_http": 200,
+    "cluster_status_storage_engine": "postgres",
+    "healthy_node_rows": [
+      {"id": "b4847253cec0-99362", "role": "data-plane", "config_epoch": 1, "health": "ok", "stale": false},
+      {"id": "b4847253cec0-98717", "role": "control-plane", "config_epoch": 1, "health": "ok", "stale": false}
+    ],
+    "visual_ui": "Cluster nodes 2; both node IDs, roles, config epoch 1, heartbeat age, and OK state displayed."
+  },
+  "node_loss_followup": {
+    "steps": ["Terminate only the disposable Data Plane process.", "Wait for it to stop responding and 12 seconds for heartbeat expiry.", "Refresh Operations > Health & Cluster and read cluster-status again."],
+    "dataplane_listener_closed": true,
+    "control_plane_ready_http": 200,
+    "cluster_status_http": 200,
+    "cluster_status_node_rows": [
+      {"id": "b4847253cec0-98717", "role": "control-plane", "config_epoch": 1, "health": "ok", "stale": false}
+    ],
+    "visual_ui": "Ready; Cluster nodes 1; sole control-plane row reports OK. The departed Data Plane is removed and no incomplete/unreachable/expected-count indicator is shown."
+  },
+  "historical_reconciliation": "The original RC6 failure (ready split Data Plane entirely absent while runtime was operating) did not reproduce on this fresh RC7 healthy two-process path. A node-loss follow-up shows the inventory removes the vanished Data Plane after heartbeat expiry and reports a ready single-node view. Because this setup had no expected replica count/topology input, whether that UI behavior violates the active-node versus unreachable-node operational contract is unresolved. Fresh status is PARTIAL, not a clean pass.",
+  "screenshots": [
+    "evidence/screenshots/CP45-split-setup-review.png",
+    "evidence/screenshots/CP45-split-overview.png",
+    "evidence/screenshots/CP45-split-ops-inventory.png",
+    "evidence/screenshots/CP45-split-ops-after-dataplane-stop.png"
+  ],
+  "visual_inspection": "The healthy two-node inventory and post-termination one-node view were visually inspected."
+}

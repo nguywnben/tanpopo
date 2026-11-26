@@ -1,0 +1,29 @@
+{
+  "request": {
+    "model": "qa004-loopback",
+    "messages": [
+      {
+        "role": "user",
+        "content": "QA004 synthetic native streaming check"
+      }
+    ],
+    "stream": true,
+    "stream_options": {
+      "include_usage": true
+    },
+    "keep_alive": "5m",
+    "options": {
+      "temperature": 0.1,
+      "num_ctx": 2048
+    }
+  },
+  "response": {
+    "status": 200,
+    "request_id": "req_01m896n9hve0092z98afan7sw7",
+    "trace_id": "trc_01m896n9hwe00bw0djbr2gbwvj",
+    "content_type": "text/event-stream; charset=utf-8",
+    "usage_accuracy": null,
+    "response_sha256": "e9be110026a3f6a8cbbcab330ba527e2302447f02628f38270fa6b3223743756",
+    "body": "data: {\"id\":\"chatcmpl-qa004\",\"object\":\"chat.completion.chunk\",\"model\":\"qa004-mock\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hello \"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-qa004\",\"object\":\"chat.completion.chunk\",\"model\":\"qa004-mock\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"from synthetic Ollama.\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-qa004\",\"object\":\"chat.completion.chunk\",\"model\":\"qa004-mock\",\"choices\":[],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":4,\"total_tokens\":11}}\n\ndata: [DONE]\n\n"
+  }
+}

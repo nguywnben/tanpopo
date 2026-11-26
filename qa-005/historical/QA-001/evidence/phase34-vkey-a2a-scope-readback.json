@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-23",
+  "database_read_only": true,
+  "keys": [
+    {
+      "name": "qa-cp32-a2a-scope-boundary",
+      "found": true,
+      "state": "REVOKED",
+      "allowed_planes": "PROVIDER"
+    },
+    {
+      "name": "qa-cp33-a2a-default-key",
+      "found": true,
+      "state": "REVOKED",
+      "allowed_planes": "PROVIDER"
+    },
+    {
+      "name": "qa-cp34-a2a-default-key",
+      "found": true,
+      "state": "REVOKED",
+      "allowed_planes": "PROVIDER"
+    }
+  ]
+}

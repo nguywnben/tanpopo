@@ -1,0 +1,31 @@
+{
+  "createStatus": 201,
+  "created": {
+    "id": "mcp_01m87hry72e0099df0m8n2c84w",
+    "slug": "qa003-mcp-sync-fixture",
+    "state": "ACTIVE"
+  },
+  "pageContains": true,
+  "rows": [
+    "Server\tEndpoint\tSchema state\tTools\tActions",
+    "QA003 MCP Sync Fixture\nqa003-mcp-sync-fixture\n\thttp://127.0.0.1:19191/mcp\tActive\t0\t\nSync tools",
+    "QA003 SSRF MCP\nqa003-ssrf-mcp\n\thttp://127.0.0.1:19189/mcp\tActive\t0\t\nSync tools",
+    "QA003 SSRF MCP\nqa003-ssrf-mcp2\n\thttp://127.0.0.1:19189/mcp\tActive\t0\t\nSync tools"
+  ],
+  "buttons": [
+    "Default Organization / default / dev (Active workspace scope)",
+    "JumpCtrlK",
+    "Kill Switch",
+    "Register server",
+    "Sync tools",
+    "Sync tools",
+    "Sync tools"
+  ],
+  "responses": [
+    {
+      "url": "http://127.0.0.1:18107/admin/v1/mcp/servers",
+      "status": 201,
+      "body": "{\"id\":\"mcp_01m87hry72e0099df0m8n2c84w\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"slug\":\"qa003-mcp-sync-fixture\",\"name\":\"QA003 MCP Sync Fixture\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19191/mcp\",\"allow_private_ip\":true,\"state\":\"ACTIVE\",\"tool_count\":0,\"version\":1}\n"
+    }
+  ]
+}

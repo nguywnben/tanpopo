@@ -1,0 +1,43 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "read_method": "read-only SQLite connection to isolated runtime DB",
+  "settlements": [
+    {
+      "request_id": "trc_01m8cygktye009n3mdq0dbfq9b",
+      "logical_model_slug": "qa005-native-fixture",
+      "usage_accuracy": "EXACT",
+      "input_tokens": 7,
+      "output_tokens": 4,
+      "media_usage_json": {},
+      "applied_pricing_snapshot_json": {
+        "pricing_schema_version": 2,
+        "token_rate_unit": "nano_usd_per_token",
+        "input_token_nano_usd": 100000000,
+        "output_token_nano_usd": 200000000,
+        "billing_mode": "SELF_HOSTED_INFRA"
+      },
+      "total_cost_micros": 1500000
+    },
+    {
+      "request_id": "trc_01m8cygkvce00bna8qv1t9s9na",
+      "logical_model_slug": "qa005-native-fixture",
+      "usage_accuracy": "EXACT",
+      "input_tokens": 8,
+      "output_tokens": 5,
+      "media_usage_json": {},
+      "applied_pricing_snapshot_json": {
+        "pricing_schema_version": 2,
+        "token_rate_unit": "nano_usd_per_token",
+        "input_token_nano_usd": 100000000,
+        "output_token_nano_usd": 200000000,
+        "billing_mode": "SELF_HOSTED_INFRA"
+      },
+      "total_cost_micros": 1800000
+    }
+  ],
+  "expected_arithmetic": {
+    "chat_nano_usd": 1500000000,
+    "generate_nano_usd": 1800000000,
+    "micro_usd_rounding": "ceil(nano_usd/1000)"
+  }
+}

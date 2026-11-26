@@ -1,0 +1,66 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": 18116,
+  "tests": [
+    {
+      "browser": "Chromium",
+      "result": "PASS scoped authenticated navigation",
+      "url": "https://127.0.0.1:19194/observability/traces",
+      "overviewHasPage": true,
+      "providersHasHeader": true,
+      "tracesHasHeader": true,
+      "sidebarLinks": [
+        "Skip to main content",
+        "Tanpopo",
+        "Overview",
+        "Traces",
+        "FinOps",
+        "Providers",
+        "Models",
+        "Routes & Policies",
+        "Extensions",
+        "MCP Hub",
+        "Playground",
+        "Access & Keys",
+        "Security",
+        "Operations"
+      ],
+      "pageErrors": [],
+      "shots": [
+        "CP39-chromium-overview.png",
+        "CP39-chromium-providers.png",
+        "CP39-chromium-traces.png"
+      ]
+    },
+    {
+      "browser": "WebKit",
+      "result": "PASS scoped authenticated navigation",
+      "url": "https://127.0.0.1:19194/observability/traces",
+      "overviewHasPage": true,
+      "providersHasHeader": true,
+      "tracesHasHeader": true,
+      "sidebarLinks": [
+        "Skip to main content",
+        "Tanpopo",
+        "Overview",
+        "Traces",
+        "FinOps",
+        "Providers",
+        "Models",
+        "Routes & Policies",
+        "Extensions",
+        "MCP Hub",
+        "Playground",
+        "Access & Keys",
+        "Security",
+        "Operations"
+      ],
+      "pageErrors": [],
+      "shots": [
+        "CP39-webkit-overview.png",
+        "CP39-webkit-providers.png",
+        "CP39-webkit-traces.png"
+      ]
+    }
+  ]
+}

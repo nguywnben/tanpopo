@@ -1,0 +1,42 @@
+{
+  "checkpoint": "CP134",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "RC6 isolated SQLite runtime 127.0.0.1:18128",
+  "browser": "Chromium 1440x1000; live Operations and Providers Console interactions; screenshots visually inspected",
+  "scope": "SSRF validation at webhook registration only",
+  "results": {
+    "loopback_target": {
+      "url": "https://127.0.0.1:16379/",
+      "status": 400,
+      "code": "ssrf_blocked_private_ip",
+      "message": "endpoint_url violates egress SSRF policy"
+    },
+    "metadata_target": {
+      "url": "https://169.254.169.254/latest/meta-data/",
+      "status": 400,
+      "code": "ssrf_blocked_private_ip",
+      "message": "metadata and link-local addresses are unconditionally blocked"
+    },
+    "subscriptions_after_rejection": {
+      "status": 200,
+      "count": 0
+    },
+    "synthetic_signing_credential_cleanup": {
+      "delete_status": 204,
+      "metadata_readback_status": 200,
+      "matching_rows_after_delete": 0
+    }
+  },
+  "credential_plaintext_returned": false,
+  "provider_or_external_egress": false,
+  "webhook_delivery_or_signature_validation": "UNVERIFIED",
+  "screenshots": [
+    "CP134-webhook-ssrf-secret-created.png",
+    "CP134-webhook-ssrf-loopback-rejected.png",
+    "CP134-webhook-ssrf-metadata-rejected.png",
+    "CP134-webhooks-no-subscription.png",
+    "CP134-webhook-ssrf-secret-cleanup.png"
+  ],
+  "product_source_modified": false,
+  "new_defect": false
+}

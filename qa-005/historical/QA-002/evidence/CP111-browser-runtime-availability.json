@@ -1,0 +1,41 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime_app": "Tanpopo QA Console 18084 remained healthy (HTTP 200 /healthz)",
+  "product_source_changed": false,
+  "chromium": {
+    "binary": "/usr/bin/chromium",
+    "status": "AVAILABLE",
+    "real_ui_tests": "continued under CP109 and CP110"
+  },
+  "firefox": {
+    "playwright_browser_version": "153.0",
+    "download": "PASS",
+    "direct_version_command": "PASS",
+    "playwright_launch_attempts": 2,
+    "playwright_runtime_test": "BLOCKED",
+    "observed_errors": [
+      "Sandbox: writing /proc/self/uid_map: EROFS",
+      "RenderCompositorSWGL failed mapping default framebuffer"
+    ],
+    "retry": "A writable XDG_CACHE_HOME and software-rendering preferences removed the Fontconfig cache warning but launch still timed out with the same sandbox and compositor errors. No sandbox bypass was attempted."
+  },
+  "webkit": {
+    "browser_download": "PASS",
+    "runtime_test": "BLOCKED",
+    "missing_host_libraries": [
+      "libgtk-4.so.1",
+      "libgraphene-1.0.so.0",
+      "libharfbuzz-icu.so.0",
+      "libmanette-0.2.so.0",
+      "libhyphen.so.0",
+      "libGLESv2.so.2"
+    ],
+    "dependency_install_attempt": "BLOCKED: Playwright installer requested root; managed environment returned su: Authentication failure."
+  },
+  "historical_webkit_evidence": "Existing QA-002 real WebKit tests CP07, CP33, CP34, CP64, CP66, CP67, CP74, and CP100 remain preserved; this checkpoint performed no WebKit product interaction.",
+  "result": "Firefox and current-environment WebKit execution are UNVERIFIED due runtime host constraints; no product defect inferred.",
+  "privacy": {
+    "credentials_or_app_data_included": false,
+    "raw_runtime_logs_included": false
+  }
+}

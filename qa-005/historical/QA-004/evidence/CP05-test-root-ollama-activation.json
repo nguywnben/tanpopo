@@ -1,0 +1,23 @@
+{
+  "installations": [
+    {
+      "id": "ins_01m895ph2ge00a3evn7jxp86st",
+      "state": "ENABLED_ACTIVE",
+      "origin_trust_tier": "official",
+      "signature_verified": true,
+      "signing_key_fingerprint": "2cfb21ec9faf58dadfc26df341eb1e88f0313983b72641a9808606ab926a5ff4",
+      "enterprise_signed": false,
+      "version": 2
+    }
+  ],
+  "adapters": [
+    {
+      "allowed_hosts": [
+        "127.0.0.1",
+        "localhost",
+        "ollama.internal"
+      ],
+      "version": "0.1.0"
+    }
+  ]
+}

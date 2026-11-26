@@ -1,0 +1,21 @@
+{
+  "downloadFilename": "tanpopo-chargeback-model.csv",
+  "response": {
+    "status": 200,
+    "headers": {
+      "cache-control": "no-store",
+      "content-disposition": "attachment; filename=\"tanpopo-usage.csv\"",
+      "content-length": "253",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+      "content-type": "text/csv; charset=utf-8",
+      "date": "Tue, 24 Nov 2026 07:32:19 GMT",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "x-tanpopo-request-id": "req_01m867gjpne008gb3466ks4yrx"
+    },
+    "url": "http://127.0.0.1:18084/admin/v1/usage/export?format=csv&group_by=model"
+  },
+  "header": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count",
+  "rowCount": 4
+}

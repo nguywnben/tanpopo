@@ -1,0 +1,31 @@
+{
+  "native_request": {
+    "status": 200,
+    "request_id": "req_01m897atmae008wkak5q9rg00m",
+    "trace_id": "trc_01m897atmbe0093dsa7amefgw7",
+    "usage_accuracy": "EXACT",
+    "body": {
+      "id": "chatcmpl-qa004",
+      "model": "qa004-mock",
+      "usage": {
+        "prompt_tokens": 7,
+        "completion_tokens": 4,
+        "total_tokens": 11
+      },
+      "choices": 1
+    }
+  },
+  "budgets": {
+    "status": 200,
+    "items": [
+      {
+        "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+        "scope_tier": "PROJECT",
+        "hard_limit_micros": 100,
+        "settled_exact_micros": 1,
+        "settled_estimated_micros": 0,
+        "reserved_hold_micros": 0
+      }
+    ]
+  }
+}

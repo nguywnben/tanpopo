@@ -1,0 +1,50 @@
+{
+  "baseline_commit": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "scope": "exact RC5 doctor on isolated SQLite clone with synthetic KEK, ephemeral port 0, and empty valid lockfile; no credentials or data copied to repo",
+  "exit_code": 0,
+  "checks": [
+    {
+      "name": "clock-skew",
+      "status": "pass"
+    },
+    {
+      "name": "ports-available",
+      "status": "pass"
+    },
+    {
+      "name": "master-kek-ready",
+      "status": "pass"
+    },
+    {
+      "name": "storage-fs-lock",
+      "status": "pass"
+    },
+    {
+      "name": "cluster-cache",
+      "status": "skipped"
+    },
+    {
+      "name": "bundle-lockfile-integrity",
+      "status": "pass"
+    },
+    {
+      "name": "tls-posture",
+      "status": "warn"
+    },
+    {
+      "name": "egress-dns-ssrf",
+      "status": "pass"
+    }
+  ],
+  "stderr_message_present": false,
+  "synthetic_key_saved": false,
+  "source_database_modified": false,
+  "bundle_lock_integrity": {
+    "valid_artifact_exit_code": 0,
+    "valid_artifact_status": "pass",
+    "tampered_artifact_exit_code": 2,
+    "tampered_artifact_status": "fail",
+    "tampered_artifact_caused_nonzero_exit": true,
+    "artifact_restored_after_test": true
+  }
+}

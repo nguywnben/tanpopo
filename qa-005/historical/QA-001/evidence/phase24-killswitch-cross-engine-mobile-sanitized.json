@@ -1,0 +1,167 @@
+{
+  "viewport": "375x844",
+  "output": [
+    {
+      "browser": "firefox",
+      "url": "https://127.0.0.1:8444/security/kill-switches",
+      "drawerHeadingVisible": true,
+      "drawerHeadingRect": {
+        "x": 73,
+        "y": 10,
+        "width": 250,
+        "height": 19.600000381469727,
+        "right": 323,
+        "bottom": 29.600000381469727
+      },
+      "metrics": {
+        "viewport": {
+          "width": 375,
+          "height": 844
+        },
+        "documentWidth": 375,
+        "documentHeight": 844
+      },
+      "activeCountText": "Active kill switches\n0",
+      "apiErrors": [],
+      "responses": [
+        {
+          "path": "/admin/v1/auth/login",
+          "status": 200,
+          "method": "POST"
+        },
+        {
+          "path": "/admin/v1/auth/session",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/organizations",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/bootstrap/status",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/projects",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/kill-switches",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/approvals",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/projects/{projectId}/environments",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/kill-switches",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/approvals",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/audit-events",
+          "status": 200,
+          "method": "GET"
+        }
+      ],
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase24-firefox-killswitch-375.png"
+    },
+    {
+      "browser": "webkit",
+      "url": "https://127.0.0.1:8444/security/kill-switches",
+      "drawerHeadingVisible": true,
+      "drawerHeadingRect": {
+        "x": 73,
+        "y": 10,
+        "width": 250,
+        "height": 19.59375,
+        "right": 323,
+        "bottom": 29.59375
+      },
+      "metrics": {
+        "viewport": {
+          "width": 375,
+          "height": 844
+        },
+        "documentWidth": 375,
+        "documentHeight": 844
+      },
+      "activeCountText": "Active kill switches\n0",
+      "apiErrors": [],
+      "responses": [
+        {
+          "path": "/admin/v1/auth/login",
+          "status": 200,
+          "method": "POST"
+        },
+        {
+          "path": "/admin/v1/auth/session",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/organizations",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/projects",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/bootstrap/status",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/kill-switches",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/approvals",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/projects/{projectId}/environments",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/approvals",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/kill-switches",
+          "status": 200,
+          "method": "GET"
+        },
+        {
+          "path": "/admin/v1/audit-events",
+          "status": 200,
+          "method": "GET"
+        }
+      ],
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase24-webkit-killswitch-375.png"
+    }
+  ]
+}

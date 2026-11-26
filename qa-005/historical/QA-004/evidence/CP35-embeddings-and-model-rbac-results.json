@@ -1,0 +1,61 @@
+{
+  "teamadminRole": "TEAM_ADMIN",
+  "modelCreate": {
+    "http_status": 403,
+    "error_code": "insufficient_role_permission",
+    "message": "insufficient role permission",
+    "request_id": "req_01m89n2arce009fwx3v9jgycf2",
+    "ui_action_visible": true,
+    "documented_roles": [
+      "ORG_OWNER",
+      "TEAM_ADMIN"
+    ]
+  },
+  "embeddings": {
+    "attempted_route": "/v1/embeddings",
+    "traces": [
+      {
+        "request_id": "trc_01m89mp6kte00aanj70s4kz3bk",
+        "status_code": 400,
+        "error_code": "capability_not_supported",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 0
+      },
+      {
+        "request_id": "trc_01m89mk5v7e00bqbxz9pc1xds0",
+        "status_code": 400,
+        "error_code": "capability_not_supported",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 0
+      },
+      {
+        "request_id": "trc_01m89mf40ae008m4ktcpe6t98k",
+        "status_code": 400,
+        "error_code": "capability_not_supported",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 0
+      },
+      {
+        "request_id": "trc_01m89mdk86e0085ax88m10aye5",
+        "status_code": 400,
+        "error_code": "capability_not_supported",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 0
+      }
+    ],
+    "provider_fixture_dispatch_count": 0,
+    "classification": "UNVERIFIED: dispatched path not reached because the only provisioned synthetic logical model is chat-only; a new embeddings-capable model could not be provisioned by documented TEAM_ADMIN role due the confirmed model-create authorization defect."
+  },
+  "temporaryState": {
+    "key": {
+      "state": "REVOKED",
+      "version": 2
+    },
+    "route_remaining": 0
+  },
+  "finopsRowsForTestKey": []
+}

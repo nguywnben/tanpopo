@@ -1,0 +1,73 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "synthetic_setup": {
+    "primary_fixture": "127.0.0.1:18125; emits one SSE content chunk, then closes without usage or [DONE]",
+    "secondary_fixture": "127.0.0.1:18126; healthy local Ollama-compatible endpoint",
+    "route_slug": "qa004-midstream-drop-no-failover",
+    "route_strategy": "PRIORITY_FAILOVER",
+    "max_failover_hops": 1,
+    "primary_deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+    "secondary_deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae",
+    "external_provider_calls": 0
+  },
+  "live_cookie_free_request": {
+    "method": "POST /v1/chat/completions",
+    "stream": true,
+    "http_status": 200,
+    "content_type": "text/event-stream; charset=utf-8",
+    "primary_sse_content": "Primary partial answer.",
+    "canonical_abort_event": {
+      "event": "error",
+      "code": "mid_stream_abort",
+      "message": "upstream closed unexpectedly before stream completion",
+      "retryable": false,
+      "request_id": "req_01m89m26w4e009j4v4efrba8f9"
+    },
+    "terminated_with_done_sentinel": false,
+    "reader_ended_cleanly_after_error_event": true,
+    "primary_fixture_requests": [
+      {"path": "/v1/chat/completions", "model": "qa004-mock", "stream": true, "auth_present": false}
+    ],
+    "secondary_fixture_requests_before": 8,
+    "secondary_fixture_requests_after": 8,
+    "no_midstream_fallback": true
+  },
+  "persistent_trace": {
+    "request_id": "trc_01m89m26w4e009j53p9m01tmav",
+    "route_slug": "qa004-midstream-drop-no-failover",
+    "deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+    "status_code": 200,
+    "error_code": "mid_stream_abort",
+    "usage_accuracy": "EXACT",
+    "total_cost_micros": 0,
+    "duration_ms": 9,
+    "screenshot_visually_inspected": "CP34-midstream-trace.png"
+  },
+  "same_key_finops_summary": {
+    "group_by": "key",
+    "group_key": "QA004 midstream failover boundary",
+    "exact_micro_usd": 0,
+    "estimated_micro_usd": 1,
+    "exact_request_count": 0,
+    "estimated_request_count": 1,
+    "unmetered_request_count": 0,
+    "screenshot_visually_inspected": "CP34-finops-midstream.png"
+  },
+  "classification": {
+    "midstream_failover_boundary": "PASS (scoped); no secondary request after first content chunk",
+    "trace_to_settlement_projection": "FAIL; existing DEF-052 reproduced on partial streaming error",
+    "new_defect_id": null
+  },
+  "cleanup": {
+    "temporary_key_state": "REVOKED",
+    "temporary_key_version": 2,
+    "post_revoke_replay_status": 401,
+    "post_revoke_error": "invalid_virtual_key",
+    "additional_provider_requests_after_replay": 0,
+    "temporary_route_delete_status": 204,
+    "remaining_routes": ["qa004-loopback"],
+    "original_successful_primary_fixture_restored": true,
+    "secret_file_removed": true
+  },
+  "sanitization": "No plaintext Virtual Key, credentials, cookies, database files, or raw provider logs included."
+}

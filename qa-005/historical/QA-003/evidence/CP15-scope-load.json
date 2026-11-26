@@ -1,0 +1,251 @@
+{
+  "result": {
+    "main": "Overview\n\nUpdated 8:26:45 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+    "scope": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch",
+    "controls": [
+      {
+        "text": "",
+        "aria": "Close navigation",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xc342km xng3xce x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x6k0iem x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xjbqb8w x1tgivj0 tp-mobile-only"
+      },
+      {
+        "text": "",
+        "aria": "Sign out",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xc342km xng3xce x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x6k0iem x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xjbqb8w x1tgivj0"
+      },
+      {
+        "text": "",
+        "aria": "Open navigation menu",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xc342km xng3xce x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x6k0iem x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xjbqb8w x1tgivj0 tp-mobile-only"
+      },
+      {
+        "text": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+        "aria": null,
+        "title": "Default Organization / default / dev",
+        "tag": "BUTTON",
+        "cls": "tp-scope-switcher"
+      },
+      {
+        "text": "",
+        "aria": "Manage organizations",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xc342km xng3xce x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x6k0iem x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xjbqb8w x1tgivj0"
+      },
+      {
+        "text": "Default Organization",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "tp-scope-menu-item"
+      },
+      {
+        "text": "",
+        "aria": "New project",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xc342km xng3xce x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x6k0iem x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xjbqb8w x1tgivj0"
+      },
+      {
+        "text": "default",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "tp-scope-menu-item"
+      },
+      {
+        "text": "No project",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "tp-scope-menu-item"
+      },
+      {
+        "text": "",
+        "aria": "New environment",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xc342km xng3xce x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x6k0iem x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xjbqb8w x1tgivj0"
+      },
+      {
+        "text": "dev",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "tp-scope-menu-item"
+      },
+      {
+        "text": "No env",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "tp-scope-menu-item"
+      },
+      {
+        "text": "Close popover",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x193iq5w x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x11l75t8 x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x17x4s8c x1tgivj0"
+      },
+      {
+        "text": "Jump\nCtrl\nK",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x193iq5w x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x7xd7g3 x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x17x4s8c x1tgivj0 tp-jump-btn"
+      },
+      {
+        "text": "English",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "x78zum5 x6s0dn4 x1qughib x1txdalj x1iyjqo2 xs83m0k x1r8uery xeuugli x1717udv x1ghz6dp xc342km xng3xce xjbqb8w xjb2p0i x1qlqyl8 x15bjb6t x1heor9g x1ypdohk x16khyan x1a2a7pz"
+      },
+      {
+        "text": "",
+        "aria": "Switch to dark theme",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x6k0iem x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x17x4s8c x1tgivj0"
+      },
+      {
+        "text": "Kill Switch",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x193iq5w x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x7xd7g3 x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x17x4s8c x1tgivj0 tp-btn-danger-outline tp-killswitch-btn"
+      },
+      {
+        "text": "1h",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-segmented-control-item x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x1wfwxd8 x1vwwbsn x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k xzye2dw xc342km xng3xce xjb2p0i x1kq96og x1e4wzip xv1l7n4 x1ypdohk x16khyan xuxw1ft xeuugli x1vix5yk xuedmi6 xlr8y92 xzj98nu xc910v0 xf314gf x141an7d x11z29ks xli5ek3 x14e4jsf xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf xjbqb8w x1anq1lc x1s5nr2v x13ugjdw xl8sb5e xoevpu5 xprvw0a x7ngsy6 xubczrd x1fjtqre x7b72wb x1ukc1h5 x1c440c0"
+      },
+      {
+        "text": "24h",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-segmented-control-item x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x1wfwxd8 x1vwwbsn x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k xzye2dw xc342km xng3xce xjb2p0i x1kq96og x1ypdohk x16khyan xuxw1ft xeuugli x1vix5yk xuedmi6 xlr8y92 xzj98nu xc910v0 xf314gf x141an7d x1kzknox x1tgivj0 x1k5gbb1 x2mo6ok x10xzikg x1jzqe4 x1i5ehqx x1fjtqre x7b72wb x1ukc1h5 x1c440c0"
+      },
+      {
+        "text": "7d",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-segmented-control-item x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x1wfwxd8 x1vwwbsn x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k xzye2dw xc342km xng3xce xjb2p0i x1kq96og x1e4wzip xv1l7n4 x1ypdohk x16khyan xuxw1ft xeuugli x1vix5yk xuedmi6 xlr8y92 xzj98nu xc910v0 xf314gf x141an7d x11z29ks xli5ek3 x14e4jsf xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf xjbqb8w x1anq1lc x1s5nr2v x13ugjdw xl8sb5e xoevpu5 xprvw0a x7ngsy6 xubczrd x1fjtqre x7b72wb x1ukc1h5 x1c440c0"
+      },
+      {
+        "text": "30d",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-segmented-control-item x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x1wfwxd8 x1vwwbsn x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k xzye2dw xc342km xng3xce xjb2p0i x1kq96og x1e4wzip xv1l7n4 x1ypdohk x16khyan xuxw1ft xeuugli x1vix5yk xuedmi6 xlr8y92 xzj98nu xc910v0 xf314gf x141an7d x11z29ks xli5ek3 x14e4jsf xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf xjbqb8w x1anq1lc x1s5nr2v x13ugjdw xl8sb5e xoevpu5 xprvw0a x7ngsy6 xubczrd x1fjtqre x7b72wb x1ukc1h5 x1c440c0"
+      },
+      {
+        "text": "Refresh",
+        "aria": "Refresh",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x193iq5w x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x7xd7g3 x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x17x4s8c x1tgivj0"
+      },
+      {
+        "text": "",
+        "aria": "Close",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xc342km xng3xce x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x1ueg155 x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xjbqb8w x1tgivj0"
+      },
+      {
+        "text": "Cancel",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x193iq5w x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x11l75t8 x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x17x4s8c x1tgivj0"
+      },
+      {
+        "text": "Create project",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x193iq5w xrafxwg xuedmi6 x12w9bfk xlr8y92 x11l75t8 x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x1mrddfy xt0e3qv xbyyjgo x18o3ruo xuqm82a x1bev2v5 x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x1ewilqj x17wrial"
+      },
+      {
+        "text": "",
+        "aria": "Close",
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xc342km xng3xce x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x1ueg155 x1v15ycx xioom0i xnjsko4 xt970qd x2lah0s x1x1rfll x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xjbqb8w x1tgivj0"
+      },
+      {
+        "text": "Cancel",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x193iq5w x1ypdohk x16khyan xrafxwg xuedmi6 x12w9bfk xlr8y92 x11l75t8 x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x7uyq82 x3f84ok x7ngsy6 x10ogxw0 xubczrd x18xnkjv xmvprkv xetgvay x1mrddfy x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x17x4s8c x1tgivj0"
+      },
+      {
+        "text": "Create environment",
+        "aria": null,
+        "title": "",
+        "tag": "BUTTON",
+        "cls": "astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd xjb2p0i xcr08ib x1kq96og x1e4wzip xuxw1ft xeuugli x193iq5w xrafxwg xuedmi6 x12w9bfk xlr8y92 x11l75t8 x11z29ks xli5ek3 xem8lmn xogcwkh x1t1ddl7 xziyay6 xz2mauf x1l7afqf x14e4jsf x6su2wr xif6eam x1ocadqd x1ukh9kf xrkptjy xjscm90 x1kec4ew x13r5q6d x1dn949c xw7rim2 xr9xsjc x1bxn267 x1osot8d xbkwwzw x10t12yn x1dn5vsf x1mrddfy xt0e3qv xbyyjgo x18o3ruo xuqm82a x1bev2v5 x3oybdh x8ppqj x1249l8d xbht4k1 x1ex9uxt x3y5scg xg3abmg xoigjuk x1gnnqk1 xc342km x13rsnn2 xng3xce xx61lck x1ylmb6m x1ewilqj x17wrial"
+      }
+    ],
+    "url": "http://127.0.0.1:18103/overview"
+  },
+  "rs": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m87axgx7e008ehq1d016vqwt/environments",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    }
+  ]
+}

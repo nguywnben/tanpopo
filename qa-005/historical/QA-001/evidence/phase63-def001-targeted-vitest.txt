@@ -1,0 +1,141 @@
+
+> tanpopo-console@0.3.0 test
+> vitest run src/pages/console.test.tsx -t hides unavailable presets|offers only adapters
+
+
+ RUN  v5.1.0 /workspace/tanpopo/web/console
+
+ ❯ src/pages/console.test.tsx (13 tests | 2 failed | 11 skipped) 923ms
+   ❯ Tanpopo Console v2 core workflows & accessibility (13)
+     × hides unavailable presets and shows adapter activation guidance in Setup when available_adapters is empty 515ms
+     × offers only adapters returned in bootstrap status available_adapters 405ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/pages/console.test.tsx > Tanpopo Console v2 core workflows & accessibility > hides unavailable presets and shows adapter activation guidance in Setup when available_adapters is empty
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "description": "Ensure that elements labelled through their content must have their visible text as part of their accessible name",
++     "help": "Elements must have their visible text as part of their accessible name",
++     "helpUrl": "https://dequeuniversity.com/rules/axe/4.14/label-content-name-mismatch?application=axeAPI",
++     "id": "label-content-name-mismatch",
++     "impact": "serious",
++     "nodes": [
++       {
++         "all": [],
++         "any": [
++           CheckResult {
++             "data": null,
++             "id": "label-content-name-mismatch",
++             "impact": "serious",
++             "message": "Text inside the element is not included in the accessible name",
++             "relatedNodes": [],
++           },
++         ],
++         "failureSummary": "Fix any of the following:
++   Text inside the element is not included in the accessible name",
++         "html": "<button type=\"button\" aria-label=\"Go to step 1: Owner ...\" data-astryx-pressabl...=\"\" class=\"x1yc453h x1qjc9v5 x7...\" style=\"--x-paddingInline: v...\">",
++         "impact": "serious",
++         "none": [],
++         "target": [
++           "li[data-progress=\"completed\"] > .xdt5ytf.x98rzlu > .x15406qy.xkvfbh3.x1anq1lc",
++         ],
++       },
++     ],
++     "tags": [
++       "cat.semantics",
++       "wcag21a",
++       "wcag253",
++       "EN-301-549",
++       "EN-9.2.5.3",
++       "RGAAv4",
++       "RGAA-6.1.5",
++     ],
++   },
++ ]
+
+ ❯ src/pages/console.test.tsx:121:30
+    119|     expect(screen.queryByRole('combobox', {name: 'Provider adapter'}))…
+    120|     const audit = await axe.run(container);
+    121|     expect(audit.violations).toEqual([]);
+       |                              ^
+    122|   });
+    123|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/pages/console.test.tsx > Tanpopo Console v2 core workflows & accessibility > offers only adapters returned in bootstrap status available_adapters
+AssertionError: expected [ { …(7) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "description": "Ensure that elements labelled through their content must have their visible text as part of their accessible name",
++     "help": "Elements must have their visible text as part of their accessible name",
++     "helpUrl": "https://dequeuniversity.com/rules/axe/4.14/label-content-name-mismatch?application=axeAPI",
++     "id": "label-content-name-mismatch",
++     "impact": "serious",
++     "nodes": [
++       {
++         "all": [],
++         "any": [
++           CheckResult {
++             "data": null,
++             "id": "label-content-name-mismatch",
++             "impact": "serious",
++             "message": "Text inside the element is not included in the accessible name",
++             "relatedNodes": [],
++           },
++         ],
++         "failureSummary": "Fix any of the following:
++   Text inside the element is not included in the accessible name",
++         "html": "<button type=\"button\" aria-label=\"Go to step 1: Owner ...\" data-astryx-pressabl...=\"\" class=\"x1yc453h x1qjc9v5 x7...\" style=\"--x-paddingInline: v...\">",
++         "impact": "serious",
++         "none": [],
++         "target": [
++           "li[data-progress=\"completed\"] > .xdt5ytf.x98rzlu > .x15406qy.xkvfbh3.x1anq1lc",
++         ],
++       },
++     ],
++     "tags": [
++       "cat.semantics",
++       "wcag21a",
++       "wcag253",
++       "EN-301-549",
++       "EN-9.2.5.3",
++       "RGAAv4",
++       "RGAA-6.1.5",
++     ],
++   },
++ ]
+
+ ❯ src/pages/console.test.tsx:163:30
+    161|     fireEvent.click(screen.getByRole('option', {name: 'Local vLLM'}));
+    162|     const audit = await axe.run(container);
+    163|     expect(audit.violations).toEqual([]);
+       |                              ^
+    164|   });
+    165|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 11 skipped (13)
+   Start at  14:40:15
+   Duration  3.68s (import 36%, environment 28%, tests 26%, transform 6%, setup 3%)
+
+npm notice
+npm notice New major version of npm available! 11.19.1 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice

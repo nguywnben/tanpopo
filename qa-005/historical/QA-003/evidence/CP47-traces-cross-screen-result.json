@@ -1,0 +1,13 @@
+{
+  "trace_id": "trc_01m8863dkpe008mw5hqmnvjc8j",
+  "scope": "default/dev",
+  "page": "Request traces\n\nMetadata-only execution telemetry. Zero prompt or completion bytes stored.\n\nMetadata-Only\nRequest ID lookup\nModel\nError code\nSearch\nRecent requests\n10\nRequest ID\tRoute\tStatus\tError\tMetering\tDuration\tTimestamp\n\ntrc_01m8863dkpe008mw5hqmnvjc8j\n\tqa003-cp47-stream-route\t200\t—\tExact\t14 ms\t1:46:08 AM\n\ntrc_01m885s913e00b4zcprezweby7\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t1:40:36 AM\n\ntrc_01m885rvhse008zv27s4c10fa0\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t1:40:22 AM\n\ntrc_01m885rbwqe00ar44kq4q0q5y7\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t1:40:06 AM\n\ntrc_01m885q7ade00bj3kn7a296rfy\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t1:39:29 AM\n\ntrc_01m880m8b5e00bfvrjrbss531n\n\t/v1/chat/completions\t503\tno_compliant_deployment_available\tExact\t0 ms\t12:10:29 AM\n\ntrc_01m880k565e0092fk8k3yh2fg1\n\t/v1/chat/completions\t503\tno_compliant_deployment_available\tExact\t0 ms\t12:09:53 AM\n\ntrc_01m880hx1ve00ah648kq9j1qkv\n\t/v1/chat/completions\t503\tno_compliant_deployment_available\tExact\t0 ms\t12:09:11 AM\n\ntrc_01m880aywke009srbfax05w95j\n\t/v1/chat/completions\t503\tno_compliant_deployment_available\tExact\t0 ms\t12:05:24 AM\n\ntrc_01m88078r6e009etaz25bw1wvd\n\t/v1/chat/completions\t503\tno_compliant_deployment_available\tExact\t0 ms\t12:03:23 AM",
+  "trace": {
+    "status": 200,
+    "trace": {
+      "route_slug": "qa003-cp47-stream-route",
+      "error_code": null,
+      "stage_count": 0
+    }
+  }
+}

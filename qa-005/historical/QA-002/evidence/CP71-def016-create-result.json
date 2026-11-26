@@ -1,0 +1,23 @@
+{
+  "calls": [
+    {
+      "url": "http://127.0.0.1:18084/admin/v1/members?limit=100",
+      "status": 403,
+      "method": "GET",
+      "body": "{\"error\":{\"code\":\"insufficient_role_permission\",\"type\":\"permission_error\",\"message\":\"insufficient role permission\",\"request_id\":\"req_01m8667s9ae00bzst14d5hn8tp\",\"retryable\":false}}\n"
+    },
+    {
+      "url": "http://127.0.0.1:18084/admin/v1/members",
+      "status": 201,
+      "method": "POST",
+      "body": "{\"id\":\"prc_01m8667t7ye00bacznhftww7sf\",\"email\":\"qa002-cp71-def016@example.invalid\",\"kind\":\"HUMAN\",\"roles\":[\"DEVELOPER\"],\"project_ids\":[\"prj_01m84ymb7we009px5hb5pfwsns\"],\"version\":1,\"created_at\":\"2026-11-24T07:10:04.03Z\"}\n"
+    },
+    {
+      "url": "http://127.0.0.1:18084/admin/v1/members?limit=100",
+      "status": 403,
+      "method": "GET",
+      "body": "{\"error\":{\"code\":\"insufficient_role_permission\",\"type\":\"permission_error\",\"message\":\"insufficient role permission\",\"request_id\":\"req_01m8667t87e009pecbc1bn90c9\",\"retryable\":false}}\n"
+    }
+  ],
+  "visibleText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nqa002-team-admin@example.invalid\nDeveloper, Team Admin\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n9\nMembers & Roles\nMembers: insufficient role permission\nMember added.\nOrganization members\n0\nNo members found\nNo members found"
+}

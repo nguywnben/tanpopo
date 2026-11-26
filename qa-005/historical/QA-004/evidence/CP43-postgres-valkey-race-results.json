@@ -1,0 +1,56 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "date_utc": "2026-11-25",
+  "product_source_modified": false,
+  "source_mount": "read-only Docker bind mount",
+  "toolchain": "go1.26.11 linux/amd64 in golang:1.26.11",
+  "module_transport": "Go proxy downloads succeeded with host CA bundle mounted read-only; TLS verification remained enabled",
+  "postgres": {
+    "version": "PostgreSQL 16.16",
+    "container": "qa004-postgres16",
+    "host_bind": "127.0.0.1:25432",
+    "data": "container tmpfs; ephemeral",
+    "application_role": "qa004app",
+    "application_role_superuser": false,
+    "application_role_bypassrls": false,
+    "admin_role_separate": true
+  },
+  "valkey": {
+    "version": "Valkey 8.1.12",
+    "topology": "three primary nodes",
+    "host_bind": "127.0.0.1:16379-16381 and loopback cluster bus ports",
+    "cluster_state": "ok",
+    "cluster_slots_assigned": 16384,
+    "cluster_slots_ok": 16384,
+    "cluster_known_nodes": 3
+  },
+  "race_enabled_results": [
+    {
+      "command": "go test -race -count=1 ./internal/storage/postgres ./internal/security/audit",
+      "result": "PASS",
+      "packages": ["internal/storage/postgres", "internal/security/audit"]
+    },
+    {
+      "command": "go test -race -count=1 ./internal/cluster/valkey ./internal/finops/ledger ./internal/ops/migrate",
+      "result": "PASS",
+      "packages": ["internal/cluster/valkey", "internal/finops/ledger", "internal/ops/migrate"]
+    },
+    {
+      "command": "go test -race -count=1 ./cmd/tanpopo -run 'TestTPIMP0040PG16ForceRLSEndToEnd|TestTPIMP0040MultiNodeClusterPG16AndValkeyAC1ToAC4'",
+      "result": "PASS",
+      "scenarios": ["PostgreSQL FORCE ROW LEVEL SECURITY end-to-end", "control-plane to three data-plane nodes with PostgreSQL and Valkey propagation"]
+    },
+    {
+      "command": "go test -race -count=1 ./cmd/tanpopo -run 'TestTPIMP0040MultiNodeClusterPG16AndValkeyAC1ToAC4'",
+      "result": "PASS",
+      "scenarios": ["independent repeat of control-plane / data-plane cluster propagation"]
+    }
+  ],
+  "not_proven": [
+    "full-product acceptance or complete Go suite",
+    "production cluster availability, network partitions, crash/restart durability, or multi-host failure domains",
+    "OTel export to an external collector",
+    "performance and production-scale concurrency",
+    "PostgreSQL/Valkey support for every runtime role and deployment mode"
+  ]
+}

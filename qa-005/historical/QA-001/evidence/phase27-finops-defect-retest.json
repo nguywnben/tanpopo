@@ -1,0 +1,80 @@
+{
+  "finopsDefault": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nFinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nBudgets & Holds\nChargeback\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n0\nNo budgets configured\nBudget records appear once configured for your organization or project.\nNo budgets configured Budget records appear once configured for your organization or project.",
+  "scopeButtons": [
+    "",
+    "Default Organization / QA Isolation 2026-11-23 / qa-sandbox (Active workspace scope)",
+    "JumpCtrlK",
+    "",
+    "Kill Switch",
+    "Export CSV",
+    "Export JSON"
+  ],
+  "finopsBoundary": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nOrganization\nQA Boundary Organization\nDefault Organization\nProject\nQA Isolation 2026-11-23\ndefault\nNo project\nEnv\nqa-sandbox\nNo env\nClose popover\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nFinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nBudgets & Holds\nChargeback\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n0\nNo budgets configured\nBudget records appear once configured for your organization or project.\nNo budgets configured Budget records appear once configured for your organization or project.",
+  "responses": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/overview/summary",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/deployments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/alerts/active",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/usage/summary",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/budgets",
+      "status": 200,
+      "method": "GET"
+    }
+  ]
+}

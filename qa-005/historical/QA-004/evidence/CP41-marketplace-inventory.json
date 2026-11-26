@@ -1,0 +1,97 @@
+{
+  "api": {
+    "status": 200,
+    "items": [
+      {
+        "package_id": "@tanpopo/anthropic",
+        "canonical_name": "Anthropic Official Adapter",
+        "version": "0.1.0",
+        "source_uri": "tanpopo-builtin://anthropic.tpkg",
+        "signature_verified": false,
+        "origin_trust_tier": "unverified_external",
+        "capabilities": [
+          "provider_adapter"
+        ]
+      },
+      {
+        "package_id": "@tanpopo/aws-bedrock",
+        "canonical_name": "AWS Bedrock Official Adapter",
+        "version": "0.1.0",
+        "source_uri": "tanpopo-builtin://aws-bedrock.tpkg",
+        "signature_verified": false,
+        "origin_trust_tier": "unverified_external",
+        "capabilities": [
+          "provider_adapter"
+        ]
+      },
+      {
+        "package_id": "@tanpopo/azure-openai",
+        "canonical_name": "Azure OpenAI Official Adapter",
+        "version": "0.1.0",
+        "source_uri": "tanpopo-builtin://azure-openai.tpkg",
+        "signature_verified": false,
+        "origin_trust_tier": "unverified_external",
+        "capabilities": [
+          "provider_adapter"
+        ]
+      },
+      {
+        "package_id": "@tanpopo/cohere-rerank",
+        "canonical_name": "Cohere Rerank Official Adapter",
+        "version": "0.1.0",
+        "source_uri": "tanpopo-builtin://cohere-rerank.tpkg",
+        "signature_verified": false,
+        "origin_trust_tier": "unverified_external",
+        "capabilities": [
+          "provider_adapter"
+        ]
+      },
+      {
+        "package_id": "@tanpopo/gemini",
+        "canonical_name": "Google Gemini Official Adapter",
+        "version": "0.1.0",
+        "source_uri": "tanpopo-builtin://gemini.tpkg",
+        "signature_verified": false,
+        "origin_trust_tier": "unverified_external",
+        "capabilities": [
+          "provider_adapter"
+        ]
+      },
+      {
+        "package_id": "@tanpopo/ollama",
+        "canonical_name": "Ollama Local & Self-Hosted Adapter",
+        "version": "0.1.0",
+        "source_uri": "tanpopo-builtin://ollama.tpkg",
+        "signature_verified": true,
+        "origin_trust_tier": "official",
+        "signing_key_fingerprint": "2cfb21ec9faf58dadfc26df341eb1e88f0313983b72641a9808606ab926a5ff4",
+        "capabilities": [
+          "provider_adapter"
+        ]
+      },
+      {
+        "package_id": "@tanpopo/openai",
+        "canonical_name": "OpenAI Official Adapter",
+        "version": "0.1.0",
+        "source_uri": "tanpopo-builtin://openai.tpkg",
+        "signature_verified": false,
+        "origin_trust_tier": "unverified_external",
+        "capabilities": [
+          "provider_adapter"
+        ]
+      },
+      {
+        "package_id": "@tanpopo/openai-compatible",
+        "canonical_name": "OpenAI-Compatible Gateway & vLLM/TGI Adapter",
+        "version": "0.1.0",
+        "source_uri": "tanpopo-builtin://openai-compatible.tpkg",
+        "signature_verified": false,
+        "origin_trust_tier": "unverified_external",
+        "capabilities": [
+          "provider_adapter"
+        ]
+      }
+    ]
+  },
+  "screen": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nExtensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\nInstalled packages\n1\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\n@tanpopo/ollama\next_01m895ph2ge00a3cr388bdwbt3\nActive: 0.1.0\n\tActive\tOfficial\tSignature verified (2cfb21ec9faf)\tdeclarative\t"
+}

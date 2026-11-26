@@ -1,0 +1,8 @@
+{
+  "runtime": 18084,
+  "event": "virtual_key.created",
+  "target_id": "vky_01m86na047e009k3adznza29j7",
+  "dialog_visible": true,
+  "contains_secret_marker": false,
+  "detail_text": "Audit event #499\nvirtual_key.created\nSequence\n#499\nTimestamp\nNov 24, 2026, 11:33:24 AM\nActor ID\nprc_01m84xhbtwe00939kr14qg3khv\nAction\nvirtual_key.created\nTarget\nvirtual_key / vky_01m86na047e009k3adznza29j7\nEvent SHA-256 hash\n33a31d0ef081e6f9c7fd6d0aa3eb670a49967ea98a16cd4f36fe22863b7e059b\nEvent metadata (plain text JSON)\n{\n  \"allowed_planes\": \"A2A\",\n  \"env_id\": \"env_01m84ymb8ae00b43av7shak1sf\"\n}"
+}

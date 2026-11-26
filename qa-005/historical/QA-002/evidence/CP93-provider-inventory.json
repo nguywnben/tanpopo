@@ -1,0 +1,12 @@
+{
+  "runtime": "18084",
+  "role": "Organization Owner",
+  "rows": [
+    "ConnectionAdapterRegion / BillingStateVault fingerprintsActions",
+    "QA002 CP73 Failing Ollamahttp://127.0.0.1:19187adp_01m8509e6pe00bkhe4fhsqsmntON_PREM · Self-hostedUnverifiedNone bound",
+    "QA002 Google Geminihttps://generativelanguage.googleapis.comadp_01m852w4yze009v8wf6e76wgtyUS · CommercialUnverifiedapi_key: ...1d03",
+    "QA002 Google Geminihttps://generativelanguage.googleapis.comadp_01m852w4yze009v8wf6e76wgtyUS · CommercialUnverifiedapi_key: ...1d03",
+    "QA002 Failing Ollama 401http://127.0.0.1:19107adp_01m8509e6pe00bkhe4fhsqsmntON_PREM · Self-hostedUnverifiedNone bound",
+    "QA002 Ollama Synthetichttp://127.0.0.1:19106adp_01m8509e6pe00bkhe4fhsqsmntON_PREM · Self-hostedActiveNone bound"
+  ]
+}

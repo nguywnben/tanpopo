@@ -1,0 +1,83 @@
+{
+  "sdk": "openai npm 7.64.0",
+  "stream_request": {
+    "stream": true,
+    "include_usage": true
+  },
+  "result": {
+    "text": "Hello from synthetic Ollama.",
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 4,
+      "prompt_tokens": 7,
+      "total_tokens": 11
+    },
+    "chunkSummary": [
+      {
+        "choice_count": 1,
+        "finish_reason": null,
+        "usage": null
+      },
+      {
+        "choice_count": 1,
+        "finish_reason": null,
+        "usage": null
+      },
+      {
+        "choice_count": 1,
+        "finish_reason": "stop",
+        "usage": null
+      },
+      {
+        "choice_count": 0,
+        "finish_reason": null,
+        "usage": {
+          "completion_tokens": 4,
+          "prompt_tokens": 7,
+          "total_tokens": 11
+        }
+      }
+    ]
+  },
+  "upstream_dispatches": 1,
+  "upstream": [
+    {
+      "path": "/v1/chat/completions",
+      "model": "qa004-mock",
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "auth_present": false
+    }
+  ],
+  "readback": {
+    "traces": [
+      {
+        "request_id": "trc_01m8avfet7e00b29ry77m08ntm",
+        "status_code": 200,
+        "route_slug": "qa004-mock",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      }
+    ],
+    "chargeback": [
+      {
+        "group_key": "QA004 CP102 OpenAI SDK stream usage",
+        "exact_micro_usd": 1,
+        "estimated_micro_usd": 0,
+        "exact_request_count": 1,
+        "estimated_request_count": 0,
+        "unmetered_request_count": 0
+      }
+    ]
+  },
+  "postRevocationReplay": {
+    "status": 401,
+    "message": "401 Virtual Key is invalid, expired, or revoked."
+  },
+  "finalKey": {
+    "state": "REVOKED",
+    "version": 2
+  }
+}

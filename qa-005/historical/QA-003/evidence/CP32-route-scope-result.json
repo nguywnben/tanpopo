@@ -1,0 +1,34 @@
+{
+  "routeRequests": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/routes?env_id=env_01m87axgx7e008ejsny065s8qz&limit=100"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/routes?env_id=env_01m87axgx7e008ejsny065s8qz&limit=100"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/routes?env_id=env_01m87axgx7e008ejsny065s8qz&limit=100"
+    }
+  ],
+  "states": [
+    {
+      "scope": "Default Organization / default / dev",
+      "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\nRoute Explain\nPolicies\n\nInherited data residency ceiling: EU, US, APAC, ON_PREM\n\nConfigured routes\n0\nNo routes in this environment\nCreate a route to map model slugs to ordered or weighted deployments.\nCreate route"
+    },
+    {
+      "scope": "Default Organization / QA003 Empty Project DEF035 / No env",
+      "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.\nConfigured routes\n0\nNo routes in this environment\nCreate a route to map model slugs to ordered or weighted deployments."
+    }
+  ],
+  "readback": [
+    {
+      "project": "default",
+      "environment": "dev",
+      "status": 200,
+      "routeCount": 0
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+{
+  "session": {
+    "status": 200,
+    "roles": [
+      "DEVELOPER"
+    ]
+  },
+  "securityNavCount": 0,
+  "memberView": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nqa002-cp30-local-member@example.invalid\nDeveloper\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nVirtual Keys\n18\nMembers & Roles\nYour role can inspect Virtual Keys but does not have permission to list organization members.\nAll systems nominal No active operational alerts or pending remediation items.",
+  "securityAttempt": {
+    "url": "http://127.0.0.1:18086/security/approvals",
+    "securityNavCount": 0,
+    "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nqa002-cp30-local-member@example.invalid\nDeveloper\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nAccess restricted\nYour assigned roles (Developer) do not permit access to Security."
+  },
+  "playground": {
+    "before": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nqa002-cp30-local-member@example.invalid\nDeveloper\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nPlayground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nLive Playground\nSDK Snippets\nModel or route slug\nqa002-cp22-route-repro\nComparison model (optional)\nSession budget cap (micro-USD)\n\nNo turns yet. Send a prompt below to mint an ephemeral key and stream from /v1/chat/completions.\n\nPrompt\nSend",
+    "after": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nqa002-cp30-local-member@example.invalid\nDeveloper\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nPlayground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 \u00b7 expires 12:07:33 AM\nEnd session\nLive Playground\nSDK Snippets\nModel or route slug\nqa002-cp22-route-repro\nComparison model (optional)\nYou\nCP32 Developer permission and persistent synthetic inference check\nqa002-cp22-route-repro\nSynthetic inference completed.\nPrompt\nSend\nExecution traces\nPrimary \u00b7 req_01m85d6pnse00a3hbf35x18wtj\nTrace metadata pending\u2026",
+    "http_status": 200
+  },
+  "fixture_before": {
+    "requests": [
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      },
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      },
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      }
+    ]
+  },
+  "fixture_after": {
+    "requests": [
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      },
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      },
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      },
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      }
+    ]
+  },
+  "budgets": {
+    "status": 200,
+    "count": 15
+  },
+  "responses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 403,
+      "code": "insufficient_role_permission"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/virtual-keys",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/models",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 403,
+      "code": "insufficient_role_permission"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/routes",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/playground/sessions",
+      "status": 201,
+      "code": null
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces/req_01m85d6pnse00a3hbf35x18wtj",
+      "status": 404,
+      "code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces/req_01m85d6pnse00a3hbf35x18wtj",
+      "status": 404,
+      "code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces/req_01m85d6pnse00a3hbf35x18wtj",
+      "status": 404,
+      "code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces/req_01m85d6pnse00a3hbf35x18wtj",
+      "status": 404,
+      "code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces/req_01m85d6pnse00a3hbf35x18wtj",
+      "status": 404,
+      "code": "resource_not_found"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets",
+      "status": 200,
+      "code": null
+    }
+  ],
+  "trace_correlation": {
+    "playground_card_request_id": "req_01m85d6pnse00a3hbf35x18wtj",
+    "trace_card_lookup_404_count": 5,
+    "persisted_trace_id": "trc_01m85d6pnse00a3jb10ca2padf",
+    "persisted_trace_http_status": 200,
+    "persisted_trace_status_code": 200,
+    "persisted_usage_accuracy": "EXACT",
+    "persisted_total_cost_micros": 0,
+    "persisted_finops_summary_exact_request_count": 6,
+    "persisted_finops_summary_exact_micro_usd": 6
+  }
+}

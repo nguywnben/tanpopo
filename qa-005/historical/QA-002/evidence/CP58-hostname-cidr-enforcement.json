@@ -1,0 +1,75 @@
+{
+  "checkpoint": "CP58",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "test_type": "Hostname-resolved private-address CIDR enforcement; not a DNS-rebinding test.",
+  "synthetic_endpoint": {
+    "url": "http://127.0.0.1.nip.io:19183/mcp",
+    "dns_observed_ipv4": [
+      "127.0.0.1"
+    ],
+    "system_ahostsv6_observation": [
+      "::ffff:127.0.0.1"
+    ],
+    "fixture_bind": "127.0.0.1:19183"
+  },
+  "mismatch_case": {
+    "server_id": "mcp_01m86098n5e00832y9ygz4tkw6",
+    "slug": "qa002-cp58-nipio-mismatch",
+    "allowed_cidrs": [
+      "127.0.0.2/32"
+    ],
+    "persistent_state": "ACTIVE",
+    "tool_count": 0,
+    "sync_http_status": 502,
+    "canonical_error": "mcp_sync_failed",
+    "ui_message": "upstream MCP tool synchronization failed",
+    "fixture_requests_before": 0,
+    "fixture_requests_after": 0,
+    "classification": "PASS: resolved loopback address not in explicit CIDR was blocked before endpoint contact; underlying diagnostic repeats QA-OBS-004."
+  },
+  "matching_control": {
+    "server_id": "mcp_01m8609w2ae00azh33twfd097c",
+    "slug": "qa002-cp58-nipio-control",
+    "allowed_cidrs": [
+      "127.0.0.1/32"
+    ],
+    "persistent_state": "SCHEMA_DRIFT_LOCKED",
+    "tool_count": 1,
+    "fixture_requests": [
+      {
+        "method": "initialize",
+        "path": "/mcp",
+        "host": "127.0.0.1.nip.io:19183"
+      },
+      {
+        "method": "notifications/initialized",
+        "path": "/mcp",
+        "host": "127.0.0.1.nip.io:19183"
+      },
+      {
+        "method": "tools/list",
+        "path": "/mcp",
+        "host": "127.0.0.1.nip.io:19183"
+      }
+    ],
+    "ui_message": "Synced 1 tools on QA002 CP58 nip.io exact allowlist; 0 schema changes require approval.",
+    "known_defect_reproduced": "DEF-026: successful first discovery is schema locked with one tool, while the green result message reports zero approval-requiring schema changes."
+  },
+  "interpretation": {
+    "ssrf_boundary": "Explicit private/loopback consent plus a CIDR matching the resolved peer allowed the synthetic request; a mismatched CIDR denied it before fixture contact.",
+    "new_defects": [],
+    "observations": [
+      "QA-OBS-004 generic MCP sync failure diagnostic recurred.",
+      "DEF-026 first-discovery count/status mismatch recurred."
+    ],
+    "dns_rebinding_tested": false,
+    "secret_or_request_body_captured": false,
+    "product_source_modified": false
+  },
+  "screenshots_visually_inspected": [
+    "CP58-nipio-mismatch-form.png",
+    "CP58-nipio-mismatch-sync.png",
+    "CP58-nipio-allowlisted-control-form.png",
+    "CP58-nipio-allowlisted-control-sync.png"
+  ]
+}

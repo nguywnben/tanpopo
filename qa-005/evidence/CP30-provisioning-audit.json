@@ -1,0 +1,28 @@
+{
+  "checkpoint": "CP30",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact": "local exact-source Linux amd64 build",
+    "artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "base_url": "http://127.0.0.1:18145",
+    "database": "isolated SQLite",
+    "browser": "Chromium with Playwright, 1440x1000"
+  },
+  "principal": "synthetic QA Operator and Org Owner",
+  "organization": {"id": "org_01m8crmjtje009gbep9v278fpe", "slug": "qa005-secondary", "created_via_console": true, "create_status": 201},
+  "project": {"id": "prj_01m8ct3xs7e00bv1hwq3qz2est", "slug": "qa005-audit-project", "name": "QA005 Audit Project", "create_status": 201},
+  "environment": {"id": "env_01m8ct3z58e009ra7k22qmsea5", "project_id": "prj_01m8ct3xs7e00bv1hwq3qz2est", "slug": "qa005-audit-sandbox", "name": "QA005 Audit Sandbox", "create_status": 201},
+  "audit_events": [
+    {"event_type": "organization.created", "target_type": "organization", "target_id": "org_01m8crmjtje009gbep9v278fpe", "chain_key": "org_01m8crmjtje009gbep9v278fpe", "sequence": 1, "actor_kind": "PRINCIPAL", "entry_point": "admin_api", "metadata": {"min_plugin_trust": "ANY_APPROVED", "slug": "qa005-secondary"}},
+    {"event_type": "project.created", "target_type": "project", "target_id": "prj_01m8ct3xs7e00bv1hwq3qz2est", "chain_key": "org_01m8crmjtje009gbep9v278fpe", "sequence": 2, "actor_kind": "PRINCIPAL", "entry_point": "admin_api", "metadata": {"slug": "qa005-audit-project"}},
+    {"event_type": "environment.created", "target_type": "environment", "target_id": "env_01m8ct3z58e009ra7k22qmsea5", "chain_key": "org_01m8crmjtje009gbep9v278fpe", "sequence": 3, "actor_kind": "PRINCIPAL", "entry_point": "admin_api", "metadata": {"project_id": "prj_01m8ct3xs7e00bv1hwq3qz2est", "slug": "qa005-audit-sandbox"}}
+  ],
+  "chain_verification": {"tool": "tanpopo admin verify-state --check-audit-chain --reconcile-orphaned-holds=false", "status": "ok", "audit_chain_valid": true, "events_verified": 218, "orphans_reconciled": 0},
+  "screenshots": [
+    "screenshots/CP30-org-project-scope-menu.png",
+    "screenshots/CP30-project-create-form.png",
+    "screenshots/CP30-environment-create-form.png",
+    "screenshots/CP30-project-environment-created.png"
+  ],
+  "limitations": ["Only successful creation by synthetic Operator/Org Owner", "No project/environment mutation failure or concurrency case", "Other storage backends and roles remain unverified"]
+}

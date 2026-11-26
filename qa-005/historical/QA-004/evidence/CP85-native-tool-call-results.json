@@ -1,0 +1,107 @@
+{
+  "key": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "vky_01m8ajdabne00bk7ysr6cwfzh3",
+        "state": "CREATED_ACTIVE",
+        "allowed_planes": [
+          "PROVIDER"
+        ],
+        "allowed_routes": [
+          "/native/ollama/*"
+        ]
+      }
+    ]
+  },
+  "native": {
+    "status": 200,
+    "contentType": "application/json",
+    "requestId": "req_01m8ajdam6e00bm4k3wra90hpk",
+    "usageAccuracy": "ESTIMATED",
+    "body": {
+      "model": "qa004-loopback",
+      "created_at": "2026-11-25T23:00:00Z",
+      "message": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "function": {
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "QA-104"
+              }
+            }
+          }
+        ]
+      },
+      "done": true,
+      "prompt_eval_count": 17,
+      "eval_count": 4
+    }
+  },
+  "fixture": [
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": false,
+      "tool_names": [
+        "lookup_order"
+      ],
+      "message_roles": [
+        "user"
+      ],
+      "auth_present": false
+    }
+  ],
+  "traces": {
+    "status": 200,
+    "rows": [
+      {
+        "request_id": "trc_01m8ajdam8e008jaw7v80nma1a",
+        "plane": "NATIVE",
+        "route_slug": "qa004-loopback",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 12,
+        "virtual_key_id": "vky_01m8ajdabne00bk7ysr6cwfzh3"
+      },
+      {
+        "request_id": "trc_01m89nyjake009aa209mbs3035",
+        "plane": "NATIVE",
+        "route_slug": "qa004-loopback",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 20,
+        "virtual_key_id": "vky_01m89nyj4ke00ayfmr8njnha3j"
+      },
+      {
+        "request_id": "trc_01m89nfp99e00bbbk7n8ze6gsm",
+        "plane": "PROVIDER",
+        "route_slug": "qa004-loopback",
+        "status_code": 200,
+        "error_code": "mid_stream_abort",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 14,
+        "virtual_key_id": "vky_01m89nee7me008y30hqb8f2enz"
+      },
+      {
+        "request_id": "trc_01m89fpcafe00b798h3xkh7e7e",
+        "plane": "PROVIDER",
+        "route_slug": "qa004-loopback",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 70,
+        "virtual_key_id": "vky_01m89fpca4e0091xtfx9pk88nk"
+      }
+    ]
+  }
+}

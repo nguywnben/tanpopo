@@ -1,0 +1,75 @@
+{
+  "keys": [
+    {
+      "id": "vky_01m8begdfbe008ewkj97w2679s",
+      "name": "+SUM(1,1)",
+      "revoke_status": 200
+    },
+    {
+      "id": "vky_01m8begf54e009jz6xzvshf5tv",
+      "name": "-1+1",
+      "revoke_status": 200
+    },
+    {
+      "id": "vky_01m8beggqqe008x8xga61xr5cp",
+      "name": "@SUM(1,1)",
+      "revoke_status": 200
+    }
+  ],
+  "exports": {
+    "CSV": {
+      "filename": "tanpopo-chargeback-key.csv",
+      "bytes": 1945,
+      "sha256": "954da492ad4b6ea43b295f9c213e6be2bda9ffca51c2fbf47454d8615127a522",
+      "rows": {
+        "+SUM(1,1)": {
+          "row_present": true,
+          "line": "\"'+SUM(1,1)\",1,0,1,0,0",
+          "neutralized_apostrophe": true,
+          "formula_at_first_cell_character": false
+        },
+        "-1+1": {
+          "row_present": true,
+          "line": "'-1+1,1,0,1,0,0",
+          "neutralized_apostrophe": true,
+          "formula_at_first_cell_character": false
+        },
+        "@SUM(1,1)": {
+          "row_present": true,
+          "line": "\"'@SUM(1,1)\",1,0,1,0,0",
+          "neutralized_apostrophe": true,
+          "formula_at_first_cell_character": false
+        }
+      }
+    },
+    "JSON": {
+      "filename": "tanpopo-chargeback-key.json",
+      "bytes": 9735,
+      "sha256": "7e8bde651242ccff37a059c7504dce9714ae4dd639ad9bcc74271c96bcf9bafa",
+      "rows": {
+        "+SUM(1,1)": {
+          "row_present": true,
+          "line": "    \"group_key\": \"+SUM(1,1)\",",
+          "retains_original_name_as_json_string": true
+        },
+        "-1+1": {
+          "row_present": true,
+          "line": "    \"group_key\": \"-1+1\",",
+          "retains_original_name_as_json_string": true
+        },
+        "@SUM(1,1)": {
+          "row_present": true,
+          "line": "    \"group_key\": \"@SUM(1,1)\",",
+          "retains_original_name_as_json_string": true
+        }
+      }
+    }
+  },
+  "restored_budget": {
+    "limit": 100,
+    "exact": 2041,
+    "estimated": 14,
+    "reserved": 0,
+    "version": 175
+  }
+}

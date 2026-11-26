@@ -1,0 +1,37 @@
+{
+  "connectionDelete": {
+    "method": "DELETE",
+    "httpStatus": 204
+  },
+  "secretDelete": {
+    "method": "DELETE",
+    "httpStatus": 204
+  },
+  "extensionQuarantine": {
+    "method": "POST",
+    "httpStatus": 200,
+    "state": "QUARANTINED"
+  },
+  "extensionUninstall": {
+    "method": "DELETE",
+    "httpStatus": 204
+  },
+  "killSwitchClear": {
+    "uiActionCompleted": true,
+    "finalReadbackHttpStatus": 200,
+    "activeItems": []
+  },
+  "finalInstallationReadback": {
+    "httpStatus": 200,
+    "installationCount": 1,
+    "remainingPackage": "original Ollama installation"
+  },
+  "visualEvidence": [
+    "CP24-google-connection-delete-confirm.png",
+    "CP24-google-secret-delete-confirm.png",
+    "CP24-google-quarantined.png",
+    "CP24-google-uninstall-confirm.png",
+    "CP24-google-uninstalled.png",
+    "CP24-google-switch-cleared.png"
+  ]
+}

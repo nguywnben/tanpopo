@@ -1,0 +1,18 @@
+{
+  "deleteStatus": 200,
+  "deleteSucceeded": true,
+  "targetOrigin": "https://example.com",
+  "disabledAndReenabledBeforeDelete": true,
+  "after": {
+    "listStatus": 200,
+    "count": 0,
+    "remainingOrigins": [],
+    "auditStatus": 200,
+    "webhookAuditTypes": [
+      "webhook.deleted",
+      "webhook.registered",
+      "webhook.enabled",
+      "webhook.disabled"
+    ]
+  }
+}

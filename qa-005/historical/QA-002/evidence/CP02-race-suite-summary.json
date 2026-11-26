@@ -1,0 +1,15 @@
+{
+  "command": "go test -race ./...",
+  "go_version": "go1.26.11 linux/amd64",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "environment": {
+    "CGO_ENABLED": "1",
+    "GOFLAGS": "-buildvcs=false",
+    "umask": "0022",
+    "GOTOOLCHAIN": "local"
+  },
+  "exit_code": 0,
+  "packages_passed": 86,
+  "packages_failed": 0,
+  "status": "PASS"
+}

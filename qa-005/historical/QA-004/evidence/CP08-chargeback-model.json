@@ -1,0 +1,10 @@
+[
+  {
+    "group_key": "qa004-mock",
+    "exact_micro_usd": 2,
+    "estimated_micro_usd": 1,
+    "exact_request_count": 2,
+    "estimated_request_count": 1,
+    "unmetered_request_count": 0
+  }
+]

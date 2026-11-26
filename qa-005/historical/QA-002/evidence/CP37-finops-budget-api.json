@@ -1,0 +1,14 @@
+{
+  "http_status": 200,
+  "count": 15,
+  "has_more": false,
+  "by_scope_period": {
+    "VIRTUAL_KEY/MONTHLY": 14,
+    "PROJECT/MONTHLY": 1
+  },
+  "sample": {
+    "scope_tier": "VIRTUAL_KEY",
+    "period": "MONTHLY",
+    "settled_exact_micros": 1
+  }
+}

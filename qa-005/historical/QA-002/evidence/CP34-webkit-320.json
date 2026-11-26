@@ -1,0 +1,108 @@
+{
+  "viewport": "320x720",
+  "overview": {
+    "viewport": 320,
+    "doc": 320,
+    "body": 320,
+    "active": "BODY"
+  },
+  "security": {
+    "viewport": 320,
+    "doc": 320,
+    "body": 320,
+    "active": "BODY"
+  },
+  "tabNames": [
+    "Approval QueueApproval Queue",
+    "Kill SwitchesKill Switches",
+    "Audit LogAudit Log"
+  ],
+  "tablist": {
+    "client": 296,
+    "scroll": 365,
+    "scrollLeft": 0
+  },
+  "auditTab": {
+    "selected": "true",
+    "visible": true
+  },
+  "audit": {
+    "viewport": 320,
+    "doc": 320,
+    "body": 320,
+    "active": "BUTTON"
+  },
+  "auditText": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n100\n#276\nauth.login_succeeded\nActor\nprc_01m853e561e00byye5wtq3s746\nTarget\nprincipal\nprc_01m853e561e00byye5wtq3s746\nDetail (2)\n#275\nauth.login_succeeded\nActor\nprc_01m853e561e00byye5wtq3s746\nTarget\nprincipal\nprc_01m853e561e00byye5wtq3s746\nDetail (2)\n#274\nauth.login_succeeded\nActor\nprc_01m853e561e00byye5wtq3s746\nTarget\nprincipal\nprc_01m853e561e00byye5wtq3s746\nDetail (2)\n#273\nauth.login_succeeded\nActor\nprc_01m853e561e00byye5wtq3s746\nTarget\nprincipal\nprc_01m853e561e00byye5wtq3s746\nDetail (2)\n#272\nauth.login_succeeded\nActor\nprc_01m853e561e00byye5wtq3s746\nTarget\nprincipal\nprc_01m853e561e00byye5wtq3s746\nDetail (2)\n#271\nauth.login_succeeded\nActor\nprc_01m853e561e00byye5wtq3s746\nTarget\nprincipal\nprc_01m853e561e00byye5wtq3s746\nDetail (2)\n#270\nauth.login_succeeded\nActor\nprc_01m",
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/audit-events",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    }
+  ]
+}

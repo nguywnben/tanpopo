@@ -1,0 +1,15 @@
+{
+  "project": {
+    "status": 201,
+    "id": "prj_01m85fzh16e009hg9r5wysq16v",
+    "slug": "qa002-cp39-project",
+    "org_id": "org_01m85fqs3ae009a5406gxzx57g"
+  },
+  "environment": {
+    "status": 201,
+    "id": "env_01m85fzh24e00bh3g188tyanhn",
+    "slug": "qa002-cp39-env",
+    "project_id": "prj_01m85fzh16e009hg9r5wysq16v"
+  },
+  "visibleProjectCount": 1
+}

@@ -1,0 +1,11 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "target_key_id": "vky_01m886r4sce00av1sv0kg3pa9k",
+  "logout_status": 204,
+  "key_readback": {
+    "status": 200,
+    "found": true,
+    "state": "REVOKED",
+    "version": 2
+  }
+}

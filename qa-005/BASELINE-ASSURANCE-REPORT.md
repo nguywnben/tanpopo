@@ -1,0 +1,121 @@
+# QA-005 baseline assurance report — ongoing
+
+**Mission:** TEEP-00 Baseline Stabilization / QA-005  
+**Repository:** `nguywnben/tanpopo`  
+**Frozen source:** `737079ddb847d97dbcf832f610ed0048556cb65b` (unsigned RC7 engineering baseline)  
+**Branch:** `qa/qa-005-baseline-stabilization`  
+**Campaign state:** IN PROGRESS — this is a checkpoint report, not final assurance.  
+**GATE-REL-07:** BLOCKED.
+
+## Executive summary
+
+QA-005 independently built the frozen source and exercised fresh installation, SQLite and PostgreSQL runtimes, deterministic loopback-provider traffic, Console workflows, role authorization, exact self-hosted accounting, backup/restore, runtime restart and a selected key-expiry lifecycle. The full Go race suite also passed as supporting evidence.
+
+Three new product defects are confirmed so far:
+
+| Priority | Finding | Impact |
+|---|---|---|
+| P1 / Major | [DEF-081](NEW-DEFECT-REGISTER.md): PostgreSQL extension activation persists an active extension while provider-adapter registration fails; the provider catalog stays empty after restart. | Blocks provider connection and route setup for an activated adapter on PostgreSQL deployments. |
+| P2 / Low | [DEF-080](NEW-DEFECT-REGISTER.md): FinOps Viewer key-inventory API denial is rendered beside “0” and “No Virtual Keys.” | Misleads read-only finance users; the authorization boundary itself correctly denies access. |
+| P2 / Low | [DEF-082](NEW-DEFECT-REGISTER.md): kill-switch badge remains stale immediately after extension unquarantine although active inventory is empty. | Misleads operators during emergency recovery; persisted inventory and extension state remain safe. |
+| P2 / Moderate | [DEF-083](NEW-DEFECT-REGISTER.md): native Ollama chat/generate streaming responses omit the OpenAPI-required usage-accuracy header although the corresponding records settle EXACT. | Client SDKs cannot use the documented header to distinguish exact, estimated or unmetered completion after a stream. |
+
+DEF-078’s historical FinOps mismatch did not reproduce in the current three-request fixture (both APIs and exports show exact 1 / estimated 0), but estimates, volume and the prior limit boundary are unverified (CP21). DEF-079’s historical budget-alert navigation failure did not reproduce on exact RC7: the active alert API returned `/finops/budgets`, the real Remediate action opened that screen, and hard refresh preserved it (CP20). This is scoped to one alert and synthetic project. Key rotation expiry now finalized to `CREATED_ACTIVE` with a linked audit event just after the configured 60-second grace deadline, unlike the earlier RC6 finding. **DEF-075 remains PARTIAL**, because this campaign did not reliably correlate both show-once secrets for pre/post-expiry authentication checks. Product-gap observations PG-001 through PG-005 are separate from defects. QA-005 independently retested DEF-010 through an A2A-only key, discovery, cross-plane denial and an input-required/resume task lifecycle on an isolated A2A-enabled clone (CP24). CP28 freshly retested **DEF-069**: the real Console canceled a Working task and the create caller received canceled/HTTP 200, but the delayed loopback agent continued the full 15-second job before its response write failed. DEF-069 remains FAIL; this differs from historical HTTP 400 create results but does not meet downstream-work cancellation acceptance. MCP has a scoped pass through local registration, tool sync, drift lock, schema pin, key grant, cookie-free invocation, cross-plane denial and revocation (CP25), plus post-pin drift re-lock (CP26). A2A/MCP remain partial or failed because nonzero budgets, mutating/HITL, external interop and other security edges are untested. Product-gap PG-004 records missing Console retirement actions for the tested MCP/model registries. QA-005 also verified scoped webhook loopback SSRF rejection and then deleted the synthetic Vault credential (CP22). It verified a 375px Access & Keys layout without horizontal overflow, Vietnamese locale persistence through hard reload/navigation, and agreement between populated project-level CSV/JSON FinOps exports and the displayed total/count; see CP17–19. These are narrow passes and do not establish broad responsive/accessibility/localization or accounting-migration coverage.
+
+No baseline-stable verdict can be issued at this checkpoint. The fresh QA-005 ledger now records 22 scoped PASSes, 3 PARTIALs, one fresh historical FAIL, and 53 of 79 historical findings still UNVERIFIED. New findings DEF-080 (Low), DEF-081 (Major/PostgreSQL), DEF-082 (Low), and DEF-083 (Moderate/streaming contract) remain FAIL. DEF-060/075/072 are PARTIAL; DEF-069 remains a fresh FAIL. CP43 retested DEF-025 and CP44 retested DEF-068 with scoped passes. CP45 listed both healthy split-role processes, but after Data Plane loss the current inventory silently fell to one healthy Control Plane row; CP46 added a three-node Valkey Cluster and cross-Data-Plane RPM pass. DEF-072 remains PARTIAL pending expected-topology and missing-node semantics. Official RC7 artifact provenance and production signature integration remain UNVERIFIED/BLOCKED. Real providers were not called and no paid usage was incurred.
+
+CP27 added a synthetic second-organization Console journey. Creation, live scope switching and organization-only Access & Keys / FinOps empty states matched the isolated tenant data. A hard refresh returned the picker to the original/session organization and its default project/environment. Since historical evidence establishes project/environment refresh persistence but no accepted requirement defines cross-organization preference persistence, the observation is tracked as PG-005 pending a product contract, not a new defect. Multi-tenant authorization coverage remains partial.
+
+CP28's active A2A cancellation result remains a confirmed historical acceptance failure: caller-visible cancellation is improved over the prior HTTP 400, but delegated work continued after the successful cancel action. The new test key was revoked and the isolated clone's 253-event audit chain verified intact.
+
+CP29 independently retested DEF-067. A synthetic upstream's synchronous HTTP 200 `working` response now yields a persisted Working task and HTTP 201 create response on this exact RC7 SQLite runtime; the real Console can then cancel it. This is scoped evidence only and does not resolve asynchronous continuation or DEF-069.
+
+CP30 used the actual Console workspace flow to create an organization, project and environment, then verified each resource's targeted audit event and org chain partition. The exact-source audit verifier passed 218 events. This is a successful-path SQLite pass for DEF-007; failure atomicity, other roles and backend coverage remain open.
+
+CP31 retested DEF-071 with a schema-valid, CLI-packable unsigned reserved-namespace archive in a fresh exact-source runtime configured with an isolated local archive root. Extensions UI rejected it with 403 `reserved_namespace_spoofing`, no candidate appeared, and `extension.provenance_rejected` was recorded in a valid 224-event audit chain. The prior QA-004 FAIL remains in history; alternate archive/signature paths remain unverified.
+
+CP32 retested DEF-055 with a synthetic environment created through the real Console. After refresh, the UI returned to the original/session organization scope; after reselection, the environment selector displayed `QA005 Audit Sandbox`, and SQLite list/readback returned the matching human-readable `name` and slug. The screenshot was visually inspected. This is a scoped PASS for name readback, while scope reset remains PG-005 and other role/backend/rename paths remain unverified.
+
+CP33 freshly retested DEF-058 on exact RC7. The real Extensions UI quarantined then unquarantined its synthetic installed adapter; the recovery response and refreshed readback showed `INSTALLED_DISABLED` v4, an `extension.unquarantined` audit event was present, and the complete 240-event SQLite chain verified. This is a scoped PASS for the prior recovery-path failure, preserving the historical QA-004 RC6 FAIL. The explicit re-enable/reprobe flow and role/backend/concurrency boundaries remain open. CP33 also confirmed DEF-082: the immediate success UI retained a red Kill Switch 1 badge although the follow-up active inventory was HTTP 200 empty; it cleared after the Security view fetched that inventory.
+
+CP34 revisited DEF-060. The exact-source Console now shows an `aria-disabled` Rollback version item plus the specified no-previous-pin and quarantine guidance when `previous_rollback_version` is null. Enter on the focused item emitted no rollback request and the installation readback remained unchanged. This is PARTIAL because the current installation was disabled following CP33 rather than in the historical initial ACTIVE state; screen-reader announcement and a real post-upgrade rollback remain open.
+
+CP35 verified DEF-003 and DEF-024 in a fresh synthetic organization. The real Console created the first monthly project budget from a zero-row state and persisted it across hard refresh after scope reselection. A subsequent organization-level budget appeared alongside the project budget in the child project's refreshed budget list and UI. The org-switch-on-refresh observation remains PG-005; other ceiling scopes, concurrent writes, budget enforcement/precedence, exports and migrations remain open.
+
+CP36–39 added scoped fresh-source checks for private MCP/A2A CIDR guards, setup accessibility names, two Virtual Key period labels, and Playground budget rejection/key lifecycle. DEF-019 now has a fresh scoped pass; End Session versus logout timing is PG-006 because the documented contract requires logout revocation but does not require immediate key invalidation on tab-local End Session.
+
+CP40–41 expanded native Ollama coverage with Console-configured loopback fixtures. Native chat/generate counter extraction, per-token arithmetic, trace/FinOps reconciliation, correct Ollama NDJSON content type, and one image-unit calculation all passed their narrowly exercised RC7 paths (DEF-051/052/053/070/074). However both native stream endpoints omitted the documented `X-Tanpopo-Usage-Accuracy` response header while trace/settlement was EXACT; this is new DEF-083. No real Ollama service or paid provider was used. Detailed sanitized response and read-only settlement evidence is linked from the checkpoints.
+
+CP42 revisited DEF-023 against a populated organization: the Owner saw the same three members, including a project-bound pending invitee, at project/environment, organization-only (`No project / No env`), and project/no-environment scopes. The real Console list and `GET /admin/v1/members?limit=100` remained consistent at each tested scope. DEF-023 now has a fresh scoped PASS; different role and sibling-project membership matrices remain open.
+
+CP43 revisited DEF-025 on the fresh exact-source SQLite Console. At `No project / No env`, Add deployment opened a drawer explaining that an environment must first be created, Save remained disabled, and the browser observed no deployment POST. The screenshots were visually inspected. This is a scoped pass; other roles, project states, backends and accessibility remain open.
+
+CP44 retested active-organization crypto-shred on an isolated exact-source SQLite clone. A synthetic empty target was deleted with HTTP 200; the Console switched to a surviving org and showed the destroyed DEK ID and revoked-key count in its completion banner. The target disappeared from the organization-list readback. The receipt did not survive a full reload, and a direct audit-chain verification probe was rejected for missing CSRF; no fresh chain result is claimed. This scoped pass covers the original scope-switch receipt behavior only. Populated tenant erasure, audit verification, roles/backends, pending/failure and concurrency paths remain open.
+
+CP45 created an independent fresh PostgreSQL database and started exact-source Control Plane and Data Plane processes. Both readiness probes passed; the unauthenticated data-plane ingress returned the expected 401; and cluster-status plus the visually inspected Operations screen enumerated both healthy roles with IDs, epochs, heartbeats and status. After terminating the isolated Data Plane and waiting beyond its heartbeat interval, the inventory dropped it and continued to show a healthy one-node cluster without an incomplete/missing-node warning. CP45 had no Valkey configured and no expected replica topology. CP46 later tested healthy three-node Valkey Cluster operation and cross-process RPM. DEF-072 remains PARTIAL: the RC6 live-node omission does not reproduce, but missing-node visibility with an expected topology remains open.
+
+CP46 expanded the runtime topology to an isolated three-node Valkey Cluster and fresh PostgreSQL-backed Control Plane plus two Data Planes. The UI issued an environment-bound test key; a versioned Admin API update set `rpm_limit=1`. The first synthetic request through Data Plane 18152 passed admission then returned 503 because the test intentionally had no route/deployment; the second through 18153 returned 429 `rate_limit_exceeded`. Durable metadata-only traces show both outcomes. The visually inspected Operations table listed all three nodes at epoch 6 and healthy. The test key was revoked and its final inventory readback was `REVOKED`. This is scoped shared-RPM evidence, not a validation of TPM/budget cross-node consistency, failure recovery, replica promotion, concurrency or real provider traffic.
+
+CP47 retested orderly cross-node Virtual Key revocation on that split Control Plane/two-Data-Plane PostgreSQL/Valkey setup. The real UI revoked a synthetic environment-bound key with HTTP 200 and state `REVOKED`; replay on the other Data Plane returned HTTP 401 `invalid_virtual_key`, after the pre-revoke request had been authenticated and failed only because the synthetic model had no route. The key was revoked and the screenshot visually inspected. Revocation latency bounds, active-stream severance, race/outage fallback and multi-tenant/role cases remain open.
+
+## Baseline identity and evidence integrity
+
+- All QA-005 tests so far use a local Linux amd64 binary built from the exact source commit; SHA-256 is `62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9`. Go build metadata records the frozen revision and `vcs.modified=false`.
+- The official downloadable RC7 artifact remains **UNVERIFIED**. Source default `0.1.0-dev` and locally injected version metadata are not treated as release defects or provenance proof.
+- Built-in extension testing used an ephemeral QA Ed25519 root and local signatures. This proves only a test trust path; it is not production signing, real publisher provenance, or release certification.
+- Main, develop, historic QA branches and the owner signing-manifest ref were intake-verified and not changed. Signing branch and production private keys were not accessed. No production source/spec changes, tags, releases or paid provider calls were made.
+- Credentials, database volumes, bootstrap tokens, key material, backup archives and provider logs stay under `/tmp` and are excluded. Tracked evidence is sanitized and synthetic.
+
+## Defect register and recommended priorities
+
+The complete DEF-001–079 intake ledger is [DEFECT-REGRESSION-LEDGER.md](DEFECT-REGRESSION-LEDGER.md); it retains each historical QA-004 classification and begins QA-005 with UNVERIFIED. QA-005 has changed only DEF-075 to PARTIAL based on fresh, limited runtime evidence. Full new findings are in [NEW-DEFECT-REGISTER.md](NEW-DEFECT-REGISTER.md).
+
+Recommended stabilization sequence:
+
+1. **DEF-081:** diagnose the PostgreSQL adapter-registration transaction/synchronization failure; make approval state and adapter availability coherent; test exact acceptance through restart and routed local-fixture traffic.
+2. **DEF-069:** stop delegated work after a successful A2A cancellation and verify it at the downstream endpoint, including budget-hold release.
+3. **DEF-080:** return an explicit restricted state or provide the specified read-only inventory; never pair a 403 with an authoritative empty/zero result.
+4. **DEF-083:** satisfy the OpenAPI usage-accuracy response-header contract for native streaming clients, then test with estimates, unmetered results, disconnects and every native runtime mode.
+5. **DEF-082:** refresh the kill-switch badge after recovery; include stale cache, failure and concurrent operations.
+6. Retest the remaining historical high/major failures and partials against exact acceptance criteria, especially DEF-002/005/007/010, DEF-023, DEF-051–053, DEF-056, DEF-059–060, DEF-063–065 and DEF-067–074. Scoped CP40/41 passes do not close other adapters, rates, modalities or backends. Use [the ledger](DEFECT-REGRESSION-LEDGER.md) and original reports, not engineering claims or unit tests alone.
+7. **DEF-075:** retain a trustworthy one-time old/new pair, test validity during and after grace, version/state/audit, and persistence across restart and multi-node deployment.
+8. Validate PG-001–PG-006 during TEEP-01; these remain product-contract observations unless an accepted requirement establishes a defect.
+
+## Coverage and limitations
+
+The live [coverage matrix](COVERAGE-AND-EVIDENCE-MATRIX.md) owns exact PASS/FAIL/PARTIAL/BLOCKED/UNVERIFIED boundaries. Current completed slices include fresh SQLite setup and real Console rendering, one deterministic streamed and one exact-priced loopback inference path, project hard-budget rejection before egress, FinOps Viewer role checks, SQLite encrypted backup/restore, runtime restart/readiness, PostgreSQL 16 schema/RLS smoke, and audit hash-chain verification. The full Go race suite passed after correcting environment prerequisites (locked Node dependencies installed and umask `0022` for the security-mode test).
+
+Coverage remains incomplete for the 57 unverified historical findings, PostgreSQL routed traffic, Valkey rate-limit/budget/rebuild behavior, real provider interoperability, extension recovery/provenance breadth, most A2A acceptance paths, credential-vault lifecycle, multi-tenant API/RBAC boundaries, pricing migrations/concurrency/modalities, telemetry integrity/export, cluster/failover, Windows/macOS, cross-browser/mobile/accessibility/responsive/localization, worker shutdown, and corruption/crash recovery. Successful webhook delivery, HMAC verification and other SSRF forms remain unverified. DEF-083 also leaves the native streaming usage-header contract failing on the tested Ollama endpoints. CP40–41 only cover a deterministic local Ollama-compatible fixture on SQLite. The narrow mobile/localization/export checks in CP17–19 do not resolve those broader gaps. See the matrix and [residual risk register](RESIDUAL-RISK-REGISTER.md).
+
+## TEEP-01 entry readiness
+
+**Readiness verdict: NOT DETERMINED — QA-005 remains in progress.** The final campaign must choose one of `BASELINE_STABLE`, `BASELINE_REMEDIATION_REQUIRED`, or `BASELINE_ASSURANCE_BLOCKED` after completing executable coverage and resolving its evidence conflicts. A stable baseline will not authorize production signing or release. `GATE-REL-07` remains BLOCKED.
+
+## Evidence index
+
+- CP00–CP02: baseline identity, fresh install and navigation
+- CP03–CP12: extension trust, provider/model/route/key, Playground, RBAC, pricing, backup/restore
+- CP13–CP15: runtime recovery, Operations, PostgreSQL/RLS, DEF-081, DEF-075
+- CP27: secondary-organization workflow, cross-screen scoped state and refresh context behavior
+- CP28: fresh DEF-069 A2A active-work cancellation retest
+- CP29: fresh DEF-067 upstream `working` response retest
+- CP30: organization/project/environment creation and audit chain
+- CP31: reserved extension namespace rejection retest
+- CP32: DEF-055 environment display-name readback after scope reselection
+- CP33: DEF-058 audited quarantine recovery; DEF-082 stale kill-switch badge
+- CP34: DEF-060 disabled rollback guidance and keyboard no-submit check
+- CP35: DEF-003 first budget and DEF-024 parent-budget visibility
+- CP36: DEF-005 private MCP/A2A CIDR form guards
+- CP37: DEF-001 fresh setup progress names
+- CP38: DEF-018 two-key period-label non-reproduction
+- CP39: DEF-019 Playground project-budget error explanation and key lifecycle; PG-006 End Session/logout contract observation
+- CP40: native Ollama JSON/NDJSON, exact counters/pricing, trace/FinOps reconciliation and DEF-083 response-header defect
+- CP41: native Ollama one-image exact settlement retest for DEF-074
+- CP42: DEF-023 populated Members & Roles at organization-only and no-environment scopes
+- CP43: DEF-025 no-project deployment prerequisite and disabled submission
+- CP44: DEF-068 active-organization shred receipt across scope change
+- CP45: DEF-072 healthy split-role PostgreSQL inventory and Data Plane loss follow-up
+- CP46: shared RPM admission across two Data Planes over isolated PostgreSQL/Valkey Cluster
+- CP47: cross-Data Plane Virtual Key revocation and replay denial
+- [Full evidence directory](evidence/)
+- [Historical campaigns](historical/)

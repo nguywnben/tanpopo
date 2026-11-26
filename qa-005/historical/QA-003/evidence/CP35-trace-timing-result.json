@@ -1,0 +1,19 @@
+{
+  "polls": [
+    {
+      "elapsed_ms": 1194,
+      "status": 200
+    }
+  ],
+  "completion": {
+    "elapsed_ms": 87,
+    "status": 503,
+    "trace_id": "trc_01m880aywke009srbfax05w95j",
+    "request_id": "req_01m880aywke009sqppqfjt7hf2"
+  },
+  "screen": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 12:20:24 AM\nEnd session\nLive Playground\nSDK Snippets\nNo compliant active deployment is available for model \"qa003-no-such-route-cp35-repeat\".\nModel or route slug\nqa003-no-such-route-cp35-repeat\nComparison model (optional)\nYou\nQA-003 synthetic trace timing probe CP35.\nqa003-no-such-route-cp35-repeat\nPrompt\nSend\nExecution traces\nPrimary · trc_01m880aywke009srbfax05w95j\nTrace not available yet.",
+  "late": {
+    "elapsed_label": "late read after 1100ms",
+    "status": 200
+  }
+}

@@ -1,0 +1,9 @@
+# CP32 — DEF-055 environment display-name readback
+
+**Baseline:** exact source `737079ddb847d97dbcf832f610ed0048556cb65b`; local Linux amd64 build SHA-256 `62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9`. The existing isolated SQLite runtime on `127.0.0.1:18145` was exercised through Chromium 1440×1000. Synthetic scope: `QA005 Secondary Org` / `QA005 Audit Project` / environment `QA005 Audit Sandbox` (`env_01m8ct3z58e009ra7k22qmsea5`). No product files changed.
+
+## Result: PASS (scoped DEF-055 readback)
+
+Signed in as the local QA owner, selected the synthetic organization, project, and environment, and inspected the visible scope control. It showed the environment's human-readable name `QA005 Audit Sandbox`. A hard refresh returned to the original/session scope (`QA005 Org` / `Initial Project` / `dev`); after explicitly reselecting the synthetic scopes, the visible scope again showed `QA005 Audit Sandbox`. The environment list request returned HTTP 200 and the same environment ID, slug `qa005-audit-sandbox`, and name `QA005 Audit Sandbox` on both observations. The screenshot `../evidence/screenshots/CP32-env-name-after-refresh.png` was visually inspected and shows the selected human-readable organization/project/environment, not a slug substitution.
+
+This resolves only the reported post-list/readback name substitution for this successfully created environment and SQLite/owner/Chromium path. It does **not** establish persistence of cross-organization selection after refresh; that reset is recorded separately as PG-005 because the persistence contract remains undefined. Other roles, backends, rename behavior, API clients, and failure/recovery paths remain UNVERIFIED. Script output from the real-browser run was inspected; the test script and credentials remain outside the repository under `/tmp`.

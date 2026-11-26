@@ -1,0 +1,39 @@
+{
+  "defaults": [
+    {
+      "type": "text",
+      "value": ""
+    },
+    {
+      "type": "url",
+      "value": ""
+    },
+    {
+      "type": "checkbox",
+      "checked": true
+    },
+    {
+      "type": "text",
+      "value": "127.0.0.1/32"
+    }
+  ],
+  "posts": [
+    {
+      "status": 201,
+      "body": "{\"id\":\"con_01m87k7dere008g6vh99qd1xgt\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"name\":\"QA003 loopback untouched-default probe\",\"adapter_id\":\"adp_01m87en7q2e008z362mgp36ra8\",\"billing_mode\":\"SELF_HOSTED_INFRA\",\"endpoint_url\":\"http://127.0.0.1:19200\",\"data_region\":\"ON_PREM\",\"allow_private_ip\":true,\"state\":\"CREATED_UNVERIFIED\",\"secret_slot_fingerprints\":{},\"version\":1,\"created_at\":\"2026-11-24T20:16:16.856Z\"}\n"
+    }
+  ],
+  "visibleTail": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n4\nVault Secrets\n1\nAdapters\n1\nConnection created. Run a live probe to verify connectivity.\nConfigured connections\n4\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA003 loopback untouched-default probe (99qd1xgt)\nhttp://127.0.0.1:19200\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tDisabled\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (4hst80xy)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t",
+  "sessionStatus": true,
+  "connectionListStatus": 200,
+  "persisted": {
+    "idSuffix": "99qd1xgt",
+    "name": "QA003 loopback untouched-default probe",
+    "endpoint": "http://127.0.0.1:19200",
+    "state": "CREATED_UNVERIFIED",
+    "allow_private_ip": true
+  },
+  "fixture": {
+    "error": "TypeError: fetch failed"
+  }
+}

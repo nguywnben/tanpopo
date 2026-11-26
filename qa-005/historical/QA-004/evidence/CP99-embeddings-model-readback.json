@@ -1,0 +1,49 @@
+{
+  "posted": {
+    "status": 201,
+    "body": {
+      "id": "lmd_01m8asq07ke00bbscjzzvqg5nb",
+      "slug": "qa004-cp99-embedding-batch",
+      "display_name": "QA004 CP99 Embedding Batch",
+      "context_window": 128000,
+      "max_output_tokens": 8192,
+      "assurance_tier": "DECLARED",
+      "capabilities": {
+        "streaming": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "strict_json_schema": false,
+        "json_object": false,
+        "vision": false,
+        "audio_input": false,
+        "document_input": false,
+        "reasoning": false,
+        "prompt_caching": false,
+        "embeddings": true,
+        "rerank": false
+      }
+    }
+  },
+  "read": {
+    "status": 200,
+    "model": {
+      "id": "lmd_01m8asq07ke00bbscjzzvqg5nb",
+      "slug": "qa004-cp99-embedding-batch",
+      "display_name": "qa004-cp99-embedding-batch",
+      "capabilities": {
+        "streaming": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "strict_json_schema": false,
+        "json_object": false,
+        "vision": false,
+        "audio_input": false,
+        "document_input": false,
+        "reasoning": false,
+        "prompt_caching": false,
+        "embeddings": true,
+        "rerank": false
+      }
+    }
+  }
+}

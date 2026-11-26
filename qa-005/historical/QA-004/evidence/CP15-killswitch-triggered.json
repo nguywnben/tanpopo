@@ -1,0 +1,44 @@
+{
+  "trigger": {
+    "status": 200,
+    "config_epoch": 29,
+    "severed_streams_count": 0,
+    "affected_entities_count": 1,
+    "error": null
+  },
+  "active_switches": {
+    "status": 200,
+    "count": 1,
+    "items": [
+      {
+        "level": "VIRTUAL_KEY",
+        "target_id": "vky_01m89awq1te00938c4ybxn9st9",
+        "active": true,
+        "version": 1
+      }
+    ]
+  },
+  "ui_excerpt": "Security\n1\nqa004-reviewer-1589ed90@example.invalid\nSecurity Reviewer\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\n1\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\n1\nAudit Log\nKill switch active at epoch 29 (1 entities affected, 0 streams severed).\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.\nApproval queue clear Destructive MCP tool invocations requiring human-in-the-loop sign-off appear here.",
+  "browser_session_probe": {
+    "status": 401,
+    "error": "invalid_credential_plane",
+    "interpretation": "Expected credential-plane rejection because browser fetch attached the prohibited admin session cookie; authoritative kill-switch behavior was then retested without cookies."
+  },
+  "cookie_free_target_key_block": {
+    "status": 401,
+    "error": "invalid_virtual_key",
+    "message": "Virtual Key is suspended by emergency kill switch.",
+    "model": null
+  },
+  "different_provider_key_still_works": {
+    "status": 200,
+    "error": null,
+    "message": null,
+    "model": "qa004-mock",
+    "usage": {
+      "completion_tokens": 4,
+      "prompt_tokens": 7,
+      "total_tokens": 11
+    }
+  }
+}

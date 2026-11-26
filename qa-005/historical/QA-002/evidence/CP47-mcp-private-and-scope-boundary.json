@@ -1,0 +1,62 @@
+{
+  "checkpoint": "CP47",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "environment": "isolated Tanpopo server on 127.0.0.1:18086; loopback-only synthetic MCP fixture on 127.0.0.1:19150",
+  "synthetic_server": {
+    "name": "QA002 CP47 private sync control",
+    "slug": "qa002-cp47-private-sync-control",
+    "scope": "secondary project/environment",
+    "endpoint": "http://127.0.0.1:19150/mcp",
+    "allow_private_ip": true,
+    "allow_cidrs": ["127.0.0.1/32"],
+    "fixture_tool": "safe_status",
+    "fixture_effect": "read-only; no tools/call was issued"
+  },
+  "owner_positive_control": {
+    "registration": 201,
+    "first_sync": 200,
+    "first_sync_result": {"synced_count": 1, "drifted_count": 0},
+    "observed_ui_after_first_sync": {
+      "success_notice": "Synced 1 tools on QA002 CP47 private sync control; 0 schema changes require approval.",
+      "server_state": "Schema Drift Locked",
+      "tool_state": "Drift locked",
+      "approval_action_visible": true
+    },
+    "owner_review": {
+      "approval": 200,
+      "risk_tier": "read_only",
+      "pin": 200,
+      "follow_up_sync": 200,
+      "final_server_state": "Active",
+      "final_tool_state": "Pinned"
+    },
+    "fixture_observations": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ],
+    "calls": "No tools/call; no business mutation"
+  },
+  "team_admin_boundary": {
+    "role": "TEAM_ADMIN assigned to project1 only",
+    "attempt": "POST sync-tools for the project2 synthetic server",
+    "http_status": 403,
+    "error_code": "insufficient_role_permission",
+    "fixture_requests_before": 0,
+    "fixture_requests_after": 0,
+    "interpretation": "PASS for tested cross-project action denial; endpoint remained untouched"
+  },
+  "visual_evidence": [
+    "CP47-owner-private-mcp-form.png",
+    "CP47-owner-private-mcp-registered.png",
+    "CP47-owner-private-mcp-synced.png",
+    "CP47-team-admin-scoped-mcp.png",
+    "CP47-owner-first-schema-approval-form.png",
+    "CP47-owner-first-schema-approved.png"
+  ],
+  "limitations": [
+    "One isolated loopback endpoint and one Team Admin/project boundary only.",
+    "No DNS rebinding, new redirect variants, alternate runtime, cross-browser, or Virtual Key grant/call was tested in this checkpoint.",
+    "This result does not resolve the support contract for IPv4-mapped private endpoints or redirect handling."
+  ]
+}

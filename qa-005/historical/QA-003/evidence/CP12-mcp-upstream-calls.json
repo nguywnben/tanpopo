@@ -1,0 +1,31 @@
+[
+  {
+    "method": "GET",
+    "path": "/",
+    "protocol": null,
+    "session": null
+  },
+  {
+    "method": "POST",
+    "path": "/mcp",
+    "protocol": null,
+    "session": null,
+    "rpc": "initialize",
+    "id": 1
+  },
+  {
+    "method": "POST",
+    "path": "/mcp",
+    "protocol": null,
+    "session": "qa003-mcp-session",
+    "rpc": "notifications/initialized"
+  },
+  {
+    "method": "POST",
+    "path": "/mcp",
+    "protocol": null,
+    "session": "qa003-mcp-session",
+    "rpc": "tools/list",
+    "id": 3
+  }
+]

@@ -1,0 +1,29 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 artifact 45581179274 at 127.0.0.1:18132",
+  "actor": {"email": "qa004-cp51-teamadmin-only@example.invalid", "roles": ["TEAM_ADMIN"], "project": "qa004-scope-invite-project", "environment": "dev"},
+  "readOnlyScreens": {
+    "models": {"ui": "No deployments found; no permission banner", "modelsApi": {"status": 200, "count": 0}, "deploymentsApi": {"status": 200, "count": 0}},
+    "providersBeforeSecret": {"ui": "insufficient role permission banner; no provider connections", "connectionsApi": {"status": 200, "count": 0}, "unfilteredSecretsApi": {"status": 403, "error": "insufficient_role_permission"}, "providerAdaptersApi": {"status": 200, "count": 0}},
+    "finops": {"ui": "zero exact/estimated/hold spend; no budgets", "usageSummaryApi": {"status": 200, "count": 0}, "budgetsApi": {"status": 200, "count": 0}},
+    "traces": {"ui": "no matching traces", "tracesApi": {"status": 200, "count": 0}}
+  },
+  "syntheticSecret": {
+    "createdThroughTeamAdminConsole": true,
+    "postStatus": 201,
+    "metadata": {
+      "credentialId": "sec_01m8a1qbk0e008a5xeekbk6pz5",
+      "projectId": "prj_01m89zaw43e008zhc0q6yyeshk",
+      "name": "QA-004 Project Metadata Canary",
+      "kind": "API_KEY",
+      "trailingFingerprint": "...bdbb"
+    },
+    "plaintext": "synthetic non-provider canary; excluded from evidence",
+    "immediatelyAfterCreate": {"uiCount": 1, "metadataVisible": true, "plaintextVisible": false},
+    "afterHardRefresh": {"uiCount": 0, "globalError": "insufficient role permission", "metadataRowMissing": true},
+    "authorizedProjectFilteredList": {"status": 200, "count": 1, "sameMetadataVisible": true, "secretValueFieldPresent": false},
+    "unfilteredList": {"status": 403, "error": "insufficient_role_permission"}
+  },
+  "interpretation": "A project-scoped Team Admin can create and immediately view its own secret metadata. After refresh, ProvidersPage's unfiltered secret-metadata request is denied, its Promise.all reload fails, and the UI shows zero vault credentials despite the same principal's project-filtered list returning the persisted metadata. The admin-only data boundary remains intact; this is a Console scope/query and state-rendering defect, not an authorization failure.",
+  "coverage": "FAIL (scoped) for project-scoped secret metadata readback in Providers after refresh. No real provider credential or upstream dispatch was used. Connection creation/probe, secret binding, rotation, deletion and additional roles remain UNVERIFIED."
+}

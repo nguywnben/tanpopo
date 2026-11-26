@@ -1,0 +1,36 @@
+{
+  "status": 200,
+  "total": 17,
+  "events": [
+    {
+      "id": "aud_01m8aktz7ae00bpw8c0p3w6esm",
+      "seq_no": 17,
+      "action": "extension.staged_install_cancelled",
+      "target_type": "extension_installation",
+      "target_id": "ins_01m8aksq1ne0090tv6hv4s1kt4",
+      "actor_id": "prc_01m89x03qve00b5fzb2yx9fwgz",
+      "metadata": {
+        "installation_id": "ins_01m8aksq1ne0090tv6hv4s1kt4"
+      }
+    },
+    {
+      "id": "aud_01m8aksq1re009fmeryv3fxrxe",
+      "seq_no": 16,
+      "action": "extension.staged_pending_approval",
+      "target_type": "extension_installation",
+      "target_id": "ins_01m8aksq1ne0090tv6hv4s1kt4",
+      "actor_id": "prc_01m89x03qve00b5fzb2yx9fwgz",
+      "metadata": {
+        "allowed_hosts": [
+          "api.qa004.invalid"
+        ],
+        "canonical_name": "@tanpopo-qa004-spoof/canary",
+        "enterprise_signed": false,
+        "execution_tier": "DECLARATIVE_T1",
+        "origin_trust_tier": "unverified_external",
+        "secret_slots": "[REDACTED]",
+        "version": "0.1.0"
+      }
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "writes": [
+    {
+      "status": 200,
+      "path": "/admin/v1/policies/pol_haj59dp84ns6r6vreh86dpwsew"
+    }
+  ],
+  "scope": "Default Organization / QA003 Empty Project DEF035 / No env",
+  "before": {
+    "project": {
+      "id": "prj_01m87y8xb6e00btm7gj98bjcc3",
+      "name": "QA003 Empty Project DEF035"
+    },
+    "status": 200,
+    "etag": "\"v1\"",
+    "policy": {
+      "id": "pol_haj59dp84ns6r6vreh86dpwsew",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m87y8xb6e00btm7gj98bjcc3",
+      "allowed_data_regions": [
+        "EU",
+        "US",
+        "APAC",
+        "ON_PREM"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 1
+    }
+  },
+  "policyScreen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, US, APAC, ON_PREM\tOrganization floor\nAllowed models\t*\tProject policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hooks\tNone attached\tProject policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy",
+  "apacChecked": true,
+  "afterSave": {
+    "status": 200,
+    "etag": "\"v1\"",
+    "policy": {
+      "id": "pol_haj59dp84ns6r6vreh86dpwsew",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m87y8xb6e00btm7gj98bjcc3",
+      "allowed_data_regions": [
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 1
+    },
+    "writes": [
+      {
+        "status": 200,
+        "path": "/admin/v1/policies/pol_haj59dp84ns6r6vreh86dpwsew"
+      }
+    ]
+  },
+  "afterNavigation": {
+    "status": 200,
+    "etag": "\"v1\"",
+    "scope_tier": "PROJECT",
+    "scope_id": "prj_01m87y8xb6e00btm7gj98bjcc3",
+    "allowed_data_regions": [
+      "EU",
+      "ON_PREM",
+      "US"
+    ],
+    "version": 1
+  }
+}

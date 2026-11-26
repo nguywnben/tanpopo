@@ -1,0 +1,24 @@
+{
+  "phase": 12,
+  "date": "2026-11-23",
+  "environment": "Retained isolated SQLite QA instance, browser origin https://127.0.0.1:8444",
+  "actor": "qa-owner@example.invalid (ORG_OWNER / Operator)",
+  "journey": [
+    {
+      "action": "Create second tenant organization via Operations → Organizations",
+      "name": "QA Boundary Organization",
+      "slug": "qa-boundary-org",
+      "api_status": 201,
+      "id": "org_01m83wyz0qe008ch01tnv1jht8"
+    },
+    {
+      "action": "Switch into second organization and inspect scope options",
+      "scope_title": "QA Boundary Organization / No project / No env",
+      "visible_projects": [],
+      "default_org_qa_project_visible": false
+    }
+  ],
+  "visual_evidence": ["phase12-org-create-form.png", "phase12-org-created.png", "phase12-second-org-scope.png"],
+  "qa_data_retained": true,
+  "limitations": "This validates tenant creation and UI data scoping under the global operator bootstrap owner. It does not establish cross-organization authorization denial for a non-operator principal. A direct reviewer-session probe is outstanding; the saved reviewer recovery password failed login and a supported local recovery path is being investigated. No crypto-shred action was invoked."
+}

@@ -1,0 +1,23 @@
+{
+  "recovery": {
+    "status": 200,
+    "body": "{\"choices\":[{\"finish_reason\":\"stop\",\"index\":0,\"message\":{\"content\":\"Hello from synthetic Ollama.\",\"role\":\"assistant\"}}],\"created\":1795650821,\"id\":\"chatcmpl-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion\",\"usage\":{\"completion_tokens\":4,\"prompt_tokens\":7,\"total_tokens\":11}}"
+  },
+  "state": {
+    "active_switches": 0,
+    "keys": [
+      {
+        "id": "vky_01m8ahvwnje00atwgawpv6xfqw",
+        "state": "REVOKED"
+      },
+      {
+        "id": "vky_01m8ahtc6ge009h2cgsm3z0wjs",
+        "state": "REVOKED"
+      },
+      {
+        "id": "vky_01m8ahkcf1e009mwkfhy3fhvek",
+        "state": "REVOKED"
+      }
+    ]
+  }
+}

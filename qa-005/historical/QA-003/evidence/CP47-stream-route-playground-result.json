@@ -1,0 +1,131 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "route_slug": "qa003-cp47-stream-route",
+  "stream_model": "qa003-mock-ollama-stream",
+  "responses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m87y8xb6e00btm7gj98bjcc3/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m87axgx7e008ehq1d016vqwt/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/routes",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/playground/sessions",
+      "status": 201
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces/trc_01m8863dkpe008mw5hqmnvjc8j",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces",
+      "status": 200
+    }
+  ],
+  "before": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nLive Playground\nSDK Snippets\nModel or route slug\nqa003-cp47-stream-route\nComparison model (optional)\nSession budget cap (micro-USD)\n\nNo turns yet. Send a prompt below to mint an ephemeral key and stream from /v1/chat/completions.\n\nPrompt\nSend",
+  "playground": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 2:01:08 AM\nEnd session\nLive Playground\nSDK Snippets\nModel or route slug\nqa003-cp47-stream-route\nComparison model (optional)\nYou\nReply with a brief acknowledgment.\nqa003-cp47-stream-route\nQA003 loopback mock reply\nPrompt\nSend\nExecution traces\nPrimary · trc_01m8863dkpe008mw5hqmnvjc8j\nroute qa003-cp47-stream-route · HTTP 200 · $0.000000 · 14 ms\nExact",
+  "traces": {
+    "status": 200,
+    "data": [
+      {
+        "route": "qa003-cp47-stream-route",
+        "error_code": null
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "capability_not_supported"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "capability_not_supported"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "capability_not_supported"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "capability_not_supported"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "no_compliant_deployment_available"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "no_compliant_deployment_available"
+      },
+      {
+        "route": "/v1/chat/completions",
+        "error_code": "no_compliant_deployment_available"
+      }
+    ]
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated SQLite service on 127.0.0.1:18084",
+  "browser": "Chromium 1440x900; real UI interactions; screenshots visually inspected",
+  "subscription": {
+    "create_status": 201,
+    "subscription_id": "whk_01m86c2jm5e00b8ewdy3qhkm07",
+    "receiver_origin": "https://webhook.site",
+    "event_types": ["kill_switch.triggered"],
+    "initial_state": "Enabled",
+    "visible_actions": [],
+    "authenticated_delete_status": 404,
+    "delete_error": "resource_not_found"
+  },
+  "synthetic_event": {
+    "project_id": "prj_01m868q2jte00abmhf75asqts3",
+    "project_freeze_preview": {
+      "organizations": 0,
+      "projects": 1,
+      "virtual_keys": 0,
+      "connections": 0
+    },
+    "trigger_status": 200,
+    "trigger_audit_seq": 379,
+    "clear_status": 200,
+    "clear_audit_seq": 382,
+    "active_switches_after_clear": 0
+  },
+  "delivery": {
+    "receiver_observed_requests": 0,
+    "queue_terminal_state": "DEAD_LETTER",
+    "attempt_count": 8,
+    "last_http_status": null,
+    "safe_error": "transport failure",
+    "hmac_signature_verified": false,
+    "classification": "BLOCKED by managed Cloud direct DNS/egress for the application process; not classified as a Tanpopo defect"
+  },
+  "network_evidence": {
+    "cloud_observations_current": true,
+    "cloud_network_policy": "unrestricted",
+    "cloud_network_policy_state": "enforced",
+    "application_guard_uses_ambient_proxy": false,
+    "direct_no_proxy_https_status": 0,
+    "direct_no_proxy_failure": "DNS resolution timed out",
+    "managed_shell_proxy_https_status": 200
+  },
+  "cleanup": {
+    "public_receiver_created": 201,
+    "public_receiver_deleted": 204,
+    "signing_secret_deleted_via_console": 204,
+    "sealed_receiver_url_credential_deleted_via_console": 204,
+    "subscription_and_dead_letter_cleanup": "one exact subscription and its one delivery row were removed transactionally from the isolated QA SQLite database after the supported API returned 404; audit records and the dispatched outbox event were retained",
+    "post_cleanup_subscription_rows": 0,
+    "post_cleanup_delivery_rows": 0,
+    "post_cleanup_test_vault_credentials": 0,
+    "post_cleanup_active_switches": 0
+  },
+  "audit": [
+    {"sequence": 371, "event": "webhook.registered", "target": "webhook_subscription"},
+    {"sequence": 379, "event": "kill_switch.triggered", "target": "emergency_kill_switch"},
+    {"sequence": 382, "event": "kill_switch.cleared", "target": "emergency_kill_switch"}
+  ],
+  "security_and_privacy": {
+    "external_receiver_token": "redacted and deleted",
+    "hmac_plaintext": "redacted and deleted",
+    "raw_payload_or_signature": "not retained",
+    "sensitive_logs_or_database": "not published"
+  },
+  "existing_defect_recurrence": {
+    "id": "DEF-020",
+    "observation": "after clear, page and API showed zero active switches while the global Kill Switch pill and Security navigation badge still showed one; fresh session reconciled"
+  }
+}

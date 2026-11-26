@@ -1,0 +1,59 @@
+{
+  "writes": [
+    {
+      "label": "B_current",
+      "ifMatch": "\"v2\"",
+      "status": 200,
+      "etag": "\"v3\""
+    },
+    {
+      "label": "A_stale",
+      "ifMatch": "\"v2\"",
+      "status": 409,
+      "etag": "\"v3\""
+    }
+  ],
+  "initialA": {
+    "status": 200,
+    "etag": "\"v2\"",
+    "version": 2,
+    "regions": [
+      "EU",
+      "ON_PREM"
+    ]
+  },
+  "initialB": {
+    "status": 200,
+    "etag": "\"v2\"",
+    "version": 2,
+    "regions": [
+      "EU",
+      "ON_PREM"
+    ]
+  },
+  "onpremBefore": true,
+  "Bscreen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nSaved Project policy.\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU\tProject floor\nAllowed models\t*\tProject policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hook",
+  "Bwrite": {
+    "label": "B_current",
+    "ifMatch": "\"v2\"",
+    "status": 200,
+    "etag": "\"v3\""
+  },
+  "AdraftBefore": "*",
+  "Ascreen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nresource version conflict: current revision is v3\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, ON_PREM\tProject floor\nAllowed models\t*\tProject policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hooks\tNone attached\tProject policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy\nOptimistic concurrency conflict (409)\nAnother administrator modified this resource. Your draft is preserved.\nYour draft\n{\n  \"id\": \"pol_haj59dp84ns6r6vreh86dpwsew\",\n  \"scope_tier\": \"PROJECT\",\n  \"scope_id\": \"prj_01m87y8xb6e00btm7gj98bjcc3\",\n  \"allowed_data_regions\": [\n    \"EU\",\n    \"ON_PREM\"\n  ],\n  \"min_plugin_trust\": \"ANY_APPROVED\",\n  \"min_capability_assurance\": \"DECLARED\",\n  \"version\": 2,\n  \"allowed_models\": [\n    \"qa003-stale-draft-model\"\n  ]\n}\nLatest server version\n{\n  \"id\": \"pol_haj59dp84ns6r6vreh86dpwsew\",\n  \"scope_tier\": \"PROJECT\",\n  \"scope_id\": \"prj_01m87y8xb6e00btm7gj98bjcc3\",\n  \"allowed_data_regions\": [\n    \"EU\"\n  ],\n  \"min_plugin_tr",
+  "AdraftAfter": "qa003-stale-draft-model",
+  "Awrite": {
+    "label": "A_stale",
+    "ifMatch": "\"v2\"",
+    "status": 409,
+    "etag": "\"v3\""
+  },
+  "final": {
+    "status": 200,
+    "etag": "\"v3\"",
+    "version": 3,
+    "regions": [
+      "EU"
+    ]
+  }
+}

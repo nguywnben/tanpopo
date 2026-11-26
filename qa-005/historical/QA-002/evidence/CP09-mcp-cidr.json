@@ -1,0 +1,10 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "journey": "Authenticated Chromium MCP Hub registration on isolated SQLite runtime",
+  "wildcard_submission": {"cidr": "0.0.0.0/0", "visible_error": "Private upstream access requires explicit non-wildcard CIDRs.", "mcp_server_post_count": 0},
+  "valid_submission": {"cidr": "127.0.0.1/32", "http_status": 201, "list_refresh_status": 200},
+  "persistent_row": {"id": "mcp_01m84zzq14e00bk2jrzpn6bq23", "slug": "qa002-mcp-cidr", "transport_kind": "STREAMABLE_HTTP", "endpoint_url": "http://127.0.0.1:19105/mcp", "allow_private_ip": true, "allowed_cidrs": ["127.0.0.1/32"], "status": "ACTIVE", "version": 1},
+  "result": "PARTIAL PASS",
+  "unverified": ["MCP streamable HTTP endpoint fixture", "server-side endpoint/CIDR gating", "tool sync", "schema pinning", "grants and invocation"],
+  "screenshots": ["CP09-mcp-cidr-wildcard.png", "CP09-mcp-cidr-valid.png", "CP09-mcp-cidr-persisted.png"]
+}

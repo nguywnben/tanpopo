@@ -1,0 +1,62 @@
+{
+  "checkpoint": "CP51",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "test": "organization budget enforcement through a project/environment-scoped Playground route",
+  "runtime": "isolated SQLite Tanpopo runtime on 127.0.0.1:18086 behind the local HTTPS proxy",
+  "target": {
+    "project": "QA002 CP43 Secondary Project",
+    "environment": "qa002-cp43-env2",
+    "route": "qa002-cp51-org-budget-stream-route",
+    "provider": "isolated Ollama-compatible loopback fixture",
+    "fixture_endpoint": "127.0.0.1:19180"
+  },
+  "setup": {
+    "provider_connection": "created in Console, then probe succeeded; persisted ACTIVE",
+    "logical_model": "created in Console with streaming declared",
+    "deployment": "created in Console; persisted ACTIVE_HEALTHY",
+    "route": "created in Console; displayed Healthy",
+    "initial_organization_hard_limit_micros": 1000000,
+    "fixture_calls_before_test": 0
+  },
+  "positive_control": {
+    "playground_result": "synthetic inference completed",
+    "http_status": 200,
+    "upstream_calls_after_positive": 1,
+    "settled_exact_micros": 2
+  },
+  "rejection": {
+    "temporary_organization_hard_limit_micros": 1,
+    "settled_exact_micros_at_rejection": 2,
+    "playground_result": "Playground inference failed (429).",
+    "http_status": 429,
+    "persisted_trace_error_code": "project_budget_exceeded",
+    "upstream_call_count_before": 1,
+    "upstream_call_count_after": 1,
+    "active_holds_after": 0
+  },
+  "recovery_and_cleanup": {
+    "organization_hard_limit_restored_micros": 1000000,
+    "temporary_playground_virtual_keys": 2,
+    "keys_revoked_in_console": true,
+    "database_key_states_after_cleanup": ["REVOKED", "REVOKED"],
+    "synthetic_fixture_stopped": true
+  },
+  "evidence_limits": [
+    "This verifies one project2/environment2 request under an organization ceiling; it does not verify simultaneous project, environment, and key caps.",
+    "The organization ceiling remains hidden in project-scoped FinOps (DEF-024); enforcement does not resolve the UI visibility defect.",
+    "Playground returned only a generic 429 while the trace retained the canonical budget error, extending DEF-019.",
+    "The successful Playground trace card again remained at Trace metadata pending (DEF-017).",
+    "No provider credentials or external Google service were used."
+  ],
+  "screenshots": [
+    "CP51-provider-probe-result.png",
+    "CP51-deployment-created.png",
+    "CP51-route-created.png",
+    "CP51-budget-positive-result.png",
+    "CP51-org-budget-lowered.png",
+    "CP51-budget-rejected-result.png",
+    "CP51-org-budget-restored.png",
+    "CP51-keys-before-revoke.png",
+    "CP51-keys-revoked.png"
+  ]
+}

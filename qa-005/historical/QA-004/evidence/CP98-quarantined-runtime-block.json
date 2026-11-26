@@ -1,0 +1,33 @@
+{
+  "runtime_port": 18124,
+  "scope": "QA004 Test Root Org / default / dev",
+  "attempt": {
+    "method": "POST",
+    "path": "/v1/responses",
+    "requested_stream": true,
+    "status": 503,
+    "error_code": "no_compliant_deployment_available",
+    "request_id": "req_01m8ar65h0e009d45qm993adtr",
+    "fixture_requests_before": 14,
+    "fixture_requests_after": 14,
+    "trace_usage_accuracy": "EXACT",
+    "trace_total_cost_micros": 0
+  },
+  "runtime_state": {
+    "kill_switch_id": "ksw_01m89r17cte00brrs519jxd47e",
+    "level": "EXTENSION_INSTALLATION",
+    "target_id": "ins_01m895ph2ge00a3evn7jxp86st",
+    "active": true,
+    "reason": "QA-004 adapter quarantine acceptance probe",
+    "abort_active_streams": true,
+    "target_installation_state": "QUARANTINED"
+  },
+  "temporary_test_key": {
+    "id": "vky_01m8ar2tfpe00bnzzj71ezz93m",
+    "name": "QA004 CP98 Responses stream",
+    "allowed_routes": ["/v1/responses"],
+    "state_after_cleanup": "REVOKED",
+    "version": 2
+  },
+  "disposition": "BLOCKED runtime: this is the intentional CP42 quarantine state, confirmed in the real Security UI and authenticated readback. The switch was left untouched. It is not evidence of a Responses API product failure. The same journey was completed on separate healthy runtime 18128."
+}

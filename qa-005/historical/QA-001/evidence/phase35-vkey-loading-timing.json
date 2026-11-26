@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-23",
+  "browser": "Chromium",
+  "runtime": "8081 HTTPS 8444",
+  "timeline": [
+    {
+      "elapsed": 0,
+      "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\n\nLoading Access & Keys…\n\nAll systems nominal No active operational alerts or pending remediation items."
+    },
+    {
+      "elapsed": 300,
+      "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\n3\nMembers & Roles\n4\nEnvironment Virtual Keys\n3\nName\tPrefix / Last 4\tState\tCreated\tActions\nqa-cp34-a2a-default-key\tvk_tp_qa-sandbox_…qgFK\tRevoked\tNov 23, 2026, 12:28:35 PM\t\nqa-cp33-a2a-default-key\tvk_tp_qa-sandbox_…04Hv\tRevoked\tNov 23, 2026, 12:27:51 PM\t\nqa-cp32-a2a-scope-boundary\tvk_tp_qa-sandbox_…B7ZN\tRevoked\tNov 23, 2026, 12:26:02 PM\t\nAll systems nominal No active operational alerts or pending remediation items."
+    },
+    {
+      "elapsed": 1000,
+      "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\n3\nMembers & Roles\n4\nEnvironment Virtual Keys\n3\nName\tPrefix / Last 4\tState\tCreated\tActions\nqa-cp34-a2a-default-key\tvk_tp_qa-sandbox_…qgFK\tRevoked\tNov 23, 2026, 12:28:35 PM\t\nqa-cp33-a2a-default-key\tvk_tp_qa-sandbox_…04Hv\tRevoked\tNov 23, 2026, 12:27:51 PM\t\nqa-cp32-a2a-scope-boundary\tvk_tp_qa-sandbox_…B7ZN\tRevoked\tNov 23, 2026, 12:26:02 PM\t\nAll systems nominal No active operational alerts or pending remediation items."
+    },
+    {
+      "elapsed": 2500,
+      "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\n3\nMembers & Roles\n4\nEnvironment Virtual Keys\n3\nName\tPrefix / Last 4\tState\tCreated\tActions\nqa-cp34-a2a-default-key\tvk_tp_qa-sandbox_…qgFK\tRevoked\tNov 23, 2026, 12:28:35 PM\t\nqa-cp33-a2a-default-key\tvk_tp_qa-sandbox_…04Hv\tRevoked\tNov 23, 2026, 12:27:51 PM\t\nqa-cp32-a2a-scope-boundary\tvk_tp_qa-sandbox_…B7ZN\tRevoked\tNov 23, 2026, 12:26:02 PM\t"
+    }
+  ],
+  "conclusion": "Access & Keys finished loading within sampled interval"
+}

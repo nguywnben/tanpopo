@@ -1,0 +1,117 @@
+{
+  "agents": {
+    "status": 200,
+    "request_id": null,
+    "items": [
+      {
+        "id": "agt_01m8987bbqe009959qp1mwgybg",
+        "agent_slug": "qa004-a2a-loopback",
+        "name": "QA004 Synthetic A2A Agent",
+        "data_region": "US",
+        "max_delegation_hops": 5
+      }
+    ]
+  },
+  "create": {
+    "status": 201,
+    "request_id": null,
+    "content_type": "application/json",
+    "body": {
+      "task_id": "tsk_01m898jwp1e009y0ma0b9h1wj4",
+      "target_agent_id": "agt_01m8987bbqe009959qp1mwgybg",
+      "target_agent_slug": "qa004-a2a-loopback",
+      "state": "input-required",
+      "prompt_message": "Please provide an account period.",
+      "hop_count": 1,
+      "call_chain_ids": [
+        "agt_01m8987bbqe009959qp1mwgybg"
+      ],
+      "trace_root_id": "trc_01m898jwp1e009y18zxwjs6pfd",
+      "enforced_region": "US",
+      "sub_budget_hold_micros": 0,
+      "version": 3,
+      "created_at": "2026-11-25T11:48:47.425Z",
+      "updated_at": "2026-11-25T11:48:47.429Z"
+    }
+  },
+  "inspect": {
+    "status": 200,
+    "request_id": null,
+    "content_type": "application/json",
+    "body": {
+      "task_id": "tsk_01m898jwp1e009y0ma0b9h1wj4",
+      "target_agent_id": "agt_01m8987bbqe009959qp1mwgybg",
+      "target_agent_slug": "qa004-a2a-loopback",
+      "state": "input-required",
+      "prompt_message": "Please provide an account period.",
+      "hop_count": 1,
+      "call_chain_ids": [
+        "agt_01m8987bbqe009959qp1mwgybg"
+      ],
+      "trace_root_id": "trc_01m898jwp1e009y18zxwjs6pfd",
+      "enforced_region": "US",
+      "sub_budget_hold_micros": 0,
+      "version": 3,
+      "created_at": "2026-11-25T11:48:47.425Z",
+      "updated_at": "2026-11-25T11:48:47.429Z"
+    }
+  },
+  "resume": {
+    "status": 200,
+    "request_id": null,
+    "content_type": "application/json",
+    "body": {
+      "task_id": "tsk_01m898jwp1e009y0ma0b9h1wj4",
+      "target_agent_id": "agt_01m8987bbqe009959qp1mwgybg",
+      "target_agent_slug": "qa004-a2a-loopback",
+      "state": "completed",
+      "hop_count": 1,
+      "call_chain_ids": [
+        "agt_01m8987bbqe009959qp1mwgybg"
+      ],
+      "trace_root_id": "trc_01m898jwp1e009y18zxwjs6pfd",
+      "enforced_region": "US",
+      "sub_budget_hold_micros": 0,
+      "artifacts": [
+        {
+          "content": "synthetic-complete",
+          "mime_type": "text/plain",
+          "name": "qa004-result"
+        }
+      ],
+      "version": 5,
+      "created_at": "2026-11-25T11:48:47.425Z",
+      "updated_at": "2026-11-25T11:48:47.435Z",
+      "completed_at": "2026-11-25T11:48:47.435Z"
+    }
+  },
+  "final": {
+    "status": 200,
+    "request_id": null,
+    "content_type": "application/json",
+    "body": {
+      "task_id": "tsk_01m898jwp1e009y0ma0b9h1wj4",
+      "target_agent_id": "agt_01m8987bbqe009959qp1mwgybg",
+      "target_agent_slug": "qa004-a2a-loopback",
+      "state": "completed",
+      "hop_count": 1,
+      "call_chain_ids": [
+        "agt_01m8987bbqe009959qp1mwgybg"
+      ],
+      "trace_root_id": "trc_01m898jwp1e009y18zxwjs6pfd",
+      "enforced_region": "US",
+      "sub_budget_hold_micros": 0,
+      "artifacts": [
+        {
+          "content": "synthetic-complete",
+          "mime_type": "text/plain",
+          "name": "qa004-result"
+        }
+      ],
+      "version": 5,
+      "created_at": "2026-11-25T11:48:47.425Z",
+      "updated_at": "2026-11-25T11:48:47.435Z",
+      "completed_at": "2026-11-25T11:48:47.435Z"
+    }
+  }
+}

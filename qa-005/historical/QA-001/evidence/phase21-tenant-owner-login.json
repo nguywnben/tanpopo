@@ -1,0 +1,19 @@
+{
+  "browser": "Chromium Playwright 1.62",
+  "expected_role": "ORG_OWNER in qa-boundary-org; no Operator binding granted",
+  "url": "https://127.0.0.1:8444/overview",
+  "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nqa-boundary-owner@example.invalid\nOrg Owner\nNo project\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOverview\n\nLive gateway posture and remediation queue.\n\n1h\n24h\n7d\n30d\nRefresh\nActive alerts\n0",
+  "responses": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    }
+  ],
+  "screenshot": "/workspace/tanpopo/qa/evidence/phase21-tenant-owner-session.png"
+}

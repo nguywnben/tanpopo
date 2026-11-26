@@ -1,0 +1,35 @@
+{
+  "checkpoint": "CP29",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated exact-source SQLite clone at 127.0.0.1:18148; TANPOPO_A2A_ENABLED=true",
+  "browser": "Chromium with Playwright, 1440x1000",
+  "upstream": {
+    "endpoint": "http://127.0.0.1:19095/a2a",
+    "network_scope": "loopback only, authorized CIDR 127.0.0.1/32",
+    "response": {"http_status": 200, "state": "working"}
+  },
+  "agent": {"id": "agt_01m8cstmzne009f7h9tsr6f3jy", "slug": "qa005-working-state", "state": "active"},
+  "key": {"name": "QA005 DEF067 working-response A2A-only", "allowed_planes": ["A2A"], "allowed_routes": ["/a2a/*"], "secret_included": false, "post_test_state": "revoked through Console"},
+  "task": {
+    "id": "tsk_01m8csvekee00bctyc55f56v76",
+    "create_http_status": 201,
+    "created_state": "working",
+    "created_version": 2,
+    "console_state": "Working row and Cancel action visible",
+    "cancel_http_status": 200,
+    "final_state": "canceled",
+    "hold_micros": 0,
+    "settled_cost_micros": 0
+  },
+  "audit_verification": {"audit_chain_valid": true, "events_verified": 265, "orphans_reconciled": 0},
+  "classification": "PASS scoped for DEF-067 synchronous upstream working response acceptance; async continuation and other response modes remain unverified.",
+  "screenshots": [
+    "screenshots/CP29-working-agent-form.png",
+    "screenshots/CP29-working-agent-registered.png",
+    "screenshots/CP29-working-task-inventory.png",
+    "screenshots/CP29-working-task-canceled.png",
+    "screenshots/CP29-working-key-revoked.png"
+  ],
+  "limitations": ["One synthetic local endpoint", "No real continuation or asynchronous worker was attached", "Zero-cost task only", "DEF-069 downstream cancellation remains FAIL under CP28"]
+}

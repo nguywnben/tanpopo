@@ -1,0 +1,38 @@
+{
+  "clientRequest": {
+    "http_status": 200,
+    "content_type": "text/event-stream",
+    "request_id": "req_01m89nfp98e008wxe2c7e921x1",
+    "first_chunk_received": true,
+    "client_abort": "AbortController.abort after first chunk",
+    "elapsed_to_first_chunk_ms": 15
+  },
+  "upstream": {
+    "fixture": "loopback synthetic SSE responder; original mock restored after test",
+    "path": "/v1/chat/completions",
+    "started": true,
+    "provider_received_authorization_header": false,
+    "outcome": "client_disconnected",
+    "chunks_sent_before_disconnect": 2
+  },
+  "trace": {
+    "request_id": "trc_01m89nfp99e00bbbk7n8ze6gsm",
+    "status_code": 200,
+    "error_code": "mid_stream_abort",
+    "usage_accuracy": "EXACT",
+    "total_cost_micros": 0,
+    "duration_ms": 14
+  },
+  "keyState": {
+    "state": "REVOKED",
+    "version": 2
+  },
+  "postRevokeReplay": "not repeated; one-time secret removed after UI revocation",
+  "finops": {
+    "exact_micro_usd": 0,
+    "estimated_micro_usd": 1,
+    "exact_request_count": 0,
+    "estimated_request_count": 1,
+    "unmetered_request_count": 0
+  }
+}

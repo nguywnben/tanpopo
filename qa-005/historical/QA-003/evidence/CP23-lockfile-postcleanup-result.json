@@ -1,0 +1,22 @@
+{
+  "before": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\ntanpopo.lock\nRefresh lockfile\ntanpopo.lock\n{\n  \"lockfileVersion\": 1,\n  \"generatedAt\": \"2026-11-24T22:41:35Z\",\n  \"extensions\": {}\n}",
+  "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\ntanpopo.lock\nRefresh lockfile\ntanpopo.lock\n{\n  \"lockfileVersion\": 1,\n  \"generatedAt\": \"2026-11-24T22:41:35Z\",\n  \"extensions\": {}\n}",
+  "rows": [],
+  "events": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/extensions/installations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/extensions/lockfile",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/extensions/lockfile",
+      "status": 200
+    }
+  ]
+}

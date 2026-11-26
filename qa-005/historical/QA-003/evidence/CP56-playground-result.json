@@ -1,0 +1,20 @@
+{
+  "requests": [
+    {
+      "method": "POST",
+      "status": 200,
+      "request_id": null
+    }
+  ],
+  "screen": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 3:18:59 AM\nEnd session\nLive Playground\nSDK Snippets\nModel or route slug\nqa003-cp56-route\nComparison model (optional)\nYou\nReply with a short confirmation that the local test route works.\nqa003-cp56-route\nCP56 local mock reply\nPrompt\nSend\nExecution traces\nPrimary · trc_01m88ahyb9e00801nmjpgqp5tq\nroute qa003-cp56-route · HTTP 200 · $0.000000 · 17 ms\nExact",
+  "traces": {
+    "status": 200,
+    "rows": [
+      {
+        "route_slug": "qa003-cp56-route",
+        "status_code": 200,
+        "request_id": "trc_01m88ahyb9e00801nmjpgqp5tq"
+      }
+    ]
+  }
+}

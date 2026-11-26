@@ -1,0 +1,12 @@
+{
+  "keyState": {
+    "id": "vky_01m89pzc3be00bv1xs8bf1hre2",
+    "name": "QA004 embeddings scoped synthetic",
+    "state": "REVOKED",
+    "version": 2
+  },
+  "postRevokeReplay": {
+    "status": 401,
+    "error": "invalid_virtual_key"
+  }
+}

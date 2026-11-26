@@ -1,0 +1,84 @@
+{
+  "checkpoint": "CP122",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "127.0.0.1:18128",
+  "scope": "QA004 Test Root Org / default / dev",
+  "project_budget_before": {
+    "scope_tier": "PROJECT",
+    "scope_id": "prj_01m895k8pee008b440xk2ef12p",
+    "period": "MONTHLY",
+    "hard_limit_micros": 100,
+    "settled_exact_micros": 36,
+    "settled_estimated_micros": 14,
+    "reserved_hold_micros": 0,
+    "remaining_before_request_micros": 50
+  },
+  "deployment_rate_card": {
+    "deployment_id": "dpl_01m8b5ke10e00ayywg90zeryye",
+    "state": "ACTIVE_HEALTHY",
+    "input_token_nano_usd": 0,
+    "output_token_nano_usd": 0,
+    "image_unit_nano_usd": 1000000,
+    "self_hosted_zero_rate": false
+  },
+  "expected_budget_decision": {
+    "image_count": 2,
+    "image_cost_micro_usd": 2000,
+    "estimated_prior_use_micro_usd": 50,
+    "hard_limit_micro_usd": 100,
+    "expected_before_egress": "HTTP 429 project_budget_exceeded"
+  },
+  "actual_request": {
+    "method": "POST",
+    "path": "/native/ollama/api/chat",
+    "model": "qa004-cp121-priced-vision",
+    "vkey_id": "vky_01m8b665gge0095teppze5gbad",
+    "http_status": 200,
+    "error_code": null,
+    "provider_fixture_dispatched": true,
+    "fixture_image_count": 2,
+    "fixture_image_sha256_ordered": [
+      "b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640",
+      "9d9e18e597b11d30abba0dcc7f27ca50b050fe431596f06da7d6f9524208cc00"
+    ],
+    "fixture_authorization_header_present": false,
+    "prompt_or_image_bytes_stored": false
+  },
+  "persistent_trace": {
+    "http_status": 200,
+    "request_id": "trc_01m8b6669re00bqvd07kjbfg7a",
+    "status_code": 200,
+    "error_code": null,
+    "usage_accuracy": "EXACT",
+    "total_cost_micros": 0
+  },
+  "persistent_chargeback": {
+    "endpoint": "/admin/v1/usage/summary?group_by=key",
+    "http_status": 200,
+    "group_key": "QA004 CP122 Image Budget Boundary",
+    "exact_micro_usd": 0,
+    "estimated_micro_usd": 0,
+    "exact_request_count": 0,
+    "estimated_request_count": 1,
+    "unmetered_request_count": 0
+  },
+  "project_budget_after": {
+    "hard_limit_micros": 100,
+    "settled_exact_micros": 36,
+    "settled_estimated_micros": 14,
+    "reserved_hold_micros": 0,
+    "version": 142
+  },
+  "test_key_after_cleanup": {
+    "id": "vky_01m8b665gge0095teppze5gbad",
+    "state": "REVOKED",
+    "version": 2
+  },
+  "original_fixture_restored": true,
+  "status": {
+    "budget_boundary": "FAIL",
+    "extends_defect": "DEF-074",
+    "new_defect_created": false,
+    "release_gate": "BLOCKED"
+  }
+}

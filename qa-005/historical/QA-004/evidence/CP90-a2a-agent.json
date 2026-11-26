@@ -1,0 +1,23 @@
+{
+  "status": 201,
+  "response": {
+    "agent_id": "agt_01m8amh0jje00avb1w5j0f2p3v",
+    "agent_slug": "qa004-cp90-inputcancel",
+    "name": "QA004 CP90 Input Required Cancel",
+    "endpoint_url": "http://127.0.0.1:18135",
+    "data_region": "US",
+    "max_delegation_hops": 5,
+    "skills": [],
+    "status": "ACTIVE",
+    "project_id": "prj_01m89cf7vce008saenf6dyw8gk",
+    "version": 1
+  },
+  "readback": [
+    {
+      "slug": "qa004-cp90-inputcancel",
+      "name": "QA004 CP90 Input Required Cancel",
+      "endpoint_url": "http://127.0.0.1:18135",
+      "status": "ACTIVE"
+    }
+  ]
+}

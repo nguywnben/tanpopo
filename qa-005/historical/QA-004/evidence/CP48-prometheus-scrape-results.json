@@ -1,0 +1,53 @@
+{
+  "checkpoint": "CP48",
+  "baseline": {
+    "source_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+    "artifact_run": "45581179274",
+    "executable_sha256": "9a62f8844a85aa1fd3fd9be22365b04e9ce655a470fbe9de670e19678644d34b"
+  },
+  "runtime": {
+    "listen": "127.0.0.1:18132",
+    "readyz": 200,
+    "environment_probes_set": [
+      "TANPOPO_METRICS_SCRAPE_TOKEN",
+      "TANPOPO_METRICS_INCLUDE_TENANT_LABELS"
+    ],
+    "synthetic_token_value": "not retained; test-only canary"
+  },
+  "browser_interactions": [
+    {
+      "request": "GET http://127.0.0.1:18132/metrics",
+      "status": 401,
+      "error_code": "unauthorized",
+      "body": "Missing or invalid internal metrics scrape token.",
+      "screenshot": "CP48-metrics-no-auth.png"
+    },
+    {
+      "request": "GET /metrics with Bearer token matching the candidate environment value",
+      "status": 401,
+      "error_code": "unauthorized",
+      "body": "Missing or invalid internal metrics scrape token.",
+      "screenshot": "CP48-metrics-with-candidate-token.png"
+    },
+    {
+      "request": "GET http://127.0.0.1:9090/metrics",
+      "result": "connection refused"
+    }
+  ],
+  "listener_snapshot": [
+    "127.0.0.1:18132"
+  ],
+  "source_observation": {
+    "serve_pipeline_config": "ServiceName, ServiceVersion, DB, Vault only",
+    "metrics_scrape_token_runtime_wiring": "not found",
+    "tenant_label_toggle_runtime_wiring": "not found",
+    "serve_listener_count": "one listener constructed from the --listen address"
+  },
+  "classification": {
+    "prometheus_metrics_scrape_operability": "FAIL — no supported runtime path configures a scrape token; scrape remains unauthorized",
+    "unauthenticated_access_control": "PASS scoped — unauthenticated and candidate bearer requests were both rejected",
+    "documented_internal_9090_listener": "FAIL — no listener is created on port 9090 in this serve process",
+    "product_source_modified": false,
+    "release_gate": "BLOCKED"
+  }
+}

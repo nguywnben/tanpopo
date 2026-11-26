@@ -1,0 +1,12 @@
+{
+  "state": {
+    "id": "vky_01m8ajdabne00bk7ysr6cwfzh3",
+    "state": "REVOKED",
+    "version": 2
+  },
+  "replay": {
+    "status": 401,
+    "body": "{\"error\":{\"code\":\"invalid_virtual_key\",\"message\":\"Virtual Key is invalid, expired, or revoked.\",\"request_id\":\"req_01m8ajh1d3e00827kd2nzasmqk\",\"retryable\":false,\"type\":\"authentication_error\"}}\n"
+  },
+  "fixture_calls": 1
+}

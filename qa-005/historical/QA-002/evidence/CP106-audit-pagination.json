@@ -1,0 +1,49 @@
+{
+  "runtime": 18084,
+  "screen": "Security > Audit Log",
+  "before": {
+    "rows": 100,
+    "first": "#512\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t",
+    "last": "#413\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t",
+    "load_older_visible": true
+  },
+  "after": {
+    "rows": 200,
+    "first": "#512\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t",
+    "last": "#313\tauth.login_succeeded\tprc_01m84xhbtwe00939kr14qg3khv\t\nprincipal\nprc_01m84xhbtwe00939kr14qg3khv\n\t",
+    "first_20_sequences": [
+      "#512",
+      "#511",
+      "#510",
+      "#509",
+      "#508",
+      "#507",
+      "#506",
+      "#505",
+      "#504",
+      "#503",
+      "#502",
+      "#501",
+      "#500",
+      "#499",
+      "#498",
+      "#497",
+      "#496",
+      "#495",
+      "#494",
+      "#493"
+    ]
+  },
+  "requests": [
+    {
+      "status": 200,
+      "url": "/admin/v1/audit-events?limit=100"
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/audit-events?limit=100&cursor=[redacted]",
+      "cursor_present": true
+    }
+  ],
+  "screen_excerpt": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n100\nSeq\tAction\tActor\tTarget\tTime\tDe"
+}

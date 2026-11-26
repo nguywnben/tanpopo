@@ -1,0 +1,18 @@
+{
+  "connection": {
+    "id": "con_01m896465xe008d8daqh65qzth",
+    "state": "CREATED_UNVERIFIED",
+    "adapter_id": "adp_01m8960jy4e008j1wpkkzr227t",
+    "billing_mode": "SELF_HOSTED_INFRA",
+    "data_region": "ON_PREM",
+    "allow_private_ip": true
+  },
+  "probe": {
+    "status": 200,
+    "valid": true,
+    "latency_ms": 13,
+    "detected_model_ids": [
+      "qa004-mock"
+    ]
+  }
+}

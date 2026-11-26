@@ -1,0 +1,88 @@
+{
+  "org": {
+    "id": "org_01m84a02k8e0091h6t66rebp8x",
+    "slug": "qa-fresh-install-cp38"
+  },
+  "project": {
+    "id": "prj_01m84a02k8e0091jx1bkwtm5xf",
+    "slug": "qa-fresh-project"
+  },
+  "environment": {
+    "id": "env_01m84a02k8e0091k6z8ps0q7g8",
+    "slug": "dev"
+  },
+  "auditRowsGrouped": [
+    {
+      "event_type": "auth.login_succeeded",
+      "target_type": "principal",
+      "target_id": "prc_01m84a02k8e0091m2kg2887b3z",
+      "n": 38
+    },
+    {
+      "event_type": "extension.permissions_approved",
+      "target_type": "extension_installation",
+      "target_id": "ins_01m84aevxxe008wndmpxys2h8x",
+      "n": 1
+    },
+    {
+      "event_type": "extension.staged_pending_approval",
+      "target_type": "extension_installation",
+      "target_id": "ins_01m84aevxxe008wndmpxys2h8x",
+      "n": 1
+    },
+    {
+      "event_type": "logical_model.created",
+      "target_type": "logical_model",
+      "target_id": "lmd_01m84bgkere00bvjpk46c3zggb",
+      "n": 1
+    },
+    {
+      "event_type": "model_deployment.created",
+      "target_type": "model_deployment",
+      "target_id": "dpl_01m84bjaxbe00ba9jn5h5rv911",
+      "n": 1
+    },
+    {
+      "event_type": "provider_connection.api_created",
+      "target_type": "provider_connection",
+      "target_id": "con_01m84b9s7qe00acksx2d4fsm3v",
+      "n": 1
+    },
+    {
+      "event_type": "provider_connection.created",
+      "target_type": "provider_connection",
+      "target_id": "con_01m84b9s7qe00acksx2d4fsm3v",
+      "n": 1
+    },
+    {
+      "event_type": "provider_connection.state_transition",
+      "target_type": "provider_connection",
+      "target_id": "con_01m84b9s7qe00acksx2d4fsm3v",
+      "n": 2
+    },
+    {
+      "event_type": "provider_connection.tested",
+      "target_type": "provider_connection",
+      "target_id": "con_01m84b9s7qe00acksx2d4fsm3v",
+      "n": 1
+    },
+    {
+      "event_type": "route.created",
+      "target_type": "route_policy",
+      "target_id": "rte_01m84bn08je008stc6cygymwef",
+      "n": 1
+    },
+    {
+      "event_type": "virtual_key.created",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m84bryjze009yqmgztptnnhj",
+      "n": 1
+    }
+  ],
+  "provisioningEvents": [],
+  "auditContractEvidence": {
+    "srs": "TP-IMP-0024 AC-1 requires each provisioning mutation to record a complete entry in audit_events",
+    "screenSpec": "SCR-08 / Access & Keys explicitly lists project.created and environment.created audit events",
+    "existingOwnerAndKeyEventsPresent": 49
+  }
+}

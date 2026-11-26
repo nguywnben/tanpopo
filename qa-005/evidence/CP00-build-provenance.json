@@ -1,0 +1,35 @@
+{
+  "repository": "https://github.com/nguywnben/tanpopo.git",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "source_tree": "aa585395ed7684b21ab7c6aa3fda190225322ad6",
+  "git_status": "clean before QA-005 documentation was added",
+  "source_refs_observed": {
+    "main": "737079ddb847d97dbcf832f610ed0048556cb65b",
+    "develop": "737079ddb847d97dbcf832f610ed0048556cb65b",
+    "signing/rc7-owner-manifest": "7503607c2188e7a314d355864e813960244f6c15"
+  },
+  "qa_branch": "qa/qa-005-baseline-stabilization",
+  "builder": {
+    "os": "linux",
+    "arch": "amd64",
+    "go_version": "go1.26.11",
+    "go_archive_sha256": "9849f4e04ee35303714e34fbc3ac8ab44ea3e448a95aa182f91e3b9b79c710ec",
+    "go_archive_source": "https://go.dev/dl/go1.26.11.linux-amd64.tar.gz",
+    "command": "go build -trimpath -o /tmp/qa005-bin/tanpopo ./cmd/tanpopo",
+    "CGO_ENABLED": "1"
+  },
+  "binary": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "reported_version": "0.1.0-dev",
+    "embedded_commit": "none",
+    "build_date": "unknown",
+    "go_build_vcs_revision": "737079ddb847d97dbcf832f610ed0048556cb65b",
+    "go_build_vcs_time": "2026-11-26T16:18:33Z",
+    "go_build_vcs_modified": false
+  },
+  "official_release_signatures": 0,
+  "paid_provider_usage_authorized": false,
+  "production_private_key_accessed": false,
+  "release_artifact": "not yet independently fetched or verified"
+}

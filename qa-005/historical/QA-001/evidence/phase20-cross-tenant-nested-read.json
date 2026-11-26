@@ -1,0 +1,39 @@
+{
+  "browser": "Chromium Playwright 1.62",
+  "principal": "QA Developer + Team Admin; no Operator",
+  "test": "Read environment subcollection for each bound-org project using own vs alternate organization scope; IDs/rows omitted",
+  "results": [
+    {
+      "resource": "project.environments",
+      "project_id_retained": false,
+      "scope": "bound",
+      "status": 200,
+      "error_code": null,
+      "count": 1
+    },
+    {
+      "resource": "project.environments",
+      "project_id_retained": false,
+      "scope": "other",
+      "status": 404,
+      "error_code": "resource_not_found",
+      "count": null
+    },
+    {
+      "resource": "project.environments",
+      "project_id_retained": false,
+      "scope": "bound",
+      "status": 200,
+      "error_code": null,
+      "count": 1
+    },
+    {
+      "resource": "project.environments",
+      "project_id_retained": false,
+      "scope": "other",
+      "status": 404,
+      "error_code": "resource_not_found",
+      "count": null
+    }
+  ]
+}

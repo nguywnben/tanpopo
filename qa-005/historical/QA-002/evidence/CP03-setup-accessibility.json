@@ -1,0 +1,41 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated A2A-enabled SQLite runtime on 127.0.0.1:18084",
+  "browser": "Chromium via Playwright, 1440x1000",
+  "journey": [
+    "Opened fresh /setup",
+    "Completed owner/org/project form with synthetic QA account",
+    "Skipped provider setup because no adapter is active",
+    "Advanced through master-key custody acknowledgement",
+    "Reviewed account, organization, project, and skipped connection",
+    "Completed bootstrap and verified initialized status from API"
+  ],
+  "axe": {
+    "version": "2.2",
+    "steps": {
+      "owner-account": {"violations": 0, "passes": 29, "incomplete": 0},
+      "first-connection": {"violations": 0, "passes": 26, "incomplete": 0},
+      "key-custody": {"violations": 0, "passes": 28, "incomplete": 0},
+      "review": {"violations": 0, "passes": 28, "incomplete": 0}
+    }
+  },
+  "behavior": {
+    "progress_control_aria_labels_include_visible_step_text": true,
+    "custody_acknowledgement_blocks_continue_when_unchecked": true,
+    "bootstrap_status_initialized": true,
+    "complete_http_status": 201,
+    "browser_console_or_page_errors": []
+  },
+  "screenshots_visually_inspected": [
+    "CP03-setup-step1.png",
+    "CP03-setup-step2.png",
+    "CP03-setup-step3.png",
+    "CP03-setup-step4-review.png"
+  ],
+  "limitations": [
+    "Only Chromium and desktop viewport were checked in this phase.",
+    "Historical QA-001 Vitest failures were on the previous baseline; they were not inherited as a QA-002 failure. Current baseline's full Console test suite passed CP02, and live accessibility scans passed all wizard steps.",
+    "This does not cover all setup locales, mobile layouts, keyboard/screen-reader interaction, or other shared progress components."
+  ],
+  "classification": "DEF-001 original symptom not reproduced on this baseline in the tested setup states; mark VERIFIED FIXED for this scoped fresh-setup path, with cross-browser and shared-component coverage still open."
+}

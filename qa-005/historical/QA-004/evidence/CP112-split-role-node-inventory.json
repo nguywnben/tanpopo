@@ -1,0 +1,38 @@
+{
+  "runtimeRoles": {
+    "controlPlane": {
+      "port": 18135,
+      "ready": 200
+    },
+    "dataPlane": {
+      "port": 18136,
+      "ready": 200,
+      "unauthNative": {
+        "status": 401,
+        "body": "{\"error\":{\"code\":\"invalid_virtual_key\",\"type\":\"authentication_error\",\"message\":\"Missing or malformed Bearer Virtual Key.\",\"request_id\":\"req_01m8azqmjge009xsae0bk98171\",\"retryable\":"
+      },
+      "adminEndpoint": {
+        "status": 404,
+        "body": "404 page not found\n"
+      }
+    }
+  },
+  "controlPlaneClusterStatus": {
+    "http": 200,
+    "json": {
+      "backup_supported": false,
+      "backup_unavailable_reason": "Console snapshot backups currently support SQLite storage only; use PostgreSQL backup tooling for PostgreSQL deployments",
+      "current_epoch": 9,
+      "nodes": [
+        {
+          "config_epoch": 9,
+          "health": "ok",
+          "id": "primary",
+          "wal_bytes": 0
+        }
+      ],
+      "storage_engine": "postgres"
+    }
+  },
+  "realConsole": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nReadiness (/readyz)\nReady\nServing traffic\nConfig epoch\n9\nCopy-on-write snapshot\nSnapshot age\n—\nLast config refresh\nStorage engine\npostgres\nActive persistence backend\nCluster nodes\n1\nNode ID\tConfig epoch\tSnapshot age\tHealth\nprimary\t9\t0 ms\tOK"
+}

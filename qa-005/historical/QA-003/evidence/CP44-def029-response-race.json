@@ -1,0 +1,75 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "heldReads": [
+    {
+      "status": 200,
+      "scoped": {
+        "project_id": true,
+        "env_id": true
+      },
+      "count": 10,
+      "rows": [
+        {
+          "name": "QA003 CP44 active race fixture 3",
+          "state": "CREATED_ACTIVE"
+        },
+        {
+          "name": "QA003 CP44 active race fixture 2",
+          "state": "CREATED_ACTIVE"
+        },
+        {
+          "name": "QA003 CP44 active race fixture 1",
+          "state": "CREATED_ACTIVE"
+        },
+        {
+          "name": "Playground session",
+          "state": "CREATED_ACTIVE"
+        },
+        {
+          "name": "Playground session",
+          "state": "CREATED_ACTIVE"
+        },
+        {
+          "name": "Playground session",
+          "state": "CREATED_ACTIVE"
+        },
+        {
+          "name": "Playground session",
+          "state": "CREATED_ACTIVE"
+        },
+        {
+          "name": "Playground session",
+          "state": "CREATED_ACTIVE"
+        },
+        {
+          "name": "CP20 reviewer emergency revoke test",
+          "state": "REVOKED"
+        },
+        {
+          "name": "CP20 reviewer revoke canary",
+          "state": "REVOKED"
+        }
+      ]
+    }
+  ],
+  "transitions": [
+    {
+      "point": "request held in default/dev",
+      "scope": "Default Organization / default / dev",
+      "visibleRows": 0,
+      "mainText": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\nEnvironment Virtual Keys\n0"
+    },
+    {
+      "point": "new scope rendered before response release",
+      "scope": "Default Organization / No project / No env",
+      "visibleRows": 0,
+      "mainText": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\n18\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic."
+    },
+    {
+      "point": "old response released and UI settled",
+      "scope": "Default Organization / No project / No env",
+      "visibleRows": 0,
+      "mainText": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\n18\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic."
+    }
+  ]
+}

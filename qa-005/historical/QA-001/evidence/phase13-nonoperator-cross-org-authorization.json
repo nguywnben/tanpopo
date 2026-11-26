@@ -1,0 +1,30 @@
+{
+  "phase": 13,
+  "date": "2026-11-23",
+  "environment": "Isolated SQLite instance, real Chromium, HTTPS loopback origin",
+  "principal": {
+    "email": "qa-boundary-probe@example.invalid",
+    "kind": "HUMAN_LOCAL",
+    "roles": ["DEVELOPER", "TEAM_ADMIN"],
+    "operator_role": false,
+    "organization_binding": "org_01m83pdexwe008wpstrpvn9r4m"
+  },
+  "probes": [
+    {
+      "request": "GET /admin/v1/projects?limit=100",
+      "header": "X-Tanpopo-Org-ID: org_01m83pdexwe008wpstrpvn9r4m",
+      "status": 200,
+      "project_count": 2
+    },
+    {
+      "request": "GET /admin/v1/projects?limit=100",
+      "header": "X-Tanpopo-Org-ID: org_01m83wyz0qe008ch01tnv1jht8",
+      "status": 404,
+      "response_code": "resource_not_found",
+      "response_message": "the requested resource was not found"
+    }
+  ],
+  "visual_evidence": ["phase13-boundary-probe-team-admin.png", "phase13-team-admin-session.png"],
+  "conclusion": "A non-operator with an organization binding can list projects in that organization, while a request targeting a different organization receives a generic 404 and discloses no target data.",
+  "limitations": "This is one GET route and one principal/role combination. It does not cover write routes, pagination/cursors, other roles, resource IDs across orgs, or concurrent scope changes. No product data was changed by the probes."
+}

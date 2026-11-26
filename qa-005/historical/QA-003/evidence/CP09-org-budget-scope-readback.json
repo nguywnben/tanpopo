@@ -1,0 +1,117 @@
+{
+  "meta": {
+    "organizations": [
+      {
+        "id": "org_01m87axgx7e008eg6c8zvy7h5b",
+        "name": "Default Organization"
+      }
+    ],
+    "projects": [
+      {
+        "id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "name": "default",
+        "slug": "default"
+      }
+    ],
+    "all": {
+      "status": 200,
+      "data": [
+        {
+          "id": "bgt_organization_org_01m87axgx7e008eg6c8zvy7h5b_monthly",
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "hard_limit_micros": 20000000,
+          "period": "MONTHLY",
+          "version": 1
+        },
+        {
+          "id": "bgt_project_prj_01m87axgx7e008ehq1d016vqwt_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "hard_limit_micros": 2500000,
+          "period": "MONTHLY",
+          "version": 1
+        }
+      ]
+    }
+  },
+  "projectId": "prj_01m87axgx7e008ehq1d016vqwt",
+  "scoped": {
+    "status": 200,
+    "data": [
+      {
+        "id": "bgt_organization_org_01m87axgx7e008eg6c8zvy7h5b_monthly",
+        "scope_tier": "ORGANIZATION",
+        "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+        "hard_limit_micros": 20000000,
+        "period": "MONTHLY",
+        "version": 1
+      },
+      {
+        "id": "bgt_project_prj_01m87axgx7e008ehq1d016vqwt_monthly",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "hard_limit_micros": 2500000,
+        "period": "MONTHLY",
+        "version": 1
+      }
+    ]
+  },
+  "visible": " & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa003-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nFinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n2\nChargeback\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n2\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nORGANIZATION\norg_01m87axgx7e008eg6c8zvy7h5b\n\tMonthly\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for ORGANIZATION org_01m87axgx7e008eg6c8zvy7h5b\nSave\n\n\nPROJECT\nprj_01m87axgx7e008ehq1d016vqwt\n\tMonthly\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m87axgx7e008ehq1d016vqwt\nSave",
+  "requests": [
+    {
+      "url": "/admin/v1/budgets?project_id=prj_01m87axgx7e008ehq1d016vqwt&include_ancestors=true&limit=100",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "limit": 20000000,
+          "period": "MONTHLY"
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "limit": 2500000,
+          "period": "MONTHLY"
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/budgets?limit=100",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "limit": 20000000,
+          "period": "MONTHLY"
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "limit": 2500000,
+          "period": "MONTHLY"
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/budgets?project_id=prj_01m87axgx7e008ehq1d016vqwt&include_ancestors=true&limit=100",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "limit": 20000000,
+          "period": "MONTHLY"
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "limit": 2500000,
+          "period": "MONTHLY"
+        }
+      ]
+    }
+  ]
+}

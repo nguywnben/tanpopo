@@ -1,0 +1,25 @@
+{
+  "api": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/mcp/servers",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/mcp/servers/mcp_01m857dpwke009mpecryx6h56f/sync-tools",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/mcp/servers",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/mcp/tools/mcp_01m857e95ae008pwkxpymn4hmp/grants",
+      "status": 201
+    }
+  ],
+  "body": "ace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n1\nA2A Agents & Active Tasks\nGranted qa002-cp24-server__echo_status to selected Virtual Key.\nRegistered MCP servers\n1\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 CP24 Synthetic MCP\nqa002-cp24-server\n\thttp://127.0.0.1:19109/mcp\tActive\t1\t\nSync tools\nQA002 CP24 Synthetic MCP tools\n1\nTool\tObserved JCS hash\tSchema review\tGrant to Virtual Key\nqa002-cp24-server__echo_status\te2cdf55fda2ead99af133619f4d70e016630ef2d1f97c85043a52f022d8ac636\t\nPinned\n\t\nVirtual key for echo_status\nQA002 CP24 MCP-only (…EM6n)\nGrant"
+}

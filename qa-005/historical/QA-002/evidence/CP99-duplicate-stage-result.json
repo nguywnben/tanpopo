@@ -1,0 +1,53 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084",
+  "account_role": "Operator, Org Owner",
+  "target_package": "@tanpopo/gemini",
+  "before": {
+    "status": 200,
+    "items": [
+      {
+        "id": "ins_01m852r1p3e008ae1h5ms062ve",
+        "package_id": "ext_01m852r1p3e008acn3fzbd80bw",
+        "state": "ENABLED_ACTIVE",
+        "version": 2,
+        "execution_tier": "sandboxed_wasm"
+      },
+      {
+        "id": "ins_01m8504abme008b1wchsjf7czg",
+        "package_id": "ext_01m8504abme008azgwpd4xh459",
+        "state": "ENABLED_ACTIVE",
+        "version": 2,
+        "execution_tier": "declarative"
+      }
+    ]
+  },
+  "stage_response": {
+    "status": 409,
+    "error_type": "resource_already_exists",
+    "message": "storage: unique constraint conflict: package \"@tanpopo/gemini\" is already registered in state ENABLED_ACTIVE (use StageUpgrade)"
+  },
+  "after": {
+    "status": 200,
+    "items": [
+      {
+        "id": "ins_01m852r1p3e008ae1h5ms062ve",
+        "package_id": "ext_01m852r1p3e008acn3fzbd80bw",
+        "state": "ENABLED_ACTIVE",
+        "version": 2,
+        "execution_tier": "sandboxed_wasm"
+      },
+      {
+        "id": "ins_01m8504abme008b1wchsjf7czg",
+        "package_id": "ext_01m8504abme008azgwpd4xh459",
+        "state": "ENABLED_ACTIVE",
+        "version": 2,
+        "execution_tier": "declarative"
+      }
+    ]
+  },
+  "ui_error": [
+    "storage: unique constraint conflict: package \"@tanpopo/gemini\" is already registered in state ENABLED_ACTIVE (use StageUpgrade)"
+  ],
+  "persistence_unchanged": true
+}

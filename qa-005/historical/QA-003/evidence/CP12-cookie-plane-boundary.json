@@ -1,0 +1,11 @@
+{
+  "sameOriginWithAdminSession": {
+    "status": 401,
+    "code": "invalid_credential_plane",
+    "message": "Admin session cookies are prohibited on A2A endpoints; authenticate with a Virtual Key Bearer token."
+  },
+  "sameOriginWithoutCookies": {
+    "status": 200,
+    "agentCount": 2
+  }
+}

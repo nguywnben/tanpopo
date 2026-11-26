@@ -1,0 +1,21 @@
+{
+  "mutationResponses": [
+    {
+      "method": "DELETE",
+      "path": "/admin/v1/extensions/ins_01m87ttzhne00b8gr5mvk3rgns",
+      "status": 204,
+      "code": null
+    }
+  ],
+  "api": {
+    "status": 200,
+    "anthropicPresent": false,
+    "installations": [
+      {
+        "canonical_name": "@tanpopo/ollama",
+        "state": "ENABLED_ACTIVE"
+      }
+    ]
+  },
+  "ui": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\next_01m87ttzhne00b8e2rcc0f4aj0 uninstall completed.\nInstalled packages\n1\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\next_01m87em5w7e008efqnwz2d6the\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tdeclarative\t"
+}

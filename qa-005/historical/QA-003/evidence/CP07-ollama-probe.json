@@ -1,0 +1,142 @@
+{
+  "rowText": "QA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t",
+  "responses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m87axgx7e008ehq1d016vqwt/environments",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/provider-adapters",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/secrets",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/connections",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/connections/con_01m87eqcdke009xw7j0g0485nk/test",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/connections",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/secrets",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/provider-adapters",
+      "status": 200,
+      "probeBody": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/connections",
+      "status": 200,
+      "probeBody": null
+    }
+  ],
+  "connectionList": {
+    "status": 200,
+    "items": [
+      {
+        "idSuffix": "0g0485nk",
+        "name": "QA003 RC5 Ollama 401",
+        "state": "CREATED_UNVERIFIED",
+        "endpoint": "http://127.0.0.1:19187"
+      },
+      {
+        "idSuffix": "4hst80xy",
+        "name": "QA003 RC5 Ollama 401",
+        "state": "CREATED_UNVERIFIED",
+        "endpoint": "http://127.0.0.1:19187"
+      }
+    ]
+  },
+  "fixtureCalls": [
+    {
+      "method": "GET",
+      "path": "/v1/models"
+    }
+  ]
+}

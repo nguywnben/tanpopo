@@ -1,0 +1,20 @@
+{
+  "selectedGroup": "Model",
+  "visibleGroupedValue": "llama3-2-qa-local",
+  "exportedGroupKey": "qa-fresh-project",
+  "exportData": [
+    {
+      "group_key": "qa-fresh-project",
+      "exact_micro_usd": 1,
+      "estimated_micro_usd": 0,
+      "exact_request_count": 1,
+      "estimated_request_count": 0,
+      "unmetered_request_count": 0
+    }
+  ],
+  "api": {
+    "url": "http://127.0.0.1:8083/admin/v1/usage/export?format=json&group_by=project",
+    "status": 200,
+    "body": "[{\"group_key\":\"qa-fresh-project\",\"exact_micro_usd\":1,\"estimated_micro_usd\":0,\"exact_request_count\":1,\"estimated_request_count\":0,\"unmetered_request_count\":0}]\n"
+  }
+}

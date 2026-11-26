@@ -1,0 +1,13 @@
+{
+  "response": {
+    "status": 400,
+    "url": "/v1/chat/completions"
+  },
+  "api": [
+    {
+      "path": "/v1/chat/completions",
+      "status": 400
+    }
+  ],
+  "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nPlayground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 10:00:52 PM\nEnd session\nLive Playground\nSDK Snippets\nPlayground inference failed (400).\nModel or route slug\nqa002-cp22-route\nComparison model (optional)\nYou\nSummarize the test environment status in one sentence.\nqa002-cp22-route\nPrompt\nSend"
+}

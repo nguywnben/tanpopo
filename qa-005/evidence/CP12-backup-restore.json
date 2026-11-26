@@ -1,0 +1,51 @@
+{
+  "campaign": "QA-005",
+  "checkpoint": "CP12",
+  "classification": "PARTIAL",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact": "local source build, not official RC7 artifact",
+    "artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "database_engine": "SQLite WAL",
+    "isolated": true
+  },
+  "environment": "Linux amd64 ephemeral test workspace; all archive, database, key, and restore files remained under /tmp/qa005-runtime and are excluded from this repository",
+  "steps": [
+    "Create encrypted backup from running isolated SQLite runtime using a schema-valid empty v1 lockfile fixture.",
+    "Verify archive authentication, manifest, and database integrity.",
+    "Restore to a previously absent destination with --verify-secrets-decrypt.",
+    "Run doctor against the restored database.sqlite and tanpopo.lock paths.",
+    "Compare read-only integrity, journal mode, and organization count between source and restored databases."
+  ],
+  "backup": {
+    "backup_id": "eddef129149688268806e6dcee30796f",
+    "archive_filename": "tanpopo-backup-eddef129149688268806e6dcee30796f.tpop.enc",
+    "size_bytes": 43815,
+    "sha256_hex": "27561c394a3af7ea45b645ecb122bb68a77d1cf40bdba449d42781824901aae3",
+    "verified_files": 6
+  },
+  "outcomes": {
+    "archive_verify": "PASS",
+    "clean_destination_restore": "PASS",
+    "secret_envelope_trial_decrypt": "PASS (no provider credential present; credential-secret coverage remains unverified)",
+    "source_database_integrity": "PASS",
+    "restored_database_integrity": "PASS",
+    "source_and_restored_journal_mode": "wal",
+    "source_and_restored_organization_count": 1,
+    "doctor_storage_and_lockfile_checks": "PASS",
+    "doctor_cluster_cache": "SKIPPED (standalone runtime)",
+    "doctor_clock_and_tls": "WARN (no expected-clock variable; loopback listener)",
+    "running_restored_service": "UNVERIFIED"
+  },
+  "limitations": [
+    "Official RC7 downloadable artifact not tested.",
+    "No provider credential existed to exercise sealed credential decryption.",
+    "No concurrent-write backup, corruption/tamper, retention, PostgreSQL/Valkey, Windows, crash, or restored-service test."
+  ],
+  "governance": {
+    "product_code_modified": false,
+    "production_signing": "BLOCKED; test-only trust material was not used for this backup",
+    "paid_provider_calls": 0,
+    "gate_rel_07": "BLOCKED"
+  }
+}

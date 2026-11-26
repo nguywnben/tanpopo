@@ -1,0 +1,38 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact RC6 SQLite at 127.0.0.1:18128",
+  "listener_access": "direct loopback; no reverse proxy in path",
+  "requests": [
+    {
+      "case": "control_without_forwarding_headers",
+      "admin_session_get_status": 401,
+      "provider_models_get_status": 401
+    },
+    {
+      "case": "forwarded_identity_headers_only",
+      "header_names": [
+        "X-Forwarded-User",
+        "X-Forwarded-Email",
+        "X-Auth-Request-Email",
+        "X-Auth-Request-User",
+        "X-Auth-Request-Roles"
+      ],
+      "admin_session_get_status": 401,
+      "provider_models_get_status": 401
+    },
+    {
+      "case": "forwarded_client_chain_and_https_only",
+      "header_names": [
+        "X-Forwarded-For",
+        "X-Forwarded-Host",
+        "X-Forwarded-Proto",
+        "X-Real-IP"
+      ],
+      "admin_session_get_status": 401,
+      "provider_models_get_status": 401
+    }
+  ],
+  "no_cookie_or_bearer_credential": true,
+  "new_defect": false,
+  "scope_limit": "Tests fail-closed behavior on a direct untrusted listener only; no trusted reverse proxy or proxy-auth/OIDC configuration was present in this slice."
+}

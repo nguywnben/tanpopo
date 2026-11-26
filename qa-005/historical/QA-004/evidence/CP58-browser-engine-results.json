@@ -1,0 +1,22 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 artifact 45581179274, backend 127.0.0.1:18132",
+  "chromium": {"status": "PASS (scoped; prior phases)", "evidence": "Existing CP16 and workflow evidence"},
+  "webkit": {
+    "status": "PASS (scoped WebKit/WPE browser-engine session and responsive Providers screen)",
+    "harness": "Playwright WebKit WPE browser bundle plus user-space Debian snapshot libraries extracted under /tmp; loopback-only TLS reverse proxy to the isolated backend because the secure __Host session cookie was not accepted over this WPE HTTP loopback origin",
+    "session": {"status": 200, "roles": ["OPERATOR", "ORG_OWNER"]},
+    "workflow": "Real Owner sign-in > Providers > Vault Secrets at 390x844",
+    "viewport": {"width": 390, "documentWidth": 390, "bodyWidth": 390, "mainWidth": 390},
+    "ui": "No provider connections; Vault Secrets empty state; screenshot visually inspected",
+    "screenshotPaths": ["evidence/CP58-webkit-providers.png", "evidence/CP58-webkit-mobile-vault-secrets.png"]
+  },
+  "firefox": {
+    "status": "BLOCKED (environment)",
+    "attempts": "Downloaded via Playwright into /tmp/qa004-browsers; repeated headless launch up to 20 seconds, then retried with isolated test-browser preferences and sandbox environment settings",
+    "blockers": ["Browser sandbox cannot write /proc/self/uid_map (EROFS)", "RenderCompositorSWGL failed mapping default framebuffer", "Playwright launch times out before page/context is available"],
+    "result": "No Firefox UI or product behavior was tested"
+  },
+  "configurationNote": "The initial secure-cookie rejection was specific to the temporary HTTP WebKit harness; local HTTPS proxy resolved it. It is not classified as a Tanpopo defect. No Tanpopo source or system packages were modified; browser dependencies and self-signed local test certificate are under /tmp.",
+  "sensitiveData": "No credentials, session values, or secrets are recorded."
+}

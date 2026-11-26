@@ -1,0 +1,88 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "RC6 exact-source isolated clone 127.0.0.1:18128 with A2A explicitly enabled",
+  "actor_role": "ORG_OWNER",
+  "synthetic_endpoint": {
+    "name": "QA004 Cancel Lifecycle Agent",
+    "slug": "qa004-cp65-cancel-agent",
+    "url": "http://127.0.0.1:18133",
+    "private_endpoint_opt_in": true,
+    "allowed_cidrs": [
+      "127.0.0.1/32"
+    ],
+    "response": {
+      "state": "working",
+      "spent_micros": 0,
+      "artifacts": []
+    },
+    "observed_dispatch": {
+      "path": "/tasks",
+      "caller_authorization_forwarded": false
+    },
+    "agent_id": "agt_01m8a7367ee0095pssms4xsnej"
+  },
+  "synchronous_working_response": {
+    "virtual_key": {
+      "plane": "A2A",
+      "allowed_routes": [
+        "/a2a/*"
+      ]
+    },
+    "request": {
+      "method": "POST",
+      "path": "/a2a/tasks",
+      "dispatch_async": false,
+      "sub_budget_hold_micros": 0,
+      "synthetic_input": true,
+      "target_agent_id": "agt_01m8a7367ee0095pssms4xsnej",
+      "input_parts": [
+        {
+          "type": "text",
+          "text": "Synthetic QA cancel-only task."
+        }
+      ]
+    },
+    "http_status": 400,
+    "error_code": "invalid_request",
+    "message": "a2a: invalid SM-09 state transition: working -> working",
+    "request_id": "trc_01m8a7c2qve00aa3g45b6vj8qt",
+    "persisted_task": {
+      "http_status": 200,
+      "task_id": "tsk_01m8a7c2qhe00bwdxd8zx1zj2t",
+      "agent_slug": "qa004-cp65-cancel-agent",
+      "state": "failed",
+      "version": 3,
+      "sub_budget_hold_micros": 0,
+      "settled_cost_micros": 0
+    },
+    "ui": "A third A2A task row appears as Failed with no action; create caller did not receive its task id.",
+    "endpoint_response_http_status": 200
+  },
+  "submitted_task_cancel_lifecycle": {
+    "create_status": 201,
+    "initial_state": "submitted",
+    "task_id": "tsk_01m8a7g52be008vs8ct6hsh8pa",
+    "initial_ui_action": "Cancel",
+    "cancel_status": 200,
+    "final_get_status": 200,
+    "final_state": "canceled",
+    "final_version": 2,
+    "final_sub_budget_hold_micros": 0,
+    "fixture_dispatch_for_async_task": false,
+    "ui_confirmation": "Canceled A2A task and released held budget.",
+    "target_agent_id": "agt_01m8a7367ee0095pssms4xsnej"
+  },
+  "test_key_cleanup": {
+    "plane": "A2A only",
+    "allowed_routes": [
+      "/a2a/*"
+    ],
+    "created_status": 201,
+    "graceful_revoke_status": 200,
+    "final_state": "REVOKED",
+    "secret_material_in_repository": false
+  },
+  "new_finding": "DEF-067",
+  "spend": "0",
+  "product_source_modified": false
+}

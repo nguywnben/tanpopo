@@ -1,0 +1,61 @@
+{
+  "responses": [
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"ksw_01m85a6qq1e00bmqqbmx2pxd12\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"level\":\"PROJECT_OR_ORG_FREEZE\",\"target_id\":\"prj_01m853e561e00byw750arfmw8y\",\"active\":true,\"abort_active_streams\":true,\"reason\":\"CP27 containment and recovery validation\",\"triggered_by_principal_id\":\"prc_01m853e561e00byye5wtq3s746\",\"version\":1,\"triggered_at_ms\":1795474808545}]}\n"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"ksw_01m85a6qq1e00bmqqbmx2pxd12\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"level\":\"PROJECT_OR_ORG_FREEZE\",\"target_id\":\"prj_01m853e561e00byw750arfmw8y\",\"active\":true,\"abort_active_streams\":true,\"reason\":\"CP27 containment and recovery validation\",\"triggered_by_principal_id\":\"prc_01m853e561e00byye5wtq3s746\",\"version\":1,\"triggered_at_ms\":1795474808545}]}\n"
+    },
+    {
+      "url": "/admin/v1/audit-events",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"aud_01m85a8s51e009kydj53qm6vxg\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":192,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"auth.login_succeeded\",\"target_type\":\"principal\",\"target_id\":\"prc_01m853e561e00byye5wtq3s746\",\"metadata\":{},\"prev_hash\":\"006d5728f439b77caf2a0e7387cdd8309dd4b2f4e8ac372a4c5b04810c616e88\",\"event_hash\":\"cbc5913be59d74d1d02e417fd62224f81ed878c78c6cdd053f75a0a43dd5f12c\",\"created_at\":\"2026-11-23T23:01:15.553Z\"},{\"id\":\"aud_01m85a7zbne00bbhax93agcrs6\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":191,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"virtual_key.created\",\"target_type\":\"virtual_key\",\"target_id\":\"vky_01m85a7zbne00bbgqhtjd4bx7e\",\"metadata\":{\"allowed_planes\":\"PROVIDER\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\"},\"prev_hash\":\"99107285b32b9614ef5f9450750820c24ee3f17c89ff254b5a89c58fa0b0672e\",\"event_hash\":\"006d5728f439b77caf2a0e7387cdd8309dd4b2f4e8ac372a4c5b04810c616e88\",\"created_at\":\"2026-11-23T23:00:49.141Z\"},{\"id\":\"aud_01m85a7xqxe00824ftbt27ffny\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":190,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"auth.login_succeeded\",\"target_type\":\"principal\",\"target_id\":\"prc_01m853e561e00byye5wtq3s746\",\"metadata\":{},\"prev_hash\":\"54a47784024004c1330dbaa825c755060218a27a3338631ef42e9a8816b579bb\",\"event_hash\":\"99107285b32b9614ef5f9450750820c24ee3f17c89ff254b5a89c58fa0b0672e\",\"created_at\":\"2026-11-23T23:00:47.485Z\"},{\"id\":\"aud_01m85a7e93e008akymt542c3pk\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":189,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"auth.login_succeeded\",\"target_type\":\"principal\",\"target_id\":\"prc_01m853e561e00byye5wtq3s746\",\"metadata\":{},\"prev_hash\":\"a29e72e9e6bf0be75731f5bca27d81d4467384dfa52fd5d96dae5e081c7868b0\",\"event_hash\":\"54a47784024004c1330dbaa825c755060218a27a3338631ef42e9a8816b579bb\",\"created_at\":\"2026-11-23T23:00:31.651Z\"},{\"id\":\"aud_01m85a6qq2e008s9p8adm71csz\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":188,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"kill_switch.triggered\",\"target_type\":\"emergency_kill_switch\",\"target_id\":\"ksw_01m85a6qq1e00bmqqbmx2pxd12\",\"metadata\":{\"abort_active_streams\":true,\"level\":\"PROJECT_OR_ORG_FREEZE\",\"reason\":\"CP27 containment and recovery validation\",\"target_id\":\"prj_01m853e561e00byw750arfmw8y\"},\"prev_hash\":\"fc4271948262a90daded9fba34de799d978e5ec836a9551693a03198b155404a\",\"event_hash\":\"a29e72e9e6bf0be75731f5bca27d81d4467384dfa52fd5d96dae5e081c7868b0\",\"created_at\":\"2026-11-23T23:00:08.545Z\"},{\"id\":\"aud_01m85a6nj6e00ankzcfy7svg97\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":187,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"auth.login_succeeded\",\""
+    },
+    {
+      "url": "/admin/v1/kill-switches/ksw_01m85a6qq1e00bmqqbmx2pxd12",
+      "status": 200,
+      "body": "{\"id\":\"ksw_01m85a6qq1e00bmqqbmx2pxd12\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"level\":\"PROJECT_OR_ORG_FREEZE\",\"target_id\":\"prj_01m853e561e00byw750arfmw8y\",\"active\":false,\"abort_active_streams\":true,\"reason\":\"CP27 containment and recovery validation\",\"triggered_by_principal_id\":\"prc_01m853e561e00byye5wtq3s746\",\"cleared_by_principal_id\":\"prc_01m853e561e00byye5wtq3s746\",\"clear_reason\":\"CP27 recovery validation complete\",\"version\":2,\"triggered_at_ms\":1795474808545,\"cleared_at_ms\":1795474876946}\n"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"data\":[]}\n"
+    },
+    {
+      "url": "/admin/v1/audit-events",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"aud_01m85a8tgke0085ndstzxdn7n7\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":193,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"kill_switch.cleared\",\"target_type\":\"emergency_kill_switch\",\"target_id\":\"ksw_01m85a6qq1e00bmqqbmx2pxd12\",\"metadata\":{\"clear_reason\":\"CP27 recovery validation complete\",\"level\":\"PROJECT_OR_ORG_FREEZE\",\"target_id\":\"prj_01m853e561e00byw750arfmw8y\"},\"prev_hash\":\"cbc5913be59d74d1d02e417fd62224f81ed878c78c6cdd053f75a0a43dd5f12c\",\"event_hash\":\"d8dbf15b056529817e9339799fd0b3eb2083d28233c96d4f30ebbde19eacf099\",\"created_at\":\"2026-11-23T23:01:16.946Z\"},{\"id\":\"aud_01m85a8s51e009kydj53qm6vxg\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":192,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"auth.login_succeeded\",\"target_type\":\"principal\",\"target_id\":\"prc_01m853e561e00byye5wtq3s746\",\"metadata\":{},\"prev_hash\":\"006d5728f439b77caf2a0e7387cdd8309dd4b2f4e8ac372a4c5b04810c616e88\",\"event_hash\":\"cbc5913be59d74d1d02e417fd62224f81ed878c78c6cdd053f75a0a43dd5f12c\",\"created_at\":\"2026-11-23T23:01:15.553Z\"},{\"id\":\"aud_01m85a7zbne00bbhax93agcrs6\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":191,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"virtual_key.created\",\"target_type\":\"virtual_key\",\"target_id\":\"vky_01m85a7zbne00bbgqhtjd4bx7e\",\"metadata\":{\"allowed_planes\":\"PROVIDER\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\"},\"prev_hash\":\"99107285b32b9614ef5f9450750820c24ee3f17c89ff254b5a89c58fa0b0672e\",\"event_hash\":\"006d5728f439b77caf2a0e7387cdd8309dd4b2f4e8ac372a4c5b04810c616e88\",\"created_at\":\"2026-11-23T23:00:49.141Z\"},{\"id\":\"aud_01m85a7xqxe00824ftbt27ffny\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":190,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"auth.login_succeeded\",\"target_type\":\"principal\",\"target_id\":\"prc_01m853e561e00byye5wtq3s746\",\"metadata\":{},\"prev_hash\":\"54a47784024004c1330dbaa825c755060218a27a3338631ef42e9a8816b579bb\",\"event_hash\":\"99107285b32b9614ef5f9450750820c24ee3f17c89ff254b5a89c58fa0b0672e\",\"created_at\":\"2026-11-23T23:00:47.485Z\"},{\"id\":\"aud_01m85a7e93e008akymt542c3pk\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":189,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"auth.login_succeeded\",\"target_type\":\"principal\",\"target_id\":\"prc_01m853e561e00byye5wtq3s746\",\"metadata\":{},\"prev_hash\":\"a29e72e9e6bf0be75731f5bca27d81d4467384dfa52fd5d96dae5e081c7868b0\",\"event_hash\":\"54a47784024004c1330dbaa825c755060218a27a3338631ef42e9a8816b579bb\",\"created_at\":\"2026-11-23T23:00:31.651Z\"},{\"id\":\"aud_01m85a6qq2e008s9p8adm71csz\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"chain_partition\":\"org_01m853e561e00byvg158ab8tbz\",\"seq_no\":188,\"actor_id\":\"prc_01m853e561e00byye5wtq3s746\",\"action\":\"kill_switch.triggered\",\"target_type\":\"emergency_kill_s"
+    },
+    {
+      "url": "/admin/v1/audit-events/verify",
+      "status": 200,
+      "body": "{\"intact\":true,\"checked_events_count\":193,\"first_broken_seq_no\":null}\n"
+    },
+    {
+      "url": "/admin/v1/kill-switches",
+      "status": 200,
+      "body": "{\"data\":[]}\n"
+    }
+  ],
+  "audit": "3s746\n\t10:16:58 PM\t\nInspect\n\n#109\tvirtual_key.revoked\tprc_01m853e561e00byye5wtq3s746\t\nvirtual_key\nvky_01m857kzqke00a52gf50hq1nym\n\t10:16:28 PM\t\nInspect\n\n#108\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:16:25 PM\t\nInspect\n\n#107\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:15:49 PM\t\nInspect\n\n#106\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:15:37 PM\t\nInspect\n\n#105\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:15:23 PM\t\nInspect\n\n#104\tvirtual_key.created\tprc_01m853e561e00byye5wtq3s746\t\nvirtual_key\nvky_01m857kzqke00a52gf50hq1nym\n\t10:14:57 PM\t\nInspect\n\n#103\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:14:54 PM\t\nInspect\n\n#102\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:14:15 PM\t\nInspect\n\n#101\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:13:55 PM\t\nInspect\n\n#100\tmcp.tool_schema_approved\tprc_01m853e561e00byye5wtq3s746\t\nmcp_tool\nmcp_01m857e95ae008pwkxpymn4hmp\n\t10:13:43 PM\t\nInspect\n\n#99\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:13:40 PM\t\nInspect\n\n#98\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:13:21 PM\t\nInspect\n\n#97\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:13:05 PM\t\nInspect\n\n#96\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:12:43 PM\t\nInspect\n\n#95\tmcp.tool_discovered\tprc_01m853e561e00byye5wtq3s746\t\nmcp_tool\nmcp_01m857e95ae008pwkxpymn4hmp\n\t10:11:50 PM\t\nInspect\n\n#94\tauth.login_succeeded\tprc_01m853e561e00byye5wtq3s746\t\nprincipal\nprc_01m853e561e00byye5wtq3s746\n\t10:11:48 PM\t\nInspect\nLoad older audit events",
+  "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\n1\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\n1\nPlayground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 11:16:20 PM\nEnd session\nLive Playground\nSDK Snippets\nPlayground inference failed (429).\nModel or route slug\nqa002-cp22-route-repro\nComparison model (optional)\nYou\nKill switch recovery check\nqa002-cp22-route-repro\nPrompt\nSend",
+  "inference_status": 429,
+  "state": {
+    "switches": {
+      "data": []
+    },
+    "events": {
+      "error": {
+        "code": "resource_not_found",
+        "type": "not_found_error",
+        "message": "resource not found",
+        "request_id": "req_01m85a8ykxe00ape5k0h222edj",
+        "retryable": false
+      }
+    }
+  }
+}

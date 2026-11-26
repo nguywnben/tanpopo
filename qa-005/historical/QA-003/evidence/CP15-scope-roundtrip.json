@@ -1,0 +1,170 @@
+{
+  "originalScope": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "orgOnlyScope": "Default Organization\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+  "orgOnlyFinops": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n2\nChargeback\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n2\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nORGANIZATION\norg_01m87axgx7e008eg6c8zvy7h5b\n\tMonthly\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for ORGANIZATION org_01m87axgx7e008eg6c8zvy7h5b\nSave\n\n\nPROJECT\nprj_01m87axgx7e008ehq1d016vqwt\n\tMonthly\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m87axgx7e008ehq1d016vqwt\nSave",
+  "orgOnlyBudgetReadback": {
+    "status": 200,
+    "rows": [
+      {
+        "scope_tier": "ORGANIZATION",
+        "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+        "hard_limit_micros": 20000000,
+        "period": "MONTHLY",
+        "version": 1
+      },
+      {
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "hard_limit_micros": 2500000,
+        "period": "MONTHLY",
+        "version": 1
+      }
+    ]
+  },
+  "scopeAfterProjectSelection": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "scopeAfterScopeRoundtrip": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "projectFinops": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n2\nChargeback\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n2\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nORGANIZATION\norg_01m87axgx7e008eg6c8zvy7h5b\n\tMonthly\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for ORGANIZATION org_01m87axgx7e008eg6c8zvy7h5b\nSave\n\n\nPROJECT\nprj_01m87axgx7e008ehq1d016vqwt\n\tMonthly\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m87axgx7e008ehq1d016vqwt\nSave",
+  "projectBudgetReadback": {
+    "status": 200,
+    "rows": [
+      {
+        "scope_tier": "ORGANIZATION",
+        "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+        "hard_limit_micros": 20000000,
+        "period": "MONTHLY",
+        "version": 1
+      },
+      {
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "hard_limit_micros": 2500000,
+        "period": "MONTHLY",
+        "version": 1
+      }
+    ]
+  },
+  "scopeAfterRefresh": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "availableEnvironmentOptionCount": 1,
+  "budgetRequests": [
+    {
+      "url": "/admin/v1/budgets?limit=100",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "hard_limit_micros": 20000000,
+          "period": "MONTHLY",
+          "version": 1
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "hard_limit_micros": 2500000,
+          "period": "MONTHLY",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/budgets?limit=100&include_ancestors=true",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "hard_limit_micros": 20000000,
+          "period": "MONTHLY",
+          "version": 1
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "hard_limit_micros": 2500000,
+          "period": "MONTHLY",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/budgets?project_id=prj_01m87axgx7e008ehq1d016vqwt&include_ancestors=true&limit=100",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "hard_limit_micros": 20000000,
+          "period": "MONTHLY",
+          "version": 1
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "hard_limit_micros": 2500000,
+          "period": "MONTHLY",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/budgets?project_id=prj_01m87axgx7e008ehq1d016vqwt&include_ancestors=true&limit=100",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "hard_limit_micros": 20000000,
+          "period": "MONTHLY",
+          "version": 1
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "hard_limit_micros": 2500000,
+          "period": "MONTHLY",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/budgets?limit=100&include_ancestors=true",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "hard_limit_micros": 20000000,
+          "period": "MONTHLY",
+          "version": 1
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "hard_limit_micros": 2500000,
+          "period": "MONTHLY",
+          "version": 1
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/budgets?project_id=prj_01m87axgx7e008ehq1d016vqwt&include_ancestors=true&limit=100",
+      "status": 200,
+      "rows": [
+        {
+          "scope_tier": "ORGANIZATION",
+          "scope_id": "org_01m87axgx7e008eg6c8zvy7h5b",
+          "hard_limit_micros": 20000000,
+          "period": "MONTHLY",
+          "version": 1
+        },
+        {
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "hard_limit_micros": 2500000,
+          "period": "MONTHLY",
+          "version": 1
+        }
+      ]
+    }
+  ]
+}

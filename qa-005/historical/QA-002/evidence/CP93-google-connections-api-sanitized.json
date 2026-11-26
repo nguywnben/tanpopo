@@ -1,0 +1,63 @@
+{
+  "status": 200,
+  "rows": [
+    {
+      "id": "con_01m866netce00a8wcj86nft2xq",
+      "name": "QA002 CP73 Failing Ollama",
+      "state": "CREATED_UNVERIFIED",
+      "adapter_id": "adp_01m8509e6pe00bkhe4fhsqsmnt",
+      "region": "ON_PREM",
+      "credential_bindings": [],
+      "fingerprint_suffixes": [],
+      "created_at": "2026-11-24T07:17:31.084Z"
+    },
+    {
+      "id": "con_01m8530p3we00828f2x8mp6vs2",
+      "name": "QA002 Google Gemini",
+      "state": "CREATED_UNVERIFIED",
+      "adapter_id": "adp_01m852w4yze009v8wf6e76wgty",
+      "region": "US",
+      "credential_bindings": [
+        "api_key"
+      ],
+      "fingerprint_suffixes": [
+        "...1d03"
+      ],
+      "created_at": "2026-11-23T20:54:30.268Z"
+    },
+    {
+      "id": "con_01m852zx84e008qspa6bkat3wm",
+      "name": "QA002 Google Gemini",
+      "state": "CREATED_UNVERIFIED",
+      "adapter_id": "adp_01m852w4yze009v8wf6e76wgty",
+      "region": "US",
+      "credential_bindings": [
+        "api_key"
+      ],
+      "fingerprint_suffixes": [
+        "...1d03"
+      ],
+      "created_at": "2026-11-23T20:54:04.804Z"
+    },
+    {
+      "id": "con_01m850y4xre00ahbtgj1y47zyp",
+      "name": "QA002 Failing Ollama 401",
+      "state": "CREATED_UNVERIFIED",
+      "adapter_id": "adp_01m8509e6pe00bkhe4fhsqsmnt",
+      "region": "ON_PREM",
+      "credential_bindings": [],
+      "fingerprint_suffixes": [],
+      "created_at": "2026-11-23T20:18:09.976Z"
+    },
+    {
+      "id": "con_01m850bf7je00b98hwrs3dq10r",
+      "name": "QA002 Ollama Synthetic",
+      "state": "ACTIVE",
+      "adapter_id": "adp_01m8509e6pe00bkhe4fhsqsmnt",
+      "region": "ON_PREM",
+      "credential_bindings": [],
+      "fingerprint_suffixes": [],
+      "created_at": "2026-11-23T20:07:57.938Z"
+    }
+  ]
+}

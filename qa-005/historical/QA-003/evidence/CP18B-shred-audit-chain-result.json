@@ -1,0 +1,10 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "tenantIdSuffix": "g8c3g2th",
+  "auditVerify": {
+    "httpStatus": 200,
+    "intact": true,
+    "checkedEvents": 5
+  },
+  "afterRetry": "Five event chain intact; org and children absent"
+}

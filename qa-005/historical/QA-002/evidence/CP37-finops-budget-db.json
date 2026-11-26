@@ -1,0 +1,14 @@
+{
+  "byScopePeriod": [
+    {
+      "scope_type": "PROJECT",
+      "period_kind": "MONTHLY",
+      "count": 1
+    },
+    {
+      "scope_type": "VIRTUAL_KEY",
+      "period_kind": "TOTAL_LIFETIME",
+      "count": 14
+    }
+  ]
+}

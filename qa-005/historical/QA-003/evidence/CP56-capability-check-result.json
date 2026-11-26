@@ -1,0 +1,21 @@
+{
+  "browser_control_request": {
+    "status": 200
+  },
+  "tool_capability_request": {
+    "status": 400,
+    "body": {
+      "error_code": "capability_not_supported",
+      "message": "Deployment \"dpl_01m88acwb1e0092mkgxh7hq69e\" does not support tool_calling.",
+      "request_id": "req_01m88awwjye00ajbdb99vhsrnr"
+    }
+  },
+  "synthetic_upstream_requests": [
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "bytes": 156
+    }
+  ],
+  "interpretation": "Expected capability rejection before provider dispatch if the upstream request count does not increase for the tool request."
+}

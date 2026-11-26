@@ -1,0 +1,150 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "role": "Org Owner + Operator",
+  "results": [
+    {
+      "targetScope": "org",
+      "step": "selected-scope",
+      "observedScope": "QA-002 A2A Org / No project / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "org",
+      "step": "after-hard-refresh-default",
+      "observedScope": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "org",
+      "step": "after-scope-reselect",
+      "observedScope": "QA-002 A2A Org / No project / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "org",
+      "step": "after-navigation-reentry",
+      "observedScope": "QA-002 A2A Org / No project / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "proj",
+      "step": "selected-scope",
+      "observedScope": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "proj",
+      "step": "after-hard-refresh-default",
+      "observedScope": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "proj",
+      "step": "after-scope-reselect",
+      "observedScope": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "proj",
+      "step": "after-navigation-reentry",
+      "observedScope": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "env",
+      "step": "selected-scope",
+      "observedScope": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 4,
+      "emptyCopy": false,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys 11 Members & Roles 4 Organization members 4 Principal Kind Assigned roles Actions qa002-cp71-def016@example.invalid HUMAN Developer Edit roles qa002-team-admin-created@example.invalid HUMAN Developer Edit roles qa002-team-admin@example.invalid HUMAN Developer Team Admin Edit roles qa-002-a2a-owner@example.invalid HUMAN Org Owner Edit roles"
+    },
+    {
+      "targetScope": "env",
+      "step": "after-hard-refresh-default",
+      "observedScope": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 0,
+      "emptyCopy": true,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+    },
+    {
+      "targetScope": "env",
+      "step": "after-scope-reselect",
+      "observedScope": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 4,
+      "emptyCopy": false,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys 11 Members & Roles 4 Organization members 4 Principal Kind Assigned roles Actions qa002-cp71-def016@example.invalid HUMAN Developer Edit roles qa002-team-admin-created@example.invalid HUMAN Developer Edit roles qa002-team-admin@example.invalid HUMAN Developer Team Admin Edit roles qa-002-a2a-owner@example.invalid HUMAN Org Owner Edit roles"
+    },
+    {
+      "targetScope": "env",
+      "step": "after-navigation-reentry",
+      "observedScope": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "api": {
+        "status": 200,
+        "count": 4
+      },
+      "uiCount": 4,
+      "emptyCopy": false,
+      "mainText": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys 11 Members & Roles 4 Organization members 4 Principal Kind Assigned roles Actions qa002-cp71-def016@example.invalid HUMAN Developer Edit roles qa002-team-admin-created@example.invalid HUMAN Developer Edit roles qa002-team-admin@example.invalid HUMAN Developer Team Admin Edit roles qa-002-a2a-owner@example.invalid HUMAN Org Owner Edit roles"
+    }
+  ]
+}

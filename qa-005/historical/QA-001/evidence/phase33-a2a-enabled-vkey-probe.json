@@ -1,0 +1,21 @@
+{
+  "date": "2026-11-23",
+  "runtime": "8084 with TANPOPO_A2A_ENABLED=true, shared isolated SQLite test DB",
+  "browser": "Chromium",
+  "keyName": "qa-cp33-a2a-default-key",
+  "keyCreateStatus": 201,
+  "probe": {
+    "path": "GET /a2a/agents",
+    "status": 401,
+    "code": "invalid_credential_plane",
+    "message": "Admin session cookies are prohibited on A2A endpoints; authenticate with a Virtual Key Bearer token.",
+    "dataCount": null
+  },
+  "revoke": {
+    "status": 200,
+    "state": "REVOKED"
+  },
+  "revokeStatus": 200,
+  "secretPersisted": false,
+  "configuration": "The earlier runtime returned A2A plane disabled; this isolated listener enabled the documented runtime feature flag."
+}

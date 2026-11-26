@@ -1,0 +1,52 @@
+{
+  "states": [
+    {
+      "scope": "Default Organization / QA003 Empty Project DEF035 / No env",
+      "read": {
+        "slug": "qa003-empty-def035",
+        "status": 200,
+        "etag": "\"v3\"",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87y8xb6e00btm7gj98bjcc3",
+        "regions": [
+          "EU"
+        ],
+        "version": 3
+      },
+      "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU\tProject floor\nAllowed models\t*\tProject policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hooks\tNone attached\tProject policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all"
+    },
+    {
+      "scope": "Default Organization / default / dev",
+      "read": {
+        "slug": "default",
+        "status": 200,
+        "etag": "\"v1\"",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "regions": [
+          "EU",
+          "US",
+          "APAC",
+          "ON_PREM"
+        ],
+        "version": 1
+      },
+      "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, US, APAC, ON_PREM\tOrganization floor\nAllowed models\t*\tEnvironment policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tEnvironment policy\nTPM ceiling\tUnspecified\tEnvironment policy\nConcurrent streams ceiling\tUnspecified\tEnvironment policy\nGuardrail hooks\tNone attached\tEnvironment policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAll"
+    },
+    {
+      "scope": "Default Organization / QA003 Empty Project DEF035 / No env",
+      "read": {
+        "slug": "qa003-empty-def035",
+        "status": 200,
+        "etag": "\"v3\"",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m87y8xb6e00btm7gj98bjcc3",
+        "regions": [
+          "EU"
+        ],
+        "version": 3
+      },
+      "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU\tProject floor\nAllowed models\t*\tProject policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hooks\tNone attached\tProject policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all"
+    }
+  ]
+}

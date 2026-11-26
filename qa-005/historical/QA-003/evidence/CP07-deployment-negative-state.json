@@ -1,0 +1,49 @@
+{
+  "create": {
+    "status": 201,
+    "etag": "\"v1\"",
+    "body": {
+      "id": "dpl_01m87fckaye00axyrh360js4t4",
+      "env_id": "env_01m87axgx7e008ejsny065s8qz",
+      "logical_model_id": "lmd_01m87f6xp5e00928y9d7g8kdth",
+      "connection_id": "con_01m87eqcdke009xw7j0g0485nk",
+      "connection_state": "CREATED_UNVERIFIED",
+      "upstream_model_name": "qa003-synthetic-unauthorized",
+      "data_region": "ON_PREM",
+      "state": "PROVISIONED",
+      "idle_chunk_timeout_ms": 15000,
+      "first_byte_timeout_ms": 30000,
+      "rate_card": {
+        "input_token_nano_usd": 0,
+        "output_token_nano_usd": 0,
+        "cache_read_token_nano_usd": 0,
+        "cache_write_token_nano_usd": 0,
+        "reasoning_token_nano_usd": 0,
+        "image_unit_nano_usd": 0,
+        "audio_sec_nano_usd": 0,
+        "document_page_nano_usd": 0,
+        "self_hosted_zero_rate": true
+      },
+      "version": 1
+    }
+  },
+  "selectorOptions": [
+    "QA003 RC5 Ollama 401 (SELF_HOSTED_INFRA)",
+    "QA003 RC5 Ollama 401 (SELF_HOSTED_INFRA)"
+  ],
+  "visible": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa003-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nModels & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\n1\nLogical Models\n1\nDeployment registered in provisioned state.\nData region\nAll regions\nHealth state\nAll states\nEnvironment deployments\n1\nUpstream model\tConnection\tRegion\tHealth\tIn / Out (nano-USD)\tActions\n\nqa003-synthetic-unauthorized\nlmd_01m87f6xp5e00928y9d7g8kdth\n\tQA003 RC5 Ollama 401\tON_PREM\tProvisioned\t0 / 0\t\nNo deployments found Bind a logical model to a provider connection with an integer nano-USD rate card.",
+  "activationAttempt": {
+    "status": 422,
+    "body": "{\"error\":{\"code\":\"connection_not_active\",\"type\":\"invalid_request_error\",\"message\":\"backing provider connection con_01m87eqcdke009xw7j0g0485nk is CREATED_UNVERIFIED; verify the connection before activating deployment\",\"request_id\":\"req_01m87fcm51e008w49cpqdzvezg\",\"retryable\":false}}\n"
+  },
+  "readback": {
+    "status": 200,
+    "item": {
+      "id": "dpl_01m87fckaye00axyrh360js4t4",
+      "state": "PROVISIONED",
+      "connection_state": "CREATED_UNVERIFIED",
+      "connection_id": "con_01m87eqcdke009xw7j0g0485nk",
+      "version": 1
+    }
+  }
+}

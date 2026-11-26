@@ -1,0 +1,124 @@
+{
+  "runtime": {
+    "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+    "role": "all",
+    "provider": "Ollama local synthetic fixture",
+    "fixture_host": "127.0.0.1:18125",
+    "real_provider_spend_usd": 0
+  },
+  "request": {
+    "model": "qa004-loopback",
+    "messages": [
+      {
+        "role": "user",
+        "content": "QA004 synthetic native passthrough"
+      }
+    ],
+    "stream": false,
+    "keep_alive": "5m",
+    "options": {
+      "temperature": 0.2,
+      "num_ctx": 4096
+    }
+  },
+  "upstream_observation": {
+    "path": "/api/chat",
+    "model": "qa004-loopback",
+    "stream": false,
+    "keys": [
+      "keep_alive",
+      "messages",
+      "model",
+      "options",
+      "stream"
+    ],
+    "auth_present": false,
+    "content_type": "application/json"
+  },
+  "response": {
+    "status": 200,
+    "request_id": "req_01m896ffnpe008022gm2abkba0",
+    "trace_id": "trc_01m896ffnqe008n4g8t0qmnqb3",
+    "content_type": "application/json",
+    "usage_accuracy": "ESTIMATED",
+    "response_sha256": "fe72d046cdfd16bba53bb9dd4fdddb217c0e7d2dd098dab6fbb42b677ba295fd",
+    "body": {
+      "model": "qa004-mock",
+      "created_at": "2026-11-25T10:00:00Z",
+      "message": {
+        "role": "assistant",
+        "content": "Native synthetic response."
+      },
+      "done": true,
+      "prompt_eval_count": 6,
+      "eval_count": 3
+    }
+  },
+  "persistent_state": {
+    "trace": {
+      "request_id": "trc_01m896ffnqe008n4g8t0qmnqb3",
+      "plane": "NATIVE",
+      "env_id": "env_01m895k8pee008b5ah423mhysr",
+      "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+      "route_slug": "qa004-loopback",
+      "deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+      "data_region": "ON_PREM",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "ttft_ms": null,
+      "duration_ms": 10,
+      "has_debug_payload": false,
+      "waterfall_stages": [
+        {
+          "stage": "Policy",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "ExtensionHook",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "Egress",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "RouteAttempt",
+          "duration_ms": 0,
+          "outcome": ""
+        }
+      ],
+      "created_at": "2026-11-25T11:11:58.659Z"
+    },
+    "usage_rows": [
+      {
+        "group_key": "qa004-mock",
+        "exact_micro_usd": 0,
+        "estimated_micro_usd": 1,
+        "exact_request_count": 0,
+        "estimated_request_count": 1,
+        "unmetered_request_count": 0
+      }
+    ]
+  },
+  "expected_usage_calculation": {
+    "prompt_eval_count": 6,
+    "eval_count": 3,
+    "input_token_nano_usd": 1000,
+    "output_token_nano_usd": 2000,
+    "expected_nano_usd": 12000,
+    "expected_micro_usd": 12
+  },
+  "actual_finops_row": {
+    "group_key": "qa004-mock",
+    "exact_micro_usd": 0,
+    "estimated_micro_usd": 1,
+    "exact_request_count": 0,
+    "estimated_request_count": 1,
+    "unmetered_request_count": 0
+  }
+}

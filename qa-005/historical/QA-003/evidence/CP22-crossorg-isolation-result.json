@@ -1,0 +1,25 @@
+{
+  "newPrincipal": "synthetic Developer; password and invite token held in memory",
+  "routes": {
+    "session": {
+      "org_id": "org_01m87t5syhe00bhdsq6tq094ey",
+      "roles": [
+        "DEVELOPER"
+      ]
+    },
+    "ownProjects": {
+      "status": 200,
+      "code": null
+    },
+    "crossOrgProjects": {
+      "status": 404,
+      "code": "resource_not_found"
+    },
+    "crossOrgMembers": {
+      "status": 404,
+      "code": "resource_not_found"
+    }
+  },
+  "operationsNavVisible": false,
+  "nav": "Monitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys"
+}

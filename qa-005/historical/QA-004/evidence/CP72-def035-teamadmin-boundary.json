@@ -1,0 +1,37 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 SQLite runtime at 127.0.0.1:18128",
+  "browser": "Chromium, 1440x1000, authenticated Team Admin",
+  "product_source_modified": false,
+  "principal": {
+    "roles": ["TEAM_ADMIN"],
+    "organization_id": "org_01m895k8pee008b3aeaswvpshy",
+    "visible_projects": ["default"]
+  },
+  "console": {
+    "project_scope_options": ["default", "No project"],
+    "selected_scope": "No project / No env",
+    "models_deployments_rows": 0,
+    "empty_state": "No deployments found"
+  },
+  "authenticated_reads": {
+    "GET /admin/v1/projects?limit=100": {
+      "status": 200,
+      "project_slugs": ["default"]
+    },
+    "GET /admin/v1/deployments?limit=100": {
+      "status": 200,
+      "rows": 2,
+      "interpretation": "Both records belong to the Team Admin's sole assigned default/dev project and environment."
+    },
+    "GET /admin/v1/deployments?project_id=prj_01m89cf7vce008saenf6dyw8gk&limit=100": {
+      "status": 403,
+      "error": "insufficient_role_permission"
+    },
+    "GET /admin/v1/projects/prj_01m89cf7vce008saenf6dyw8gk/environments?limit=100": {
+      "status": 403,
+      "error": "insufficient_role_permission"
+    }
+  },
+  "classification": "No sibling deployment or environment data was returned through the Team Admin's explicit sibling-project reads, and the picker did not expose that sibling project. The unfiltered deployment read returned only two records in the Team Admin's sole assigned project. This is a scoped PASS for these authorization boundaries, not full DEF-035 acceptance."
+}

@@ -1,0 +1,41 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact RC6 SQLite 18128",
+  "actor": "synthetic Org Owner",
+  "scope": "QA004 Test Root Org / default / dev",
+  "alert_api": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "alt_budget_bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+        "code": "ALT-BUDGET-80",
+        "severity": "TICKET",
+        "summary": "PROJECT budget bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly exceeded 80% utilization.",
+        "remediation_route": "/budgets",
+        "triggered_at": "2026-11-26T08:22:05.398Z"
+      }
+    ]
+  },
+  "scope_before_remediation": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "remediation_after_click": {
+    "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+    "url": "http://127.0.0.1:18128/budgets",
+    "heading": "Overview",
+    "overview_active": "page",
+    "finops_active": null,
+    "body": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOverview\n\nUpdated 8:32:20 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n196\nWindow: 24h\nError rate\n22.45%\nInternal & upstream\np95 proxy overhead\n8.268 ms\nGateway added latency\nSettled spend\n$0.002060\nActive holds: $0.000000\nActive alerts\n1\nTICKET\nPROJECT budget bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly exceeded 80% utilization.\nALT-BUDGET-80 · Nov 26, 2026, 8:22:05 AM\nRemediate"
+  },
+  "remediation_after_reload": {
+    "scope": "QA004 Test Root Org\n/\nQA-004 Isolated Canary\n/\nqa004-scope-canary-env\n(Active workspace scope)",
+    "url": "http://127.0.0.1:18128/budgets",
+    "heading": "Overview",
+    "overview_active": "page"
+  },
+  "sidebar_control": {
+    "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+    "url": "http://127.0.0.1:18128/finops/budgets",
+    "heading": "FinOps",
+    "body": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nFinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n14\nChargeback\nEx"
+  },
+  "source_edit": false
+}

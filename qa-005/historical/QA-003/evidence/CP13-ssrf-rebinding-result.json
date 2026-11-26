@@ -1,0 +1,31 @@
+{
+  "host": "rebind.qa003.test",
+  "initialAddress": "172.29.0.5",
+  "initialAddressAllowedCidrs": [
+    "172.29.0.5/32"
+  ],
+  "changedAddress": "127.0.0.1",
+  "changedAddressOutsideAllowlist": true,
+  "requestsBeforeAllowedSync": 3,
+  "requestsAfterAllowedSync": 6,
+  "requestsAddedOnAllowedSync": 3,
+  "requestsBeforeDeniedSync": 6,
+  "requestsAfterDeniedSync": 6,
+  "requestsAddedOnDeniedSync": 0,
+  "allowedSyncText": "P server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n4\nA2A Agents & Active Tasks\n6\nSynced 0 tools on QA003 controlled DNS rebinding probe; 0 tool(s) locked pending schema approval.\nRegistered MCP servers\n4\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA003 MCP Sync Fixture\nqa003-mcp-sync-fixture\n\thttp://127.0.0.1:19191/mcp\tSchema Drift Locked\t1\t\nSync tools\n\n\nQA003 controlled DNS rebinding probe\nqa003-rebind-1795551512554\n\thttp://rebind.qa003.test:19191/mcp\tActive\t0\t\nSync tools\n\n\nQA003 SSRF MCP\nqa003-ssrf-mcp\n\thttp://127.0.0.1:19189/mcp\tActive\t0\t\nSync tools\n\n\nQA003 SSRF MCP\nqa003-ssrf-mcp2\n\thttp://127.0.0.1:19189/mcp\tActive\t0\t\nSync tools",
+  "deniedSyncText": "MCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n4\nA2A Agents & Active Tasks\n6\nupstream MCP tool synchronization failed\nRegistered MCP servers\n4\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA003 MCP Sync Fixture\nqa003-mcp-sync-fixture\n\thttp://127.0.0.1:19191/mcp\tSchema Drift Locked\t1\t\nSync tools\n\n\nQA003 controlled DNS rebinding probe\nqa003-rebind-1795551512554\n\thttp://rebind.qa003.test:19191/mcp\tActive\t0\t\nSync tools\n\n\nQA003 SSRF MCP\nqa003-ssrf-mcp\n\thttp://127.0.0.1:19189/mcp\tActive\t0\t\nSync tools\n\n\nQA003 SSRF MCP\nqa003-ssrf-mcp2\n\thttp://127.0.0.1:19189/mcp\tActive\t0\t\nSync tools",
+  "dnsControllerStats": {
+    "ip": "127.0.0.1",
+    "queries": 24
+  },
+  "syncResponses": [
+    {
+      "status": 200,
+      "body": "{\"drifted_count\":0,\"synced_count\":0,\"tools\":[]}\n"
+    },
+    {
+      "status": 502,
+      "body": "{\"error\":{\"code\":\"mcp_sync_failed\",\"type\":\"upstream_error\",\"message\":\"upstream MCP tool synchronization failed\",\"request_id\":\"req_01m87kdjk3e009p3envbdk7p41\",\"retryable\":true}}\n"
+    }
+  ]
+}

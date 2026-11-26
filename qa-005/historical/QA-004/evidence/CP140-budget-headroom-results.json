@@ -1,0 +1,71 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact RC6 SQLite 18128",
+  "actor": "synthetic Org Owner",
+  "scope": "QA004 Test Root Org / default / dev",
+  "starting": {
+    "budget": {
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 100,
+      "exact": 2043,
+      "estimated": 14,
+      "reserved": 0,
+      "version": 181
+    },
+    "summary": {
+      "exact": 2044,
+      "estimated": 15
+    }
+  },
+  "limit_raised_readback": {
+    "budget": {
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 2058,
+      "exact": 2043,
+      "estimated": 14,
+      "reserved": 0,
+      "version": 182
+    },
+    "summary": {
+      "exact": 2044,
+      "estimated": 15
+    }
+  },
+  "request": {
+    "status": 200,
+    "error": null,
+    "reply_present": true
+  },
+  "after_request": {
+    "budget": {
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 2058,
+      "exact": 2044,
+      "estimated": 14,
+      "reserved": 0,
+      "version": 184
+    },
+    "summary": {
+      "exact": 2045,
+      "estimated": 15
+    }
+  },
+  "key_id": "vky_01m8bf4z7re00ap4xtsr60wqj6",
+  "key_secret_persisted": false,
+  "revoke_status": 200,
+  "final_restored": {
+    "budget": {
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 100,
+      "exact": 2044,
+      "estimated": 14,
+      "reserved": 0,
+      "version": 185
+    },
+    "summary": {
+      "exact": 2045,
+      "estimated": 15
+    }
+  },
+  "provider_spend_usd": 0
+}

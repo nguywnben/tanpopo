@@ -1,0 +1,57 @@
+{
+  "baseline": "RC6 2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "role": "ORG_OWNER authenticated Console; data-plane A2A-only Virtual Key, credentials omitted",
+  "active_scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "virtual_key": {
+    "id": "vky_01m898dwx3e00byxdkfywbmvbv",
+    "state": "CREATED_ACTIVE",
+    "project_id": "prj_01m895k8pee008b440xk2ef12p",
+    "allowed_planes": [
+      "A2A"
+    ],
+    "allowed_routes": [
+      "/a2a/*"
+    ]
+  },
+  "targets": [
+    {
+      "id": "agt_01m8a7367ee0095pssms4xsnej",
+      "slug": "qa004-cp65-cancel-agent",
+      "project_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "endpoint_url": "http://127.0.0.1:18133",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "agt_01m8987bbqe009959qp1mwgybg",
+      "slug": "qa004-a2a-loopback",
+      "project_id": "prj_01m895k8pee008b440xk2ef12p",
+      "endpoint_url": "http://127.0.0.1:18127",
+      "status": "ACTIVE"
+    }
+  ],
+  "discovery": {
+    "status": 200,
+    "items": [
+      {
+        "agent_id": "agt_01m8987bbqe009959qp1mwgybg",
+        "agent_slug": "qa004-a2a-loopback",
+        "project_id": "prj_01m895k8pee008b440xk2ef12p"
+      }
+    ],
+    "error": null
+  },
+  "attempt": {
+    "status": 404,
+    "task_id": null,
+    "state": null,
+    "error": {
+      "code": "resource_not_found",
+      "message": "Target A2A agent or parent task not found.",
+      "request_id": "trc_01m8ah5m9ze00a5rb6xhqk4bbz",
+      "type": "not_found_error"
+    }
+  },
+  "cross_project_tasks_created": [],
+  "downstream_fixture_calls": [],
+  "product_source_modified": false
+}

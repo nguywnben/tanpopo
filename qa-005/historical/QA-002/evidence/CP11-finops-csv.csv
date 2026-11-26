@@ -1,0 +1,3 @@
+group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count
+qa002-local-agent,6000,0,2,0,0
+qa002-ollama-model,1,0,1,0,0

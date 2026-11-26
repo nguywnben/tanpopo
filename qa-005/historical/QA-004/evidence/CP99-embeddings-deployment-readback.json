@@ -1,0 +1,33 @@
+{
+  "post": {
+    "status": 201,
+    "body": {
+      "id": "dpl_01m8asr3m9e00anagypff71eqd",
+      "env_id": "env_01m895k8pee008b5ah423mhysr",
+      "logical_model_id": "lmd_01m8asq07ke00bbscjzzvqg5nb",
+      "connection_id": "con_01m896465xe008d8daqh65qzth",
+      "connection_state": "ACTIVE",
+      "upstream_model_name": "qa004-embedding-vectors",
+      "data_region": "ON_PREM",
+      "state": "ACTIVE_HEALTHY",
+      "idle_chunk_timeout_ms": 15000,
+      "first_byte_timeout_ms": 30000,
+      "rate_card": {
+        "input_token_nano_usd": 0,
+        "output_token_nano_usd": 0,
+        "cache_read_token_nano_usd": 0,
+        "cache_write_token_nano_usd": 0,
+        "reasoning_token_nano_usd": 0,
+        "image_unit_nano_usd": 0,
+        "audio_sec_nano_usd": 0,
+        "document_page_nano_usd": 0,
+        "self_hosted_zero_rate": true
+      },
+      "version": 1
+    }
+  },
+  "read": {
+    "status": 200,
+    "deployments": []
+  }
+}

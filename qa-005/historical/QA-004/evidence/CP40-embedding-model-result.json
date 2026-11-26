@@ -1,0 +1,56 @@
+{
+  "posted": {
+    "status": 201,
+    "body": {
+      "id": "lmd_01m89pm36ge0098m9n97sy0p1c",
+      "slug": "qa004-embedding-vectors",
+      "display_name": "QA004 Embedding Vectors",
+      "context_window": 128000,
+      "max_output_tokens": 8192,
+      "assurance_tier": "DECLARED",
+      "capabilities": {
+        "streaming": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "strict_json_schema": false,
+        "json_object": false,
+        "vision": false,
+        "audio_input": false,
+        "document_input": false,
+        "reasoning": false,
+        "prompt_caching": false,
+        "embeddings": true,
+        "rerank": false
+      }
+    }
+  },
+  "read": {
+    "status": 200,
+    "model": {
+      "id": "lmd_01m89pm36ge0098m9n97sy0p1c",
+      "slug": "qa004-embedding-vectors",
+      "display_name": "qa004-embedding-vectors",
+      "context_window": 128000,
+      "max_output_tokens": 8192,
+      "assurance_tier": "DECLARED",
+      "capabilities": {
+        "streaming": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "strict_json_schema": false,
+        "json_object": false,
+        "vision": false,
+        "audio_input": false,
+        "document_input": false,
+        "reasoning": false,
+        "prompt_caching": false,
+        "embeddings": true,
+        "rerank": false
+      }
+    }
+  },
+  "owner_roles": [
+    "OPERATOR",
+    "ORG_OWNER"
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "runtime": "http://127.0.0.1:18084",
+  "agent_id": "agt_01m8641yq4e00a440gccs7v6x0",
+  "discovery": {
+    "status": 200,
+    "target_present": true,
+    "returned_count": 6,
+    "well_known_name": "tanpopo-a2a-gateway",
+    "well_known_description": "Tanpopo A2A Inter-Agent Gateway",
+    "evidence": "CP68-a2a-discovery.json"
+  },
+  "agent_card": {
+    "status": 200,
+    "name": "tanpopo-a2a-gateway"
+  },
+  "authorization": {
+    "key_scope": "A2A only, route /a2a/*",
+    "provider_plane_status": 403,
+    "provider_plane_error": "scope_or_plane_denied"
+  },
+  "task": {
+    "create_status": 201,
+    "task_id": "tsk_01m86487tye00bpvwn37tb3qb6",
+    "state": "input-required",
+    "version": 3,
+    "initial_get_status": 200,
+    "initial_state": "input-required",
+    "hold_micros": 10000,
+    "ui_before_refresh": "tsk_01m86487tye00bpvwn37tb3qb6\nqa002-cp68-private-agent\nSynthetic agent needs approval input\n\tInput required\t1 / 5\tUS\t$0.010000\t$0.000000\t\nResume\nCancel",
+    "ui_after_refresh": "tsk_01m86487tye00bpvwn37tb3qb6\nqa002-cp68-private-agent\nSynthetic agent needs approval input\n\tInput required\t1 / 5\tUS\t$0.010000\t$0.000000\t\nResume\nCancel",
+    "resume_status": 200,
+    "resume_task_id": "tsk_01m86487tye00bpvwn37tb3qb6",
+    "resume_state": "completed",
+    "final_status": 200,
+    "final_state": "completed",
+    "settled_cost_micros": 3000
+  },
+  "fixture": {
+    "calls": [
+      {
+        "path": "/tasks",
+        "task_id": "tsk_01m86487tye00bpvwn37tb3qb6",
+        "input_part_count": 1,
+        "approval_marker_present": false,
+        "authorization_forwarded": false,
+        "trace_root_present": true,
+        "hop_count": "1"
+      },
+      {
+        "path": "/tasks",
+        "task_id": "tsk_01m86487tye00bpvwn37tb3qb6",
+        "input_part_count": 1,
+        "approval_marker_present": true,
+        "authorization_forwarded": false,
+        "trace_root_present": true,
+        "hop_count": "1"
+      }
+    ]
+  },
+  "key": {
+    "before": "QA002 CP68 A2A only\tvk_tp_stage_\u2026b88D\t\nA2A\n/a2a/*\n\tActive\tNov 24, 2026, 6:34:24 AM\t",
+    "after": "QA002 CP68 A2A only\tvk_tp_stage_\u2026b88D\t\nA2A\n/a2a/*\n\tRevoked\tNov 24, 2026, 6:34:24 AM\t",
+    "replay_status": 401,
+    "replay_error": "invalid_virtual_key"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated SQLite at 127.0.0.1:18145",
+  "browser": "Chromium with Playwright; real authenticated UI workflow",
+  "receiver_url": "https://127.0.0.1:19443/qa005",
+  "credential": "synthetic WEBHOOK_HMAC_SECRET; sealed through UI, fingerprint ...98b6; never recorded in this evidence",
+  "registration": {
+    "http_status": 400,
+    "error_code": "ssrf_blocked_private_ip",
+    "message": "endpoint_url violates egress SSRF policy"
+  },
+  "postcondition": {
+    "webhook_inventory_count": 0,
+    "vault_credentials_after_cleanup": 0,
+    "webhook_delivery_attempted": false
+  },
+  "classification": "PASS (scoped SSRF registration rejection and cleanup)",
+  "limitations": [
+    "No successful public receiver delivery or HMAC verification was attempted.",
+    "DNS rebinding, redirects, IPv6, alternate private ranges, and delivery retry behavior remain unverified."
+  ],
+  "visual_evidence": [
+    "screenshots/CP22-webhook-inventory-before.png",
+    "screenshots/CP22-webhook-add-form.png",
+    "screenshots/CP22-webhook-loopback-rejected.png",
+    "screenshots/CP22-vault-cleanup.png"
+  ]
+}

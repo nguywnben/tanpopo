@@ -1,0 +1,31 @@
+{
+  "firefox": {
+    "browser": "Firefox 153.8 (Playwright browser build)",
+    "installed_under": "/tmp/qa004-browsers",
+    "attempt": "headless startup, 10 second timeout, XDG_CACHE_HOME set to writable /tmp",
+    "result": "UNAVAILABLE",
+    "diagnostics": [
+      "Sandbox: writing /proc/self/uid_map: EROFS",
+      "RenderCompositorSWGL failed mapping default framebuffer",
+      "launch did not complete before timeout"
+    ]
+  },
+  "webkit": {
+    "browser": "WebKit 2336 (Playwright browser build)",
+    "installed_under": "/tmp/qa004-browsers",
+    "result": "UNAVAILABLE",
+    "missing_host_libraries": [
+      "libgtk-4.so.1",
+      "libwebkitgtk-6.0.so.4",
+      "libjavascriptcoregtk-6.0.so.1",
+      "libWPEBackend-fdo-1.0.so.1",
+      "libWPEWebKit-2.0.so.1",
+      "libbacktrace.so.0",
+      "libgraphene-1.0.so.0",
+      "libharfbuzz-icu.so.0",
+      "libmanette-0.2.so.0",
+      "libwpe-1.0.so.1"
+    ]
+  },
+  "classification": "cloud execution environment limitation; no Tanpopo product result inferred"
+}

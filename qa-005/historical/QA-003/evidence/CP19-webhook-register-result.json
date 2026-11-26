@@ -1,0 +1,13 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "status": 201,
+  "result": {
+    "enabled": true,
+    "targetOrigin": "https://httpbin.org",
+    "events": [
+      "kill_switch.triggered",
+      "mcp.approval.pending"
+    ],
+    "secretReturned": false
+  }
+}

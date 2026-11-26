@@ -1,0 +1,16 @@
+{
+  "ui_create_status": 201,
+  "synthetic_principal": {
+    "id": "prc_01m85fbz3me009r8mhw1kn92t2",
+    "kind": "HUMAN_LOCAL",
+    "status": "SUSPENDED",
+    "password_hash_cleared": 1,
+    "scope_type": "ORG",
+    "role_name": "FINOPS_VIEWER",
+    "role_version": 1
+  },
+  "test_auth_role": [
+    "FINOPS_VIEWER"
+  ],
+  "out_of_band_test_credential_removed": true
+}

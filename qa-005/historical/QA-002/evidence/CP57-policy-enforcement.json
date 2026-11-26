@@ -1,0 +1,197 @@
+{
+  "key": {
+    "id": "vky_01m85zyx01e00bb24xgzb6yyzh",
+    "last_four": "8FOk",
+    "plane": "PROVIDER",
+    "state": "CREATED_ACTIVE"
+  },
+  "fixtureBefore": 4,
+  "positive": {
+    "status": 200,
+    "request_id": "req_01m85zyy50e008mtp3h59dqc01",
+    "error_code": null,
+    "response_object": "chat.completion",
+    "has_content": true
+  },
+  "fixtureAfterPositive": 5,
+  "restricted": [
+    {
+      "status": 200,
+      "scope": "ORGANIZATION",
+      "regions": [
+        "EU"
+      ],
+      "version": 5
+    },
+    {
+      "status": 200,
+      "scope": "PROJECT",
+      "regions": [
+        "EU"
+      ],
+      "version": 1
+    },
+    {
+      "status": 200,
+      "scope": "ENVIRONMENT",
+      "regions": [
+        "EU"
+      ],
+      "version": 1
+    }
+  ],
+  "fixtureBeforeDenied": 5,
+  "denied": {
+    "status": 503,
+    "request_id": "req_01m85zz11me00bta02d7dg2qhs",
+    "error_code": "no_compliant_deployment_available",
+    "response_object": null,
+    "has_content": false
+  },
+  "fixtureAfterDenied": 5,
+  "tracesAfterDenial": {
+    "status": 200,
+    "rejected_trace": {
+      "request_id": "trc_01m85zz11me00btbc5b39czrrh",
+      "data_plane_request_id": "req_01m85zz11me00bta02d7dg2qhs",
+      "route_slug": "/v1/chat/completions",
+      "status_code": 503,
+      "error_code": "no_compliant_deployment_available",
+      "deployment_id": null,
+      "data_region": null,
+      "created_at": "2026-11-24T05:20:24.631Z"
+    }
+  },
+  "restored": [
+    {
+      "status": 200,
+      "scope": "ORGANIZATION",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 6
+    },
+    {
+      "status": 200,
+      "scope": "PROJECT",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 1
+    },
+    {
+      "status": 200,
+      "scope": "ENVIRONMENT",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 1
+    }
+  ],
+  "fixtureBeforeRecovery": 5,
+  "recovery": {
+    "status": 200,
+    "request_id": "req_01m85zz25we0087zt2yan1gt85",
+    "error_code": null,
+    "response_object": "chat.completion",
+    "has_content": true
+  },
+  "fixtureAfterRecovery": 6,
+  "tracesAfterRecovery": {
+    "status": 200,
+    "traces": [
+      {
+        "request_id": "trc_01m85zyy50e008mvaxxed1hjq5",
+        "data_plane_request_id": "req_01m85zyy50e008mtp3h59dqc01",
+        "route_slug": "qa002-cp52-failover-route",
+        "status_code": 200,
+        "error_code": null,
+        "deployment_id": "dpl_01m85w0efre00b9qsa1dcwkygw",
+        "data_region": "ON_PREM",
+        "created_at": "2026-11-24T05:20:21.67Z"
+      },
+      {
+        "request_id": "trc_01m85zz11me00btbc5b39czrrh",
+        "data_plane_request_id": "req_01m85zz11me00bta02d7dg2qhs",
+        "route_slug": "/v1/chat/completions",
+        "status_code": 503,
+        "error_code": "no_compliant_deployment_available",
+        "deployment_id": null,
+        "data_region": null,
+        "created_at": "2026-11-24T05:20:24.631Z"
+      },
+      {
+        "request_id": "trc_01m85zz25we008801n2b18eyar",
+        "data_plane_request_id": "req_01m85zz25we0087zt2yan1gt85",
+        "route_slug": "qa002-cp52-failover-route",
+        "status_code": 200,
+        "error_code": null,
+        "deployment_id": "dpl_01m85w0efre00b9qsa1dcwkygw",
+        "data_region": "ON_PREM",
+        "created_at": "2026-11-24T05:20:25.794Z"
+      }
+    ]
+  },
+  "policyWrites": [
+    {
+      "status": 200,
+      "url": "/admin/v1/policies/pol_tc0dy1195x010ydcj42zcr1rt8",
+      "body": {
+        "id": "pol_tc0dy1195x010ydcj42zcr1rt8",
+        "scope_tier": "ORGANIZATION",
+        "scope_id": "org_01m85fqs3ae009a5406gxzx57g",
+        "allowed_data_regions": [
+          "EU"
+        ],
+        "min_plugin_trust": "ANY_APPROVED",
+        "min_capability_assurance": "DECLARED",
+        "version": 5
+      }
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/policies/pol_tc0dy1195x010ydcj42zcr1rt8",
+      "body": {
+        "id": "pol_tc0dy1195x010ydcj42zcr1rt8",
+        "scope_tier": "ORGANIZATION",
+        "scope_id": "org_01m85fqs3ae009a5406gxzx57g",
+        "allowed_data_regions": [
+          "EU",
+          "US",
+          "APAC",
+          "ON_PREM"
+        ],
+        "min_plugin_trust": "ANY_APPROVED",
+        "min_capability_assurance": "DECLARED",
+        "version": 6
+      }
+    }
+  ],
+  "finalKeyState": "REVOKED",
+  "key_persistent_state": {
+    "state": "REVOKED",
+    "version": 2,
+    "verified_via_authenticated_admin_api": true
+  },
+  "assertions": {
+    "healthy_on_prem_route_positive_control": true,
+    "eu_only_ancestor_policy_applied_to_env_effective_state": true,
+    "non_eu_route_rejected_before_provider_dispatch": true,
+    "no_compliant_deployment_trace_persisted": true,
+    "same_route_recovered_after_policy_restore": true,
+    "temporary_key_revoked_and_persisted": true,
+    "request_prompt_content_recorded": false
+  },
+  "observations": [
+    "Data Plane request IDs (req_\u2026) and trace-list IDs (trc_\u2026) differ for these three calls, consistent with existing QA-OBS-006; the full cross-link contract remains unresolved."
+  ]
+}

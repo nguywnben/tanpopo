@@ -1,0 +1,29 @@
+{
+  "route": {
+    "status": 201,
+    "id": "rte_01m8ass2j7e00bxwqsyprmyq1m",
+    "slug": "qa004-cp99-embedding-batch",
+    "version": 1,
+    "targets": [
+      {
+        "deployment_id": "dpl_01m8asr3m9e00anagypff71eqd",
+        "priority_order": 1
+      }
+    ],
+    "error": null
+  },
+  "read": [
+    {
+      "id": "rte_01m8ass2j7e00bxwqsyprmyq1m",
+      "slug": "qa004-cp99-embedding-batch",
+      "version": 1,
+      "targets": [
+        {
+          "deployment_id": "dpl_01m8asr3m9e00anagypff71eqd",
+          "priority_order": 1,
+          "weight": 100
+        }
+      ]
+    }
+  ]
+}

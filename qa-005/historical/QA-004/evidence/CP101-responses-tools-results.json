@@ -1,0 +1,211 @@
+{
+  "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "runtime_port": 18128,
+  "key": {
+    "id": "vky_01m8av183be009j0p7mb4javey",
+    "name": "QA004 CP101 Responses tool lifecycle",
+    "allowed_routes": [
+      "/v1/responses"
+    ]
+  },
+  "fixture_requests_before": 2,
+  "fixture_requests_after": 4,
+  "requests": {
+    "first": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "request_id": "req_01m8av3511e00891najzbdcem8",
+      "usage_accuracy": "EXACT",
+      "body": {
+        "created_at": 1795660289,
+        "id": "resp_qa101_tool",
+        "model": "qa004-responses-tools",
+        "object": "response",
+        "output": [
+          {
+            "arguments": "{\"order_id\":\"QA-104\"}",
+            "call_id": "call_qa101_lookup",
+            "id": "fc_qa101_lookup",
+            "name": "lookup_order",
+            "status": "completed",
+            "type": "function_call"
+          }
+        ],
+        "status": "completed",
+        "usage": {
+          "completion_tokens": 4,
+          "input_tokens": 7,
+          "output_tokens": 4,
+          "prompt_tokens": 7,
+          "total_tokens": 11
+        }
+      }
+    },
+    "simulatedTool": {
+      "name": "lookup_order",
+      "arguments": {
+        "order_id": "QA-104"
+      },
+      "result": {
+        "order_id": "QA-104",
+        "status": "shipped"
+      }
+    },
+    "second": {
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "request_id": "req_01m8av351ee008rp08bmjpwydf",
+      "usage_accuracy": "EXACT",
+      "body": {
+        "created_at": 1795660289,
+        "id": "resp_qa101_final",
+        "model": "qa004-responses-tools",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "text": "Order QA-104 is shipped.",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_qa101_final",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "status": "completed",
+        "usage": {
+          "completion_tokens": 5,
+          "input_tokens": 8,
+          "output_tokens": 5,
+          "prompt_tokens": 8,
+          "total_tokens": 13
+        }
+      }
+    }
+  },
+  "fixture": [
+    {
+      "path": "/v1/responses",
+      "model": "qa004-responses-tools",
+      "stream": false,
+      "input_is_array": false,
+      "input_item_types": [],
+      "tool_names": [
+        "lookup_order"
+      ],
+      "function_output_count": 0,
+      "auth_present": false
+    },
+    {
+      "path": "/v1/responses",
+      "model": "qa004-responses-tools",
+      "stream": false,
+      "input_is_array": true,
+      "input_item_types": [
+        "user",
+        "function_call",
+        "function_call_output"
+      ],
+      "tool_names": [
+        "lookup_order"
+      ],
+      "function_output_count": 1,
+      "auth_present": false
+    },
+    {
+      "path": "/v1/responses",
+      "model": "qa004-responses-tools",
+      "stream": false,
+      "input_is_array": false,
+      "input_item_types": [],
+      "tool_names": [
+        "lookup_order"
+      ],
+      "function_output_count": 0,
+      "auth_present": false
+    },
+    {
+      "path": "/v1/responses",
+      "model": "qa004-responses-tools",
+      "stream": false,
+      "input_is_array": true,
+      "input_item_types": [
+        "user",
+        "function_call",
+        "function_call_output"
+      ],
+      "tool_names": [
+        "lookup_order"
+      ],
+      "function_output_count": 1,
+      "auth_present": false
+    }
+  ],
+  "readback": {
+    "traces": [
+      {
+        "request_id": "trc_01m8av351ee008rqecth7gmvbd",
+        "route_slug": "qa004-cp101-responses-tools",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "request_id": "trc_01m8av3511e00892cc54mdtjc4",
+        "route_slug": "qa004-cp101-responses-tools",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "request_id": "trc_01m8av18ape009107b6p1zzx5j",
+        "route_slug": "qa004-cp101-responses-tools",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "request_id": "trc_01m8av18a7e00arenht1z7gz6k",
+        "route_slug": "qa004-cp101-responses-tools",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      }
+    ],
+    "chargeback": [
+      {
+        "group_key": "QA004 CP101 Responses tool lifecycle",
+        "exact_micro_usd": 0,
+        "estimated_micro_usd": 0,
+        "exact_request_count": 4,
+        "estimated_request_count": 0,
+        "unmetered_request_count": 0
+      }
+    ]
+  },
+  "postRevocationReplay": {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": "invalid_virtual_key",
+        "type": "authentication_error",
+        "message": "Virtual Key is invalid, expired, or revoked.",
+        "request_id": "req_01m8av39wte009651x55hexwxg",
+        "retryable": false
+      }
+    }
+  },
+  "fixture_requests_after_revoked_replay": 4,
+  "finalKey": {
+    "state": "REVOKED",
+    "version": 2
+  }
+}

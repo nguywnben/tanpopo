@@ -1,0 +1,13 @@
+{
+  "verifyButton": "clicked through Console",
+  "verifyResponses": [
+    {
+      "path": "/admin/v1/audit-events/verify",
+      "status": 200
+    }
+  ],
+  "ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 88 events.\nImmutable audit events\n88\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#88\tauth.login_succeeded\tprc_01m8awayeke00bfjv073fafrb6\t\nprincipal\nprc_01m8awayeke00bfjv073fafrb6\n\t3:47:16 AM\t\nInspect\n\n#87\tauth.login_succeeded\tprc_01m8awayeke00bfjv073fafrb6\t\nprincipal\nprc_01m8awayeke00bfjv073fafrb6\n\t3:46:58 AM\t\nI",
+  "pre_verify_event_count": 87,
+  "verified_event_count": 88,
+  "chain_status": "intact (RFC 8785 JCS)"
+}

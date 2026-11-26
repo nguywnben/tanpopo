@@ -1,0 +1,113 @@
+{
+  "result": {
+    "readback_status": 200,
+    "readback": {
+      "task_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+      "target_agent_id": "agt_01m8amh0jje00avb1w5j0f2p3v",
+      "target_agent_slug": "qa004-cp90-inputcancel",
+      "state": "canceled",
+      "hop_count": 1,
+      "call_chain_ids": [
+        "agt_01m8amh0jje00avb1w5j0f2p3v"
+      ],
+      "trace_root_id": "trc_01m8amvzkte00aggtxm7wnv142",
+      "enforced_region": "US",
+      "sub_budget_hold_micros": 0,
+      "version": 4,
+      "created_at": "2026-11-26T00:42:42.682Z",
+      "updated_at": "2026-11-26T00:43:33.689Z",
+      "completed_at": "2026-11-26T00:43:33.689Z"
+    },
+    "resume_after_cancel": {
+      "status": 409,
+      "body": "{\"error\":{\"code\":\"task_not_resumable\",\"message\":\"a2a: invalid SM-09 state transition: task in state canceled cannot be resumed (expected input-required)\",\"request_id\":\"trc_01m8amyq9ce00bvg8jr051y7y4\",\"type\":\"invalid_request_error\"}}\n"
+    },
+    "task_audit": [
+      {
+        "seq_no": 489,
+        "action": "a2a.task.canceled_by_admin",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+        "metadata": {
+          "from_state": "input-required",
+          "spent_micros": 0,
+          "to_state": "canceled"
+        }
+      },
+      {
+        "seq_no": 488,
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+        "metadata": {
+          "from_state": "working",
+          "spent_micros": 0,
+          "to_state": "input-required"
+        }
+      },
+      {
+        "seq_no": 487,
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+        "metadata": {
+          "from_state": "submitted",
+          "spent_micros": 0,
+          "to_state": "working"
+        }
+      },
+      {
+        "seq_no": 486,
+        "action": "a2a.task.submitted",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+        "metadata": {
+          "enforced_region": "US",
+          "hop_count": 1,
+          "sub_budget_hold_micros": 0,
+          "target_agent_id": "agt_01m8amh0jje00avb1w5j0f2p3v",
+          "trace_root_id": "trc_01m8amvzkte00aggtxm7wnv142"
+        }
+      }
+    ]
+  },
+  "fixture_calls_after_cancel_and_resume_attempt": [
+    {
+      "path": "/tasks",
+      "input_parts_count": 1,
+      "authorization_present": false,
+      "event": "dispatch"
+    }
+  ],
+  "ui_after_reload": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\nA2A Agents & Active Tasks\n14\nRegistered A2A agents\n3\nAgent\tEndpoint\tRegion\tMax hops\tState\n\nQA004 CP90 Input Required Cancel\nqa004-cp90-inputcancel\n\thttp://127.0.0.1:18135\tUS\t5\tActive\n\nQA004 Cancel Lifecycle Agent\nqa004-cp65-cancel-agent\n\thttp://127.0.0.1:18133\tUS\t5\tActive\n\nQA004 Synthetic A2A Agent\nqa004-a2a-loopback\n\thttp://127.0.0.1:18127\tUS\t5\tActive\nActive & recent A2A tasks\n11\nTask\tState\tHops\tRegion\tSub-budget hold\tSettled cost\tActions\n\ntsk_01m8amvzkte00agf9rf2pfehf9\nqa004-cp90-inputcancel\n\tCanceled\t1 / 5\tUS\t$0.000000\t$0.000000\t\u2014\n\ntsk_01m8agq31ke009j8th0r3wgbgw\nqa004-a2a-loopback\n\tCanceled\t1 / 5\tUS\t$0.000001\t$0.000000\t\u2014\n\ntsk_01m8agn3vve00ans12367zqrw6\nqa004-a2a-loopback\n\tCanceled\t1 / 5\tUS\t$0.000001\t$0.000000\t\u2014\n\ntsk_01m8agjwyme00b52gm9qsy3500\nqa004-a2a-loopback\n\tCompleted\t1 / 5\tUS\t$0.000001\t$0.000000\t\u2014\n\ntsk_01m8aght90e009j7cpk2fba1gy\nqa004-a2a-loopback\n\tCompleted\t1 / 5\tUS\t$0.000001\t$0.000000\t\u2014\n\ntsk_01m8agdghxe0092jjykaxnzdb2\nqa004-a2a-loopback\n\tCompleted\t1 / 5\tUS\t$0.000001\t$0.000000\t\u2014\n\ntsk_01m8agbeq3e00afxxdad13jqgt\nqa004-a2a-loopback\n\tCompleted\t1 / 5\tUS\t$0.000001\t$0.000000\t\u2014\n\ntsk_01m8a7g52be008vs8ct6hsh8pa\nqa004-cp65-cancel-agent\n\tCanceled\t1 / 5\tUS\t$0.000000\t$0.000000\t\u2014\n\ntsk_01m8a7c2qhe00bwdxd8zx1zj2t\nqa004-cp65-ca",
+  "discovery_and_boundary": {
+    "cookie_free_a2a_discovery_status": 200,
+    "wrong_plane_provider_models_status": 403,
+    "wrong_plane_error": "scope_or_plane_denied",
+    "browser_cookie_without_credentials_omit_probe": {
+      "status": 401,
+      "error": "invalid_credential_plane",
+      "interpretation": "Expected Admin-cookie prohibition on /a2a; corrected test used credentials: omit."
+    },
+    "target_id_probe_correction": {
+      "status": 400,
+      "error": "target_agent_id is required",
+      "interpretation": "Harness initially read the wrong discovery ID property; no fixture dispatch occurred before the corrected request."
+    }
+  },
+  "successful_create": {
+    "status": 201,
+    "task_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+    "target_agent_id": "agt_01m8amh0jje00avb1w5j0f2p3v",
+    "state": "input-required",
+    "prompt_message": "Provide the report period to continue.",
+    "hop_count": 1,
+    "enforced_region": "US",
+    "sub_budget_hold_micros": 0,
+    "version": 3,
+    "readback_status": 200,
+    "fixture_dispatches": 1,
+    "fixture_saw_authorization": false
+  },
+  "before_refresh_ui_observation": "A2A task was created by a cookie-free data-plane call while the mounted Console page remained open. Its 10-row task list did not show the new task until a page reload. The refreshed list then showed the persisted input-required row and Resume/Cancel actions; no realtime-update requirement was identified, so no defect was assigned."
+}

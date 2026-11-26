@@ -1,0 +1,12 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "package": "@tanpopo/ollama@0.1.0",
+  "extension_activation": {"permission_review_completed": true, "state": "ACTIVE", "publisher_signature": "unsigned", "origin_trust": "official", "execution_tier": "declarative"},
+  "untouched_form_defaults": {"billing_mode": "SELF_HOSTED_INFRA", "data_region": "ON_PREM", "allow_private_ip": true, "allowed_cidrs": ["127.0.0.1/32"], "credential_binding": "none"},
+  "manifest_expected_billing_mode": "SELF_HOSTED_INFRA",
+  "connection": {"id": "con_01m850bf7je00b98hwrs3dq10r", "project_id": "prj_01m84ymb7we009px5hb5pfwsns", "name": "QA002 Ollama Synthetic", "endpoint": "http://127.0.0.1:19106", "billing_mode": "SELF_HOSTED_INFRA", "data_region": "ON_PREM", "allow_private_ip": true, "allowed_cidrs": ["127.0.0.1/32"], "auth_mode": "NONE", "persisted_state": "ACTIVE", "version": 3},
+  "synthetic_probe": {"result": "success", "reported_latency_ms": 9, "connection_state": "Active"},
+  "result": "DEF-013 VERIFIED FIXED (scoped)",
+  "limitations": ["No real Ollama inference", "No secret-backed authorization", "No model/deployment lifecycle", "No alternate local adapter/role coverage"],
+  "screenshots": ["CP10-extension-marketplace.png", "CP10-ollama-permission-review.png", "CP10-ollama-review-bottom.png", "CP10-ollama-activated.png", "CP10-ollama-defaults.png", "CP10-ollama-connection-persisted.png", "CP10-ollama-connection-row.png", "CP10-ollama-probe.png"]
+}

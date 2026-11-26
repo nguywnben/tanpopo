@@ -1,0 +1,39 @@
+{
+  "action_menu": "Edit route\nDelete route",
+  "held_request": {
+    "query": "?env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100",
+    "status": 200,
+    "count": 3,
+    "rows": [
+      {
+        "id": "rte_01m85wzpdre008e3hpxfbtesc0",
+        "slug": "qa002-cp52-failover-route",
+        "env_id": "env_01m85ry445e009xg6sr14c5q1z"
+      },
+      {
+        "id": "rte_01m85w0w5me0092bby7d6r5f3b",
+        "slug": "qa002-cp51-org-budget-stream-route",
+        "env_id": "env_01m85ry445e009xg6sr14c5q1z"
+      },
+      {
+        "id": "rte_01m85vxbbbe00ap6mrpr9bn7f8",
+        "slug": "qa002-cp51-org-budget-route",
+        "env_id": "env_01m85ry445e009xg6sr14c5q1z"
+      }
+    ]
+  },
+  "before": {
+    "scope": "QA002 CP39 Tenant Project\n/\nqa002-cp39-env\n(Active workspace scope)",
+    "text": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\nRoute Explain\nPolicies\n\nInherited data residency ceiling: APAC, EU, ON_PREM, US\n\nConfigured routes\n0\nNo routes in this environment\nCreate a route to map model slugs to ordered or weighted deployments.\nCreate route"
+  },
+  "after": {
+    "scope": "QA002 CP39 Tenant Project\n/\nqa002-cp39-env\n(Active workspace scope)",
+    "text": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\n3\nRoute Explain\nPolicies\n\nInherited data residency ceiling: APAC, EU, ON_PREM, US\n\nConfigured routes\n3\nRoute slug\tStrategy\tFallback chain\tTarget health\tActions\nqa002-cp52-failover-route\tPriority failover\tqa002:latest (100%) → qa002:latest (100%)\t\nHealthy\n·\nHealthy\n\t\n\nqa002-cp51-org-budget-stream-route\tPriority failover\tqa002:latest (100%)\t\nHealthy\n\t\n\nqa002-cp51-org-budget-route\tPriority failover\tqa002:latest (100%)\t\nHealthy\n\t"
+  },
+  "stale_items_visible": 3,
+  "visible_actions": [
+    "Edit",
+    "Delete"
+  ],
+  "same_project_selected": true
+}

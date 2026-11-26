@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-23",
+  "browser": "Chromium",
+  "runtime": "8081",
+  "scope": "Default Organization / QA Isolation 2026-11-23 / qa-sandbox",
+  "dialogText": "Issue Virtual Key\nBound to environment env_01m83wspg6e00avvyn20583c0k. Plaintext secret is displayed once.\nKey name\n∙ Required\nAllow all models (*)\nAllowed MCP tools (comma-separated, server__tool)\nLeave empty to deny all MCP tools for this key.\nCancel\nCreate key",
+  "inputs": [
+    {
+      "tag": "INPUT",
+      "type": "text",
+      "name": null,
+      "placeholder": null,
+      "aria": null,
+      "text": null
+    },
+    {
+      "tag": "INPUT",
+      "type": "checkbox",
+      "name": null,
+      "placeholder": null,
+      "aria": null,
+      "text": null
+    },
+    {
+      "tag": "INPUT",
+      "type": "text",
+      "name": null,
+      "placeholder": null,
+      "aria": null,
+      "text": null
+    }
+  ]
+}

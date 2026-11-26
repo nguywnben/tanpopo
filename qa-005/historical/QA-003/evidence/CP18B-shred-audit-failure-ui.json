@@ -1,0 +1,14 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "tenantIdSuffix": "g8c3g2th",
+  "httpResponses": [
+    {
+      "method": "DELETE",
+      "path": "/admin/v1/organizations/{test-organization-id}",
+      "status": 500,
+      "error": "failed recording shred audit event"
+    }
+  ],
+  "organizationVisibleAfterFailedAudit": true,
+  "visibleError": true
+}

@@ -1,0 +1,28 @@
+{
+  "artifact": {
+    "workflow_run": "45581179274",
+    "path": "tanpopo-verified-artifacts/tanpopo_linux_amd64_v1/tanpopo",
+    "sha256": "9a62f8844a85aa1fd3fd9be22365b04e9ce655a470fbe9de670e19678644d34b",
+    "embedded_version": "0.0.1-snapshot",
+    "embedded_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+    "embedded_build_date": "2026-11-25T09:09:37Z"
+  },
+  "commands": [
+    {
+      "argv": ["tanpopo", "config", "--help"],
+      "exit_code": 0,
+      "relevant_output": "Available Commands: reconcile, show"
+    },
+    {
+      "argv": ["tanpopo", "config", "show", "--help"],
+      "exit_code": 0,
+      "relevant_output": "Show the instance overview; Usage: tanpopo config show [flags]; Global --output flag accepts table|json|yaml."
+    },
+    {
+      "argv": ["tanpopo", "config", "show", "--output", "json"],
+      "exit_code": 14,
+      "stderr": "tanpopo: TANPOPO_ADMIN_TOKEN is required for Admin API access. Export a valid Admin token and retry."
+    }
+  ],
+  "interpretation": "The exact `config show` command was recognized and dispatched to its handler. The authenticated overview data path was not tested because no Admin API token was supplied."
+}

@@ -1,0 +1,76 @@
+{
+  "checkpoint": "CP54",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "scope": "QA002 CP43 Secondary Project / qa002-cp43-env2",
+  "route": "qa002-cp52-failover-route",
+  "actual_live_control": {
+    "source_checkpoint": "CP52, same frozen baseline and route IDs",
+    "request": "real Playground streaming interaction through the configured route",
+    "http_status": 200,
+    "selected_deployment_id": "dpl_01m85w0efre00b9qsa1dcwkygw",
+    "connection_id": "con_01m85vqrzqe00b67q9r72a95ev",
+    "failover_attempts": 1,
+    "persisted_trace_id": "trc_01m85y2vcze00af2hf6bh80zp3",
+    "temporary_playground_key_revoked": true,
+    "playground_result": "synthetic stream completed; deployment identity is established by persistent trace and fixture port"
+  },
+  "route_explain_ui": {
+    "target_model_or_route_slug": "qa002-cp52-failover-route",
+    "data_residency": "ON_PREM",
+    "required_capabilities": [],
+    "http_status": 200,
+    "dry_run": true,
+    "eligible_candidates": 0,
+    "rejected_deployments": 2,
+    "rejection_rule_codes": [
+      "DIALECT_MISMATCH",
+      "DIALECT_MISMATCH"
+    ],
+    "rejection_detail": "Deployment uses native dialect \"\" instead of \"openai_compatible\".",
+    "fixture_calls_before_and_after_authenticated_dry_run": [
+      1,
+      1
+    ],
+    "no_upstream_dispatch_observed": true
+  },
+  "authenticated_dry_run_api_control": {
+    "openai_compatible": {
+      "http_status": 200,
+      "eligible_candidates": 0,
+      "rejection_rule_codes": [
+        "DIALECT_MISMATCH",
+        "DIALECT_MISMATCH"
+      ]
+    },
+    "openai_chat": {
+      "http_status": 200,
+      "eligible_candidates": 0,
+      "rejection_rule_codes": [
+        "DIALECT_MISMATCH",
+        "DIALECT_MISMATCH"
+      ]
+    },
+    "ollama": {
+      "http_status": 200,
+      "eligible_deployment_ids": [
+        "dpl_01m85w0efre00b9qsa1dcwkygw",
+        "dpl_01m85wtv27e008d3kn52h3evdw"
+      ],
+      "rejection_rule_codes": []
+    }
+  },
+  "screenshots": [
+    "CP54-route-explain-initial.png",
+    "CP54-route-explain-region-options.png",
+    "CP54-route-explain-valid.png",
+    "CP54-route-explain-tools.png",
+    "CP54-playground-route-success.png",
+    "CP54-key-revoked.png"
+  ],
+  "interpretation_limits": [
+    "The real Playground success control occurred on the same route at the same exact source baseline in CP52; CP54 also repeated it and persisted a 200 trace selecting the first deployment.",
+    "The dry-run API control using dialect ollama is a simulation only; it did not dispatch upstream.",
+    "No provider credential, external provider, source code mutation, or unretracted Playground key was involved.",
+    "Root-cause hypothesis: the Console hardcodes openai_compatible and offers no dialect control, while the selected Ollama route is usable for the normal Playground chat workflow and the simulator's dialect filter rejects it."
+  ]
+}

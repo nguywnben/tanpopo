@@ -1,0 +1,49 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "actor": "Team Admin",
+  "scope": "default/dev",
+  "surface": "real Chromium Console, Routes & Policies > Route Explain",
+  "target_route": "qa004-loopback",
+  "data_residency": "ON_PREM",
+  "target_deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+  "console_interaction": {
+    "normalized_v1": {
+      "selector_label": "Unified normalized (/v1/*)",
+      "http_status": 200,
+      "dry_run": true,
+      "eligible_candidates": 1,
+      "rejected_deployments": 0,
+      "request_id": "req_01m89kadyge00872p7hvqh70cg",
+      "screenshot_visually_inspected": "CP32-route-explain-normalized.png"
+    },
+    "explicit_openai_compatible": {
+      "selector_label": "openai_compatible",
+      "http_status": 200,
+      "dry_run": true,
+      "eligible_candidates": 0,
+      "rejected_deployments": 1,
+      "rule_code": "DIALECT_MISMATCH",
+      "detail": "Deployment uses native dialect \"\" instead of \"openai_compatible\".",
+      "request_id": "req_01m89kaf0ye00915v2fx1k0sm9",
+      "screenshot_visually_inspected": "CP32-route-explain-openai-compatible.png"
+    }
+  },
+  "direct_api_variants": {
+    "dialect_omitted": {"http_status": 200, "candidate_count": 1, "rejected_count": 0},
+    "dialect_normalized": {"http_status": 200, "candidate_count": 1, "rejected_count": 0},
+    "dialect_openai_compatible": {"http_status": 200, "candidate_count": 0, "rejection": "DIALECT_MISMATCH"},
+    "dialect_ollama": {"http_status": 200, "candidate_count": 1, "rejected_count": 0}
+  },
+  "same_deployment_live_evidence": {
+    "source_checkpoint": "CP31",
+    "route_slug": "qa004-degraded-primary-failover",
+    "request_id": "trc_01m89jr4cbe008s9v9jpreg3x8",
+    "http_status": 200,
+    "selected_deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+    "request_path": "/v1/chat/completions",
+    "visual_evidence": "CP31-failover-trace-list.png"
+  },
+  "classification": "PASS (scoped); no new defect. The normalized Console option selected the deployment used by the live /v1 request; the explicit openai_compatible selector invoked the native-dialect compatibility check and rejected the Ollama target.",
+  "remaining": ["native Anthropic/Gemini/OpenAI-compatible paths", "dialect-specific failover", "other adapters and route capabilities"],
+  "sanitization": "No secrets, credentials, cookies, database files, or raw provider logs included."
+}

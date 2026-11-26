@@ -1,0 +1,56 @@
+{
+  "invitationIssued": true,
+  "activationScreenResolved": true,
+  "activationHttpResponses": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/members",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/members/prc_01m8ayg3zpe00aeyemfz7kh3n5/enrollment-token",
+      "status": 201
+    },
+    {
+      "path": "/admin/v1/members",
+      "status": 200
+    }
+  ],
+  "activationBody": "After successful activation, the invitation page navigated into the Overview while visibly signed in as the synthetic Developer. See screenshot.",
+  "activated": true,
+  "developerLoginPath": "http://127.0.0.1:18133/overview",
+  "developerScope": "QA004 CP107 PostgreSQL Scope\n/\nqa004-cp107-qa\n(Active workspace scope)",
+  "developerScopeOptions": [
+    "QA004 CP107 PostgreSQL Scope",
+    "No project",
+    "qa004-cp107-qa",
+    "No env"
+  ],
+  "memberPageExcerpt": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nVirtual Keys\n3\nMembers & Roles\nYour role can inspect Virtual Keys but does not have permission to list organization members.",
+  "membersApi": {
+    "status": 403,
+    "error": {
+      "code": "insufficient_role_permission",
+      "type": "permission_error",
+      "message": "insufficient role permission",
+      "request_id": "req_01m8ayxvdxe00b9bqwbjpwk7qd",
+      "retryable": false
+    },
+    "message": null
+  },
+  "developerApiResponses": [
+    {
+      "path": "/admin/v1/members?limit=100",
+      "status": 403
+    }
+  ],
+  "ownerPostActivationReadback": "CP110-owner-member-readback.json",
+  "note": "One-time invite token and password are intentionally excluded from QA evidence."
+}

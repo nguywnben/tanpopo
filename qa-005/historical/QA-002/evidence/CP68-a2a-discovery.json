@@ -1,0 +1,23 @@
+{
+  "discovery_status": 200,
+  "returned_count": 6,
+  "target": {
+    "agent_id": "agt_01m8641yq4e00a440gccs7v6x0",
+    "agent_slug": "qa002-cp68-private-agent",
+    "name": "QA002 CP68 Private A2A Agent",
+    "endpoint_url": "http://127.0.0.1:19186",
+    "data_region": "US",
+    "max_delegation_hops": 5,
+    "skills": [],
+    "status": "ACTIVE",
+    "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+    "version": 1
+  },
+  "has_more": false,
+  "well_known": {
+    "name": "tanpopo-a2a-gateway",
+    "description": "Tanpopo A2A Inter-Agent Gateway",
+    "agent_count": 6,
+    "target_present": true
+  }
+}

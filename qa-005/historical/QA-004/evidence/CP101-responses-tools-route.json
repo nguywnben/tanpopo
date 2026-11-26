@@ -1,0 +1,15 @@
+{
+  "status": 201,
+  "route": {
+    "id": "rte_01m8atz50ye00bb0aywnq0rz9x",
+    "slug": "qa004-cp101-responses-tools",
+    "version": 1,
+    "targets": [
+      {
+        "deployment_id": "dpl_01m8atxyt9e009bb8zy5kgfwhd",
+        "priority_order": 1,
+        "weight": 100
+      }
+    ]
+  }
+}

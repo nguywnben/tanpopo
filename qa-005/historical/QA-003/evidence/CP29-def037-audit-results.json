@@ -1,0 +1,71 @@
+{
+  "filters": {
+    "virtual_key.issued": {
+      "status": 200,
+      "count": 0,
+      "events": []
+    },
+    "virtual_key.created": {
+      "status": 200,
+      "count": 2,
+      "events": [
+        {
+          "action": "virtual_key.created",
+          "target_id": "vky_01m87sadpbe008ym3wyr2sy9sp",
+          "actor": "prc_01m87axgx7e008ek9a2xdp3tfk"
+        },
+        {
+          "action": "virtual_key.created",
+          "target_id": "vky_01m87s64v3e00bdy9qc3z80ffw",
+          "actor": "prc_01m87axgx7e008ek9a2xdp3tfk"
+        }
+      ]
+    },
+    "virtual_key.revoked": {
+      "status": 200,
+      "count": 2,
+      "events": [
+        {
+          "action": "virtual_key.revoked",
+          "target_id": "vky_01m87sadpbe008ym3wyr2sy9sp",
+          "actor": "prc_01m87saf9ce00ad62w7zs1m910"
+        },
+        {
+          "action": "virtual_key.revoked",
+          "target_id": "vky_01m87s64v3e00bdy9qc3z80ffw",
+          "actor": "prc_01m87axgx7e008ek9a2xdp3tfk"
+        }
+      ]
+    },
+    "chain": {
+      "status": 405,
+      "result": {
+        "error": {
+          "code": "method_not_allowed",
+          "type": "invalid_request_error",
+          "message": "method not allowed",
+          "request_id": "req_01m87yy5pxe009x5jkax3ybxcn",
+          "retryable": false
+        }
+      }
+    }
+  },
+  "uiAuditFilters": {
+    "virtual_key.issued": {
+      "visible_count": 0,
+      "visible_state": "No audit events match this filter"
+    },
+    "virtual_key.created": {
+      "visible_count": 2,
+      "sequences": [
+        261,
+        254
+      ]
+    }
+  },
+  "chainUi": {
+    "verified": true,
+    "scheme": "RFC 8785 JCS",
+    "event_count": 423
+  }
+}

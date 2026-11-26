@@ -1,0 +1,64 @@
+{
+  "data": {
+    "list_status": 200,
+    "found": true,
+    "row": {
+      "request_id": "trc_01m88ahyb9e00801nmjpgqp5tq",
+      "route_slug": "qa003-cp56-route",
+      "status_code": 200,
+      "keys": [
+        "request_id",
+        "plane",
+        "env_id",
+        "virtual_key_id",
+        "route_slug",
+        "deployment_id",
+        "data_region",
+        "status_code",
+        "error_code",
+        "usage_accuracy",
+        "total_cost_micros",
+        "ttft_ms",
+        "duration_ms",
+        "has_debug_payload",
+        "waterfall_stages",
+        "created_at"
+      ]
+    },
+    "detail": {
+      "status": 200,
+      "trace": {
+        "request_id": "trc_01m88ahyb9e00801nmjpgqp5tq",
+        "route_slug": "qa003-cp56-route",
+        "status_code": 200,
+        "total_cost_micros": 0,
+        "usage_accuracy": "EXACT",
+        "duration_ms": 17,
+        "ttft_ms": 11,
+        "has_debug_payload": false,
+        "waterfall_stages": [
+          {
+            "stage": "Policy",
+            "duration_ms": 0,
+            "outcome": ""
+          },
+          {
+            "stage": "ExtensionHook",
+            "duration_ms": 0,
+            "outcome": ""
+          },
+          {
+            "stage": "Egress",
+            "duration_ms": 0,
+            "outcome": ""
+          },
+          {
+            "stage": "RouteAttempt",
+            "duration_ms": 0,
+            "outcome": ""
+          }
+        ]
+      }
+    }
+  }
+}

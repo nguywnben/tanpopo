@@ -1,0 +1,24 @@
+# CP40 — Native Ollama exact usage, price calculation, and streaming format
+
+**Status:** PASS (scoped) for historical DEF-051, DEF-052, DEF-053 and DEF-070; new DEF-083 FAIL  
+**Source:** frozen RC7 `737079ddb847d97dbcf832f610ed0048556cb65b`; compiled binary SHA-256 `62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9`  
+**Runtime/environment:** isolated exact-source SQLite Console/Data Plane `127.0.0.1:18145`; Chromium; local deterministic Ollama-compatible fixture `127.0.0.1:19096`; no provider credentials or paid calls. Test key was scoped to `PROVIDER` + `/native/ollama/*` and revoked after tests.
+
+## Journey and evidence
+
+1. In the real Console, created an Ollama adapter connection for the loopback fixture with explicit `127.0.0.1/32` allowlisting, probed it successfully (`detected_model_ids: ["qa005-native:latest"]`), registered a logical model, and activated a deployment. The fixture and actual provider form/probe state are shown in `CP40-native-connection-created.png` and `CP40-native-connection-probed.png` (visually inspected).
+2. Registered `qa005-native-fixture` and deployment rates of 100,000,000 / 200,000,000 nano-USD per token; added a route and an environment-scoped key. The deployment form labels unit rates as integer nano-USD and previews effective per-1M values as `$100000.000` / `$200000.000`; both are mathematically consistent with $0.10 / $0.20 per token. Screenshots `CP40-deployment-priced-form.png` and `CP40-rate-preview-visual.png` were visually inspected. An initial attempt was denied before egress under the project's 2-USD ceiling; the test-only limit was raised through FinOps to 10,000 USD to accommodate the conservative reservation envelope. No production or external billing occurred.
+3. A real cookie-free `POST /native/ollama/api/chat` returned HTTP 200 JSON and `X-Tanpopo-Usage-Accuracy: EXACT`. Upstream returned `prompt_eval_count=7`, `eval_count=4`. Trace and chargeback both record 1,500,000 micro-USD: `7×100,000,000 + 4×200,000,000 = 1,500,000,000` nano-USD, rounded up to 1,500,000 micro-USD. API and UI readbacks matched, with no prompt body retained. Sanitized response: `CP40-native-request-sanitized.json`; trace/FinOps readback: `CP40-native-readback.json`; visually inspected screenshots: `CP40-native-traces.png`, `CP40-native-chargeback.png`.
+4. Sent real native streaming calls to both `/native/ollama/api/chat` and `/native/ollama/api/generate`. Each produced HTTP 200, `application/x-ndjson`, and three valid Ollama JSON lines ending in `done:true`; final counters were 7/4 and 8/5. The persisted rows show `EXACT`, with 1,500,000 and 1,800,000 micro-USD respectively, and the model chargeback reconciles to the exact settlement total. Sanitized frames and response headers: `CP40-native-stream-protocol-and-usage.json`; trace readback: `CP40-native-stream-readback.json`; visually inspected Console screenshots: `CP40-native-stream-traces.png`, `CP40-native-stream-finops.png`.
+
+## Findings
+
+- **DEF-051 PASS (scoped):** native `/api/chat` counters (7/4) and native `/api/generate` counters (8/5) were used, not replaced by estimates. Durable settlements show exact counters and rates.
+- **DEF-052 PASS (scoped):** for nonstream chat, the trace is EXACT at 1,500,000 micro-USD and the chargeback model row is exactly $1.500000; overall FinOps includes one prior micro-USD fixture request. The stream rows also reconcile to the model total. The FinOps and trace pages were visually inspected.
+- **DEF-053 PASS (scoped calculation):** immutable settlement snapshots identify `token_rate_unit: nano_usd_per_token`; concrete per-token arithmetic matches the recorded 1.5-USD and 1.8-USD settlements. This corrects the tested RC7 calculation slice; migration/history and other unit types are untested.
+- **DEF-070 PASS (scoped):** both native Ollama streaming endpoints returned three valid newline-delimited JSON records using `application/x-ndjson`, rather than emitting raw NDJSON under `text/event-stream`.
+- **DEF-083 FAIL (new, Moderate):** both streaming endpoints omit the documented `X-Tanpopo-Usage-Accuracy` response header, despite their persisted trace/settlement being EXACT. See the new defect register. The same header is present and `EXACT` on the nonstream call.
+
+## Limits
+
+One deterministic Ollama-compatible fixture, one SQLite runtime, one role, one price card, one short synthetic body per path, one stream shape, and one request per native media-free call class do not establish real Ollama interoperability, other runtime roles/backends, provider auth, sustained streams, cancellation/retry/failover, nonzero token-price migrations, cost reservation boundaries, all error states, or cross-browser behavior. No paid provider was contacted. A separate single-image and image-unit acceptance is in CP41. `GATE-REL-07` remains BLOCKED.

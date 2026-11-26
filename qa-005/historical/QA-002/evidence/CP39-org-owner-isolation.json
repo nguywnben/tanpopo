@@ -1,0 +1,120 @@
+{
+  "session": {
+    "status": 200,
+    "roles": [
+      "ORG_OWNER"
+    ]
+  },
+  "organizations": {
+    "status": 200,
+    "count": 1,
+    "slugs": [
+      "qa002-cp39-isolation"
+    ]
+  },
+  "projects": {
+    "status": 200,
+    "count": 0,
+    "orgs": []
+  },
+  "members": {
+    "status": 200,
+    "count": 1,
+    "emails": [
+      "qa002-cp39-org-owner@example.invalid"
+    ]
+  },
+  "budgets": {
+    "status": 200,
+    "count": 0
+  },
+  "crossTenantBudgetWrite": {
+    "status": 404,
+    "code": "resource_not_found",
+    "message": "budget target scope not found"
+  },
+  "after": {
+    "memberCount": 1,
+    "memberEmails": [
+      "qa002-cp39-org-owner@example.invalid"
+    ],
+    "budgetCount": 0
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/members",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/v1/budgets/bgt_project_prj_01m853e561e00byw750arfmw8y_monthly",
+      "status": 404
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/members",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets",
+      "status": 200
+    }
+  ]
+}

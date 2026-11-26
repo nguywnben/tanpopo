@@ -1,0 +1,62 @@
+{
+  "checkpoint": "CP128",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 runtime; real Chromium Console; QA004 Test Root Org / default / dev",
+  "scope": "Org Owner Virtual Key rotation and revocation; no model inference or budget mutation",
+  "key_name": "QA004 CP128 Provider Key Rotation Retest",
+  "key_id": "vky_01m8b8byg1e00b2p4960gprza8",
+  "restrictions": {
+    "plane": "PROVIDER",
+    "routes": [
+      "/v1/models"
+    ],
+    "models": [
+      "qa004-cp121-priced-vision"
+    ]
+  },
+  "observations": [
+    {
+      "step": "initial credential discovery",
+      "result": "HTTP 200; only the allowed model was returned"
+    },
+    {
+      "step": "rotate through Access & Keys UI",
+      "result": "HTTP 200; state ROTATING_DUAL_VALID; version 2"
+    },
+    {
+      "step": "old credential during grace",
+      "result": "HTTP 200; only the allowed model was returned"
+    },
+    {
+      "step": "new credential during grace",
+      "result": "HTTP 200; only the allowed model was returned"
+    },
+    {
+      "step": "graceful revoke through UI",
+      "result": "state REVOKED; version 3"
+    },
+    {
+      "step": "old credential after revoke",
+      "result": "HTTP 401 invalid_virtual_key"
+    },
+    {
+      "step": "new credential after revoke",
+      "result": "HTTP 401 invalid_virtual_key"
+    },
+    {
+      "step": "audit linkage",
+      "result": "virtual_key.rotated seq 717 and virtual_key.revoked seq 718 target the same key in the organization partition"
+    }
+  ],
+  "ui_confirmation": "Both old and new secrets stay valid for a 24-hour grace window. The new plaintext secret will be shown once.",
+  "screenshots": [
+    "CP128-key-rotation-create-form.png",
+    "CP128-key-rotation-confirmation.png",
+    "CP128-key-rotated-inventory.png",
+    "CP128-key-revoked-inventory.png"
+  ],
+  "credential_handling": "Plaintext credentials were held in memory only and are not included in this record or screenshots.",
+  "classification": "PASS (scoped rotation overlap, both-credential revocation, and target-linked audit); other roles and write paths remain unverified.",
+  "product_source_modified": false,
+  "gate": "GATE-REL-07 BLOCKED"
+}

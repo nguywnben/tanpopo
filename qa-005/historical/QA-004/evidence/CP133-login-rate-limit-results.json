@@ -1,0 +1,22 @@
+{
+  "checkpoint": "CP133",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 runtime at 127.0.0.1:18128",
+  "test_identity": "qa004-bruteforce-probe@example.invalid (synthetic, nonexistent account)",
+  "login_attempts": [
+    {"attempts": "1-10", "http_status": 401, "error": "invalid_credentials"},
+    {"attempt": 11, "http_status": 429, "error": "auth_rate_limited", "retry_after_seconds": 300},
+    {"attempt": 12, "http_status": 429, "error": "auth_rate_limited", "retry_after_seconds": 300}
+  ],
+  "system_audit_events": [
+    {"seq_no": 16, "action": "auth.login_rate_limited", "reason": "max_failures_exceeded", "actor_id": "127.0.0.1", "target_id": "qa004-bruteforce-probe@example.invalid", "partition": "SYSTEM"},
+    {"seq_no": 17, "action": "auth.login_rate_limited", "reason": "brute_force_throttled", "actor_id": "127.0.0.1", "target_id": "qa004-bruteforce-probe@example.invalid", "partition": "SYSTEM"},
+    {"seq_no": 18, "action": "auth.login_rate_limited", "reason": "brute_force_throttled", "actor_id": "127.0.0.1", "target_id": "qa004-bruteforce-probe@example.invalid", "partition": "SYSTEM"}
+  ],
+  "system_chain_verification": {"http_status": 200, "intact": true, "checked_events_count": 18},
+  "console_observation": "Real Security -> Audit Log rendered the selected organization partition. No System partition selector was visible; the synthetic login events were verified via the Operator-authorized SYSTEM audit API. Visual SYSTEM-partition discoverability in Console remains unverified, not passed.",
+  "screenshot": "CP133-security-audit-ui-organization-partition.png",
+  "classification": "PASS (scoped AUTH-02 local-login rate limiting and SYSTEM audit API); OIDC/JWT, broader distributed rate-limit behavior, and SYSTEM audit UI discovery remain unverified.",
+  "product_source_modified": false,
+  "gate": "GATE-REL-07 BLOCKED"
+}

@@ -1,0 +1,149 @@
+{
+  "preText": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m84xhbtwe00937gta0tjq86f\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m84xhbtwe00937gta0tjq86f\nSave",
+  "postText": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nCreated budget ceiling for PROJECT (prj_01m84xhbtwe00937gta0tjq86f).\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m84xhbtwe00937gta0tjq86f\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m84xhbtwe00937gta0tjq86f\nSave",
+  "refreshScope": "QA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)",
+  "refreshText": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\nChargeback\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n0\nNo budgets configured\nBudget records appear once configured for your organization or project.\nCreate budget",
+  "persistedText": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m84xhbtwe00937gta0tjq86f\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m84xhbtwe00937gta0tjq86f\nSave",
+  "observedBudgetReads": [
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m84xhbtwe00937gta0tjq86f&limit=100",
+      "data": [
+        {
+          "id": "bgt_project_prj_01m84xhbtwe00937gta0tjq86f_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m84xhbtwe00937gta0tjq86f",
+          "period": "MONTHLY",
+          "hard_limit_micros": 1000000,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "version": 1
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m84xhbtwe00937gta0tjq86f&limit=100",
+      "data": [
+        {
+          "id": "bgt_project_prj_01m84xhbtwe00937gta0tjq86f_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m84xhbtwe00937gta0tjq86f",
+          "period": "MONTHLY",
+          "hard_limit_micros": 1000000,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "version": 2
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m84xhbtwe00937gta0tjq86f&limit=100",
+      "data": [
+        {
+          "id": "bgt_project_prj_01m84xhbtwe00937gta0tjq86f_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m84xhbtwe00937gta0tjq86f",
+          "period": "MONTHLY",
+          "hard_limit_micros": 1000000,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "version": 2
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m84xhbtwe00937gta0tjq86f&limit=100",
+      "data": [
+        {
+          "id": "bgt_project_prj_01m84xhbtwe00937gta0tjq86f_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m84xhbtwe00937gta0tjq86f",
+          "period": "MONTHLY",
+          "hard_limit_micros": 1000000,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "version": 2
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m84xhbtwe00937gta0tjq86f&limit=100",
+      "data": [
+        {
+          "id": "bgt_project_prj_01m84xhbtwe00937gta0tjq86f_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m84xhbtwe00937gta0tjq86f",
+          "period": "MONTHLY",
+          "hard_limit_micros": 1000000,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "version": 2
+        }
+      ]
+    }
+  ],
+  "createCalls": [
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m84xhbtwe00937gta0tjq86f&limit=100",
+      "data": [
+        {
+          "id": "bgt_project_prj_01m84xhbtwe00937gta0tjq86f_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m84xhbtwe00937gta0tjq86f",
+          "period": "MONTHLY",
+          "hard_limit_micros": 1000000,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "version": 1
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets/bgt_project_prj_01m84xhbtwe00937gta0tjq86f_monthly",
+      "data": []
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m84xhbtwe00937gta0tjq86f&limit=100",
+      "data": [
+        {
+          "id": "bgt_project_prj_01m84xhbtwe00937gta0tjq86f_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m84xhbtwe00937gta0tjq86f",
+          "period": "MONTHLY",
+          "hard_limit_micros": 1000000,
+          "soft_warning_percents": [
+            50,
+            80,
+            95
+          ],
+          "version": 2
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "purpose": "zero-cost Google AI Studio model-list connectivity control; credential value excluded",
+  "results": [
+    {
+      "transport": "direct_no_proxy",
+      "status": null,
+      "model_count": null,
+      "sample_model_names": [],
+      "error_class": "URLError"
+    },
+    {
+      "transport": "environment_proxy",
+      "status": 200,
+      "model_count": 50,
+      "sample_model_names": [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash-preview-tts"
+      ],
+      "error_class": null
+    }
+  ],
+  "credential_value_saved": false,
+  "response_bodies_saved": false,
+  "billable_generation_requested": false
+}

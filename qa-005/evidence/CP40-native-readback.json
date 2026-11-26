@@ -1,0 +1,34 @@
+{
+  "checkpoint": "CP40",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": "isolated exact-source SQLite, 127.0.0.1:18145",
+  "request": "POST /native/ollama/api/chat using qa005-native-fixture; nonstream JSON",
+  "trace_api": {
+    "http_status": 200,
+    "request_id": "trc_01m8cxy735e00bxkwn7k72a4gp",
+    "plane": "NATIVE",
+    "route_slug": "qa005-native-fixture",
+    "status_code": 200,
+    "usage_accuracy": "EXACT",
+    "total_cost_micros": 1500000,
+    "data_region": "ON_PREM",
+    "has_debug_payload": false
+  },
+  "usage_summary_api": {
+    "http_status": 200,
+    "group_by": "model",
+    "target_row_at_read": {
+      "group_key": "qa005-native-fixture",
+      "exact_micro_usd": 1500000,
+      "estimated_micro_usd": 0,
+      "exact_request_count": 1,
+      "estimated_request_count": 0,
+      "unmetered_request_count": 0
+    }
+  },
+  "cross_screen_visual_evidence": [
+    "screenshots/CP40-native-traces.png",
+    "screenshots/CP40-native-chargeback.png"
+  ],
+  "limitation": "Readback was taken before later repeated streaming calls and the separate image-unit request. Intermediate total must not be interpreted as the campaign's final runtime aggregate."
+}

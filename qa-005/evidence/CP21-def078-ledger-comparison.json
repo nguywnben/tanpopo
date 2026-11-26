@@ -1,0 +1,96 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "status": [
+    200,
+    200
+  ],
+  "responses": [
+    {
+      "url": "/admin/v1/budgets?project_id=prj_01m8cj8phze00a0s2ha55vm8wt&include_ancestors=true&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "bgt_project_prj_01m8cj8phze00a0s2ha55vm8wt_monthly",
+            "scope_tier": "PROJECT",
+            "scope_id": "prj_01m8cj8phze00a0s2ha55vm8wt",
+            "period": "MONTHLY",
+            "period_start": "2026-11-01T00:00:00Z",
+            "period_end": "2026-12-01T00:00:00Z",
+            "hard_limit_micros": 1,
+            "soft_warning_percents": [
+              50,
+              80,
+              95
+            ],
+            "settled_exact_micros": 1,
+            "settled_estimated_micros": 0,
+            "reserved_hold_micros": 0,
+            "negative_carryover_micros": 0,
+            "unmetered_request_count": 0,
+            "version": 3
+          },
+          {
+            "id": "bdg_01m8ckeyfte009vrbcd3d61x8x",
+            "scope_tier": "VIRTUAL_KEY",
+            "scope_id": "vky_01m8ckeyfse008yfn8htwyv9ax",
+            "period": "TOTAL_LIFETIME",
+            "period_start": "2026-11-26T18:56:35.833Z",
+            "period_end": "2026-11-26T19:11:35.833Z",
+            "hard_limit_micros": 500000,
+            "soft_warning_percents": [
+              50,
+              80,
+              100
+            ],
+            "settled_exact_micros": 0,
+            "settled_estimated_micros": 0,
+            "reserved_hold_micros": 0,
+            "negative_carryover_micros": 0,
+            "unmetered_request_count": 0,
+            "version": 3
+          },
+          {
+            "id": "bdg_01m8ckd0pse009hdr2df97se7b",
+            "scope_tier": "VIRTUAL_KEY",
+            "scope_id": "vky_01m8ckd0pqe009fpqnstef73s0",
+            "period": "TOTAL_LIFETIME",
+            "period_start": "2026-11-26T18:55:32.567Z",
+            "period_end": "2026-11-26T19:10:32.567Z",
+            "hard_limit_micros": 500000,
+            "soft_warning_percents": [
+              50,
+              80,
+              100
+            ],
+            "settled_exact_micros": 0,
+            "settled_estimated_micros": 0,
+            "reserved_hold_micros": 0,
+            "negative_carryover_micros": 0,
+            "unmetered_request_count": 0,
+            "version": 2
+          }
+        ],
+        "has_more": false
+      }
+    },
+    {
+      "url": "/admin/v1/usage/summary?group_by=project",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "group_id": "prj_01m8cj8phze00a0s2ha55vm8wt",
+            "group_key": "Initial Project",
+            "exact_micro_usd": 1,
+            "estimated_micro_usd": 0,
+            "exact_request_count": 3,
+            "estimated_request_count": 0,
+            "unmetered_request_count": 0
+          }
+        ]
+      }
+    }
+  ]
+}

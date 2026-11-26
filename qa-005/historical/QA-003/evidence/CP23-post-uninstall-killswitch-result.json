@@ -1,0 +1,42 @@
+{
+  "text": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\n1\nAudit Log\nActive kill switches\n1\nLevel\tTarget ID\tTrigger reason\tRev\tActions\nExtension Installation\tins_01m87ttzhne00b8gr5mvk3rgns\tQA CP23 synthetic adapter isolation\tv1\t\nClear switch",
+  "rows": [
+    "LevelTarget IDTrigger reasonRevActions",
+    "Extension Installationins_01m87ttzhne00b8gr5mvk3rgnsQA CP23 synthetic adapter isolationv1Clear switch"
+  ],
+  "buttons": [
+    "",
+    "Default Organization / default / dev (Active workspace scope)",
+    "JumpCtrlK",
+    "",
+    "Kill Switch1",
+    "Trigger kill switch",
+    "Clear switch"
+  ],
+  "api": {
+    "status": 200,
+    "items": [
+      {
+        "id": "ksw_01m87vgpb5e009by5capvxgt0a",
+        "target_id": "ins_01m87ttzhne00b8gr5mvk3rgns"
+      }
+    ]
+  },
+  "observedResponses": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    }
+  ]
+}

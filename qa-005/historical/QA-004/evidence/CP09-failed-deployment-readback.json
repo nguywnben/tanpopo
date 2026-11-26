@@ -1,0 +1,23 @@
+{
+  "status": 200,
+  "items": [
+    {
+      "id": "dpl_01m897vpcve008s9jjtnxtxvae",
+      "upstream_model_name": "qa004-mock-failing",
+      "connection_id": "con_01m897rgv1e00b2n9vf3w7j125",
+      "state": "PROVISIONED",
+      "connection_state": "CREATED_UNVERIFIED",
+      "data_region": "ON_PREM",
+      "version": 1
+    },
+    {
+      "id": "dpl_01m8969kjme00br1mjja9gam7q",
+      "upstream_model_name": "qa004-mock",
+      "connection_id": "con_01m896465xe008d8daqh65qzth",
+      "state": "ACTIVE_HEALTHY",
+      "connection_state": "ACTIVE",
+      "data_region": "ON_PREM",
+      "version": 1
+    }
+  ]
+}

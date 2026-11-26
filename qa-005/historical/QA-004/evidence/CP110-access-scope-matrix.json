@@ -1,0 +1,80 @@
+{
+  "result": "two organization members visible at each selected workspace scope",
+  "scopes": [
+    {
+      "label": "org-only-two-members",
+      "scope": "QA004 CP105 PostgreSQL\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+      "ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n2\nOrganization members\n2\nPrincipal\tKind\tAssigned roles\tActions\n\nqa004-cp110-developer@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa004-pg-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t",
+      "api": {
+        "status": 200,
+        "count": 2,
+        "members": [
+          {
+            "email": "qa004-cp110-developer@example.invalid",
+            "kind": "HUMAN",
+            "roles": [
+              "DEVELOPER"
+            ]
+          },
+          {
+            "email": "qa004-pg-owner@example.invalid",
+            "kind": "HUMAN",
+            "roles": [
+              "ORG_OWNER"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "project-no-env-two-members",
+      "scope": "QA004 CP105 PostgreSQL\n/\nQA004 CP107 PostgreSQL Scope\n/\nNo env\n(Active workspace scope)",
+      "ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n2\nOrganization members\n2\nPrincipal\tKind\tAssigned roles\tActions\n\nqa004-cp110-developer@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa004-pg-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t",
+      "api": {
+        "status": 200,
+        "count": 2,
+        "members": [
+          {
+            "email": "qa004-cp110-developer@example.invalid",
+            "kind": "HUMAN",
+            "roles": [
+              "DEVELOPER"
+            ]
+          },
+          {
+            "email": "qa004-pg-owner@example.invalid",
+            "kind": "HUMAN",
+            "roles": [
+              "ORG_OWNER"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "label": "environment-two-members",
+      "scope": "QA004 CP105 PostgreSQL\n/\nQA004 CP107 PostgreSQL Scope\n/\nqa004-cp107-qa\n(Active workspace scope)",
+      "ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n3\nMembers & Roles\n2\nOrganization members\n2\nPrincipal\tKind\tAssigned roles\tActions\n\nqa004-cp110-developer@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa004-pg-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t",
+      "api": {
+        "status": 200,
+        "count": 2,
+        "members": [
+          {
+            "email": "qa004-cp110-developer@example.invalid",
+            "kind": "HUMAN",
+            "roles": [
+              "DEVELOPER"
+            ]
+          },
+          {
+            "email": "qa004-pg-owner@example.invalid",
+            "kind": "HUMAN",
+            "roles": [
+              "ORG_OWNER"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

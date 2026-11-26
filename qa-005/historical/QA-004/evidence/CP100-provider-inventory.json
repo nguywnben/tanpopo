@@ -1,0 +1,33 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime_port": 18128,
+  "scope": "QA004 Test Root Org / default / dev",
+  "connections": [
+    {
+      "name": "QA004 synthetic Ollama 401",
+      "endpoint": "http://127.0.0.1:18126",
+      "state": "ACTIVE",
+      "vault_fingerprints": "None bound"
+    },
+    {
+      "name": "QA004 synthetic Ollama",
+      "endpoint": "http://127.0.0.1:18125",
+      "state": "ACTIVE",
+      "vault_fingerprints": "None bound"
+    }
+  ],
+  "adapters": [
+    {
+      "id": "@tanpopo/ollama",
+      "protocol": "openai_chat",
+      "execution_tier": "declarative",
+      "origin_trust": "Official",
+      "state": "ACTIVE"
+    }
+  ],
+  "sealed_vault_credentials": 0,
+  "air_gapped_offline_mode": true,
+  "provider_interop_status": "BLOCKED in this runtime; external-provider credentials/connections and adapters unavailable",
+  "secret_values_or_fingerprints_recorded": false,
+  "historical_distinction": "CP61 Google AI Studio catalog reachability used the separate QA runner HTTPS proxy and did not configure this runtime or test inference"
+}

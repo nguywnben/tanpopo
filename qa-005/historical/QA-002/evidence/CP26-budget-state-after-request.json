@@ -1,0 +1,54 @@
+{
+  "budget_ledger": {
+    "id": "bgt_project_prj_01m853e561e00byw750arfmw8y_monthly",
+    "scope_type": "PROJECT",
+    "scope_id": "prj_01m853e561e00byw750arfmw8y",
+    "period_kind": "MONTHLY",
+    "period_start_ms": 1793491200000,
+    "period_end_ms": 1796083200000,
+    "hard_limit_micros": 1,
+    "reserved_hold_micros": 0,
+    "settled_exact_micros": 1,
+    "settled_estimated_micros": 0,
+    "negative_carryover_micros": 0,
+    "version": 4
+  },
+  "project_usage_settlements": [
+    {
+      "id": "set_01m856a0rpe00bsgh7psa7jb5y",
+      "request_id": "trc_01m856a0rje00b386h4a6f4vqb",
+      "virtual_key_id": "vky_01m856a0rbe00bxmqy8nacn4nf",
+      "total_cost_micros": 1,
+      "usage_accuracy": "EXACT",
+      "logical_model_slug": "qa002-cp22-streaming"
+    },
+    {
+      "id": "set_01m856b4z4e00ac064xq0fnt7f",
+      "request_id": "trc_01m856b4yze00961hse6j1qfpx",
+      "virtual_key_id": "vky_01m856b4ype0091h727havv8c7",
+      "total_cost_micros": 1,
+      "usage_accuracy": "EXACT",
+      "logical_model_slug": "qa002-cp22-streaming"
+    },
+    {
+      "id": "set_01m8593ewce0080fzre8w2zhrk",
+      "request_id": "trc_01m8593ew5e00attb504mdf30v",
+      "virtual_key_id": "vky_01m8593evve008h9qe95cjxmmv",
+      "total_cost_micros": 1,
+      "usage_accuracy": "EXACT",
+      "logical_model_slug": "qa002-cp22-streaming"
+    }
+  ],
+  "latest_playground_trace": [
+    {
+      "request_id": "trc_01m8593ew4e00arqm2vrq3f6gx",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "route_slug": "qa002-cp22-route-repro",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "virtual_key_id": "vky_01m8593evve008h9qe95cjxmmv",
+      "failover_attempts": 1
+    }
+  ],
+  "secret_material_included": false
+}

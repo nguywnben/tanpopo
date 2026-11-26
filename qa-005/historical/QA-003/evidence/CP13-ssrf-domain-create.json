@@ -1,0 +1,18 @@
+{
+  "deniedVisible": " Self-hosted\tUnverified\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tDisabled\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (4hst80xy)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t\nNew provider connection\nBind an enabled adapter, upstream endpoint, and write-only secret slots.\nCSRF token or origin validation failed\nConnection name\n∙ Required\nProvider adapter\n@tanpopo/ollama (adp_01m87en7q2e008z362mgp36ra8)\nEndpoint URL\n∙ Required\nBilling mode\nSelf-hosted infra\nData region\nOn-prem\nCredential for api_key\nNo credential\nAllow private or loopback upstream\nRequires explicit non-wildcard CIDRs; metadata endpoints remain blocked.\nAllowed CIDRs\n∙ Required\nCancel\nCreate connection",
+  "posts": [
+    {
+      "status": 403,
+      "body": "{\"error\":{\"code\":\"csrf_validation_failed\",\"type\":\"permission_error\",\"message\":\"CSRF token or origin validation failed\",\"request_id\":\"req_01m87jr2gre008rhwkkf3m339n\",\"retryable\":false}}\n"
+    },
+    {
+      "status": 403,
+      "body": "{\"error\":{\"code\":\"csrf_validation_failed\",\"type\":\"permission_error\",\"message\":\"CSRF token or origin validation failed\",\"request_id\":\"req_01m87jr336e008qsqge64mvhfj\",\"retryable\":false}}\n"
+    }
+  ],
+  "createdVisible": false,
+  "dns": {
+    "ip": "127.0.0.1",
+    "queries": 2
+  }
+}

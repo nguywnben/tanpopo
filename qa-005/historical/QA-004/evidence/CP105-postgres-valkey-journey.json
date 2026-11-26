@@ -1,0 +1,54 @@
+{
+  "runtime": "http://127.0.0.1:18133",
+  "storage_expected": "postgres + Valkey Cluster",
+  "screenshots": [
+    "CP105-setup-initial.png",
+    "CP105-setup-form.png",
+    "CP105-setup-step2.png",
+    "CP105-setup-step3.png",
+    "CP105-setup-review.png",
+    "CP105-setup-complete.png",
+    "CP105-owner-overview.png"
+  ],
+  "initial_url": "http://127.0.0.1:18133/setup",
+  "initial_text": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and initialize its primary organization and owner account.\n\nOwner account\n2\nFirst connection\n3\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nOwner account & initial tenant\n\nBootstrap token & initial tenant\n\nBootstrap token\nPrinted once on server startup and saved to data/bootstrap.token by default.\nBootstrap token\nOwner email\nOwner password\nMinimum 12 characters.\nOwner password\nConfirm password\nRe-enter your owner pass",
+  "input_count": 6,
+  "step2_text": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and initialize its primary organization and owner account.\n\nOwner account\ncompleted\nFirst connection\n3\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nInitial provider connection\n\nOptional upstream provider\n\nNo provider adapters enabled yet\nFinish setup first, then open Extensions \u2192 Marketplace to activate one of 8 bundled official adapters (or stage a package via CLI) before adding connections.\nBack\nContinue",
+  "step3_text": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and initialize its primary organization and owner account.\n\nOwner account\ncompleted\nFirst connection\ncompleted\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nMaster key custody\n\nTanpopo encrypts provider credentials and secrets with the configured instance master key (KEK). Back it up in your approved secret manager\u2014losing it renders encrypted credentials unrecoverable.\n\nI have securely backed up the Tanpopo master key\nBack\nContinue",
+  "checkbox_count": 1,
+  "review_text": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and initialize its primary organization and owner account.\n\nOwner account\ncompleted\nFirst connection\ncompleted\nKey custody\ncompleted\nReview\n\nAlready initialized? Sign in\n\nReview and initialize\n\nInitialize instance\n\nOwner email\nqa004-pg-owner@example.invalid\nOrganization / Project\nQA004 CP105 PostgreSQL / default\nInitial connection\nSkipped\nBack\nComplete setup",
+  "bootstrap_status": 201,
+  "bootstrap_body": {
+    "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+    "project_id": "prj_01m8awayeke00bfgn140arcw3y",
+    "env_id": "env_01m8awayeke00bfh45kd4epg65",
+    "owner_principal_id": "prc_01m8awayeke00bfjv073fafrb6",
+    "csrf_token_present": true
+  },
+  "post_setup_url": "http://127.0.0.1:18133/overview",
+  "post_setup_text": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa004-pg-owner@example.invalid\nOperator, Org Owner\nQA004 CP105 PostgreSQL\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOverview\n\nUpdated 2:53:14 AM \u00b7 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.\nAll systems nominal No active operational alerts or pending remediation items.",
+  "overview_text": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOverview\n\nUpdated 2:53:14 AM \u00b7 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+  "storage": {
+    "http": 200,
+    "data": {
+      "backup_supported": false,
+      "backup_unavailable_reason": "Console snapshot backups currently support SQLite storage only; use PostgreSQL backup tooling for PostgreSQL deployments",
+      "current_epoch": 1,
+      "nodes": [
+        {
+          "config_epoch": 1,
+          "health": "ok",
+          "id": "primary",
+          "wal_bytes": 0
+        }
+      ],
+      "storage_engine": "postgres"
+    }
+  },
+  "ready": {
+    "status": 200,
+    "data": {
+      "status": "ready"
+    }
+  }
+}

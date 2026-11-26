@@ -1,0 +1,10 @@
+{
+  "scope": "Default Organization\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+  "ui": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n6\nOrganization members\n6\nPrincipal\tKind\tAssigned roles\tActions\n\nqa003-enrollment-journey-04@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey-03@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey-02@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-local-enroll@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t",
+  "api": {
+    "status": 200,
+    "apiCount": 6,
+    "visibleSyntheticEmails": 6,
+    "allSyntheticRowsHaveKindHuman": true
+  }
+}

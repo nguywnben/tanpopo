@@ -1,0 +1,50 @@
+{
+  "projects": [
+    {
+      "project_id": "prj_01m868q2jte00abmhf75asqts3",
+      "project_name": "QA002 CP78 Fresh Budget",
+      "environments": []
+    },
+    {
+      "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+      "project_name": "QA002 Audit mwto47wa",
+      "environments": [
+        {
+          "id": "env_01m84ymb8ae00b43av7shak1sf",
+          "name": "stage"
+        }
+      ]
+    },
+    {
+      "project_id": "prj_01m84xhbtwe00937gta0tjq86f",
+      "project_name": "qa-002-a2a-project",
+      "environments": [
+        {
+          "id": "env_01m84xhbtwe0093833en21fxkw",
+          "name": "dev"
+        }
+      ]
+    }
+  ],
+  "deployments": [
+    {
+      "id": "dpl_01m866t154e008eyngzznvbdke",
+      "environment_id": "env_01m84ymb8ae00b43av7shak1sf",
+      "logical_model_id": "lmd_01m850m2fqe0098hxskdjr46bm",
+      "connection_id": "con_01m866netce00a8wcj86nft2xq"
+    },
+    {
+      "id": "dpl_01m850zp5qe0083acpb9f738e5",
+      "environment_id": "env_01m84ymb8ae00b43av7shak1sf",
+      "logical_model_id": "lmd_01m850m2fqe0098hxskdjr46bm",
+      "connection_id": "con_01m850y4xre00ahbtgj1y47zyp"
+    },
+    {
+      "id": "dpl_01m850m3gae00bqjvsdeqtah89",
+      "environment_id": "env_01m84ymb8ae00b43av7shak1sf",
+      "logical_model_id": "lmd_01m850m2fqe0098hxskdjr46bm",
+      "connection_id": "con_01m850bf7je00b98hwrs3dq10r"
+    }
+  ],
+  "unscopedCount": 3
+}

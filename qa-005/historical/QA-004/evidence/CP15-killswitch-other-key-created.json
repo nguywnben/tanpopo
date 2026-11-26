@@ -1,0 +1,12 @@
+{
+  "status": 201,
+  "id": "vky_01m89b4swce008f60aq9y5dnfx",
+  "secret_length": 42,
+  "allowed_planes": [
+    "PROVIDER"
+  ],
+  "allowed_routes": [
+    "*"
+  ],
+  "state": "CREATED_ACTIVE"
+}

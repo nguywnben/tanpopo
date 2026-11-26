@@ -1,0 +1,81 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084 isolated QA SQLite runtime",
+  "product_source_changed": false,
+  "organization_id": "org_01m84xhbtwe009367awjy8edrt",
+  "synthetic_member": {
+    "email": "qa002-cp110-local-onboarding-20261124@example.invalid",
+    "principal_id": "prc_01m86rsgvce00a8kw0zpd5ynx5",
+    "ui_kind": "HUMAN",
+    "assigned_role": "DEVELOPER",
+    "scoped_project_id": "prj_01m868q2jte00abmhf75asqts3"
+  },
+  "creation": {
+    "ui_action": "Access & Keys \u2192 Members & Roles \u2192 Add member",
+    "http_status": 201,
+    "success_message": "Member added.",
+    "credential_or_invitation_fields_present": false,
+    "local_login_setup_or_invitation_returned": false
+  },
+  "persistence_and_scope": {
+    "explicit_organization_header_get_status": 200,
+    "explicit_organization_member_count": 5,
+    "synthetic_member_present": true,
+    "no_environment_ui_count_after_create": 0,
+    "no_environment_ui_message": "No members found",
+    "project_environment_ui_count_after_scope_switch": 5,
+    "project_environment_ui_shows_synthetic_member": true,
+    "scope_defect": "DEF-023 reconfirmed"
+  },
+  "first_login": {
+    "browser_context": "fresh isolated Chromium context with no owner cookies",
+    "attempt_credential": "throwaway value never issued to the new principal; omitted",
+    "http_status": 401,
+    "visible_message": "Sign-in failed. The email address or password is not valid.",
+    "invite_setup_reset_or_signup_action_present": false,
+    "new_instance_setup_link_present": true
+  },
+  "cleanup": {
+    "member_delete_api_route_in_admin_api_contract": false,
+    "ui_row_actions": [
+      "Edit roles"
+    ],
+    "synthetic_record_retained_in_isolated_qa_runtime": true,
+    "reason": "No supported member-delete workflow was present; no direct database mutation was used."
+  },
+  "result": "FAIL DEF-021 Moderate reconfirmed in an independent RC4 runtime; DEF-023 also reconfirmed. No new defect assigned because local-human enrollment intent is documented but precise identity-enrollment contract remains uncertain.",
+  "screenshots": [
+    "CP110-member-create-form-no-enrollment.png",
+    "CP110-member-added-org-only-empty.png",
+    "CP110-member-first-login-rejected.png",
+    "CP110-member-visible-in-stage.png",
+    "CP110-member-created-audit-chain.png"
+  ],
+  "privacy": {
+    "password_or_token_saved": false,
+    "member_email_is_synthetic_example_invalid": true,
+    "database_or_raw_logs_committed": false
+  },
+  "member_creation_audit": {
+    "action_filter_status": 200,
+    "matched_event": {
+      "sequence": 548,
+      "action": "member.created",
+      "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+      "target_type": "principal",
+      "target_id": "prc_01m86rsgvce00a8kw0zpd5ynx5",
+      "metadata_fields": [
+        "email",
+        "kind",
+        "project_ids",
+        "roles"
+      ]
+    },
+    "audit_log_ui_visible": true,
+    "hash_chain_verify": {
+      "status": "intact",
+      "checked_events": 548
+    },
+    "scope": "successful provisioning event only; append-failure atomicity remains unverified"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "deletedOrganizationName": "QA-003 Backup Retest CP02",
+  "deletedSlug": "qa003-backup-cp02",
+  "uiRowRemoved": true,
+  "activeScopeAfter": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "postShred": {
+    "organizationNames": [
+      "Default Organization"
+    ],
+    "auditVerifyStatus": 200,
+    "auditIntact": true,
+    "auditCheckedEvents": 23
+  },
+  "screenshots": [
+    "CP02-crypto-shred-confirm.png",
+    "CP02-crypto-shred-ready.png",
+    "CP02-crypto-shred-complete.png"
+  ]
+}

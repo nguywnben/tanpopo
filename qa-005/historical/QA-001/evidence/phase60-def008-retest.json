@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "api": [
+    {
+      "method": "POST",
+      "status": 503,
+      "error": {
+        "code": "ops_backend_unavailable",
+        "type": "upstream_error",
+        "message": "backup requires configured tanpopo.lock, tanpopo.yaml, and extension artifact store",
+        "request_id": "req_01m84d600we00bq1meycpfmdpb",
+        "retryable": true
+      }
+    }
+  ],
+  "before": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-fresh-cp38@example.invalid\nOperator, Org Owner\nQA Fresh Install CP38\n/\nqa-fresh-project\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nEncrypted backups (.tpop.enc)\n0\nCreate encrypted backup\nNo backup receipts recorded\nBackup receipts are recorded as immutable SYSTEM audit events.\nNo backup receipts recorded Backup receipts are recorded as immutable SYSTEM audit events.",
+  "after": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-fresh-cp38@example.invalid\nOperator, Org Owner\nQA Fresh Install CP38\n/\nqa-fresh-project\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nBackup failed: backup requires configured tanpopo.lock, tanpopo.yaml, and extension artifact store\nEncrypted backups (.tpop.enc)\n0\nCreate encrypted backup\nNo backup receipts recorded\nBackup receipts are recorded as immutable SYSTEM audit events.\nNo backup receipts recorded Backup receipts are recorded as immutable SYSTEM audit events."
+}

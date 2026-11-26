@@ -1,0 +1,55 @@
+{
+  "checkpoint": "CP39",
+  "campaign": "QA-005",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "artifact": {
+    "description": "compiled exact-source Linux runtime",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9"
+  },
+  "environment": {
+    "runtime": "isolated SQLite Console and Data Plane",
+    "base_url": "http://127.0.0.1:18145",
+    "provider_fixture": "deterministic OpenAI-compatible loopback fixture",
+    "provider_fixture_url": "http://127.0.0.1:19090",
+    "browser": "Chromium",
+    "viewport": "1440x1000",
+    "paid_provider_use": false
+  },
+  "defect_regression": {
+    "id": "DEF-019",
+    "status": "PASS",
+    "scope": "One Playground prompt against a synthetic route after its project hard monthly budget was exhausted at 1 micro-USD.",
+    "steps": [
+      "Set the isolated synthetic project's monthly hard ceiling to 1 micro-USD after settled usage reached 1 micro-USD.",
+      "Submit a synthetic prompt in Playground using the deterministic loopback route.",
+      "Inspect the visible response, request status, and trace; verify a budget explanation and Inspect budgets action."
+    ],
+    "actual": {
+      "request_status": 429,
+      "error_code": "project_budget_exceeded",
+      "retryable": false,
+      "trace_cost_usd": "0.000000",
+      "trace_duration_ms": 0,
+      "visible_reason": "Request blocked by budget ceiling: Budget limit exceeded across organization, project, environment, or virtual key scope.",
+      "recovery_action": "Inspect budgets"
+    },
+    "limitations": [
+      "Does not cover organization, environment, or virtual-key budget ceilings or mixed-ceiling precedence.",
+      "Does not cover concurrent reservation, replenishment, retry, other roles, or provider fixture hit count."
+    ],
+    "evidence": [
+      "screenshots/CP39-playground-budget-rejection.png",
+      "screenshots/CP39-playground-end-session-ui.png",
+      "screenshots/CP39-playground-end-session-key-active.png",
+      "screenshots/CP39-playground-key-after-logout.png"
+    ]
+  },
+  "product_gap": {
+    "id": "PG-006",
+    "area": "Playground ephemeral key lifecycle",
+    "observation": "End Session clears the current tab; the user-facing message says signing out revokes active Playground keys. A key remained active immediately after End Session and the tested session keys were revoked after logout.",
+    "classification": "PRODUCT_GAP, not defect: SCR-15 requires a short-lived key and logout revocation, but reviewed criteria do not require immediate revocation on End Session.",
+    "credential_handling": "No credential value is included. Test keys were revoked after the lifecycle observation."
+  },
+  "gate_rel_07": "BLOCKED"
+}

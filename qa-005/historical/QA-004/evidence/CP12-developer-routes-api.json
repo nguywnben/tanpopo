@@ -1,0 +1,69 @@
+{
+  "path": "/routes",
+  "pageError": "insufficient role permission",
+  "emptyState": "No routes in this environment",
+  "requests": [
+    {
+      "path": "/admin/v1/organizations",
+      "query": "?limit=100",
+      "status": 403,
+      "method": "GET",
+      "error": "insufficient_role_permission",
+      "rows": null
+    },
+    {
+      "path": "/admin/v1/deployments",
+      "query": "?env_id=env_01m895k8pee008b5ah423mhysr&limit=100",
+      "status": 200,
+      "method": "GET",
+      "error": null,
+      "rows": 2,
+      "sample": [
+        {
+          "type": "item",
+          "status": null
+        },
+        {
+          "type": "item",
+          "status": null
+        }
+      ]
+    },
+    {
+      "path": "/admin/v1/models",
+      "query": "?limit=100",
+      "status": 200,
+      "method": "GET",
+      "error": null,
+      "rows": 1,
+      "sample": [
+        {
+          "type": "item",
+          "status": null
+        }
+      ]
+    },
+    {
+      "path": "/admin/v1/connections",
+      "query": "?limit=100",
+      "status": 403,
+      "method": "GET",
+      "error": "insufficient_role_permission",
+      "rows": null
+    },
+    {
+      "path": "/admin/v1/routes",
+      "query": "?env_id=env_01m895k8pee008b5ah423mhysr&limit=100",
+      "status": 200,
+      "method": "GET",
+      "error": null,
+      "rows": 1,
+      "sample": [
+        {
+          "type": "item",
+          "status": null
+        }
+      ]
+    }
+  ]
+}

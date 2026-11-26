@@ -1,0 +1,45 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "artifact_run": "45581179274",
+  "runtime": "exact RC6 test-root runtime on 127.0.0.1:18129; air-gapped; separate SQLite state and local archive directory",
+  "actor": "synthetic Org Owner via real Chromium Console",
+  "fixture": {
+    "package": "@qa004/lifecycle-canary",
+    "active_version_before_and_after": "0.1.0",
+    "package_signing": "unsigned synthetic local archive; no production signature or key involved",
+    "modified_copy": "cp118-tampered.tpkg; one trailing byte changed; 362 bytes",
+    "original_sha256_expected": "59841233bee7df19e9a45a4de9e38d1cf7818bc1fc1e80951102add6232b9964",
+    "modified_sha256_actual": "675dbba90b6c2534113eb529a1c475deb12b43011f7388448e571f87b313e3c1",
+    "source_uri": "tanpopo-local://cp118-tampered.tpkg"
+  },
+  "action": "Submitted the modified local archive through Extensions > Marketplace > Stage package while pinning the original archive SHA-256.",
+  "api_result": {
+    "http_status": 400,
+    "error_code": "hash_mismatch",
+    "message_displayed_by_console": "verify marketplace archive: installer: artifact_digest_mismatch",
+    "candidate_or_permission_review_created": false
+  },
+  "post_attempt_readback": {
+    "endpoint": "GET /admin/v1/extensions/installations?limit=100",
+    "http_status": 200,
+    "installation_count": 1,
+    "existing_installation_state": "ENABLED_ACTIVE",
+    "active_version": "0.1.0",
+    "candidate_version": null,
+    "version": 9,
+    "new_installation_created": false
+  },
+  "screenshots_visually_inspected": [
+    "CP118-tampered-archive-rejected.png",
+    "CP118-tampered-archive-installations.png"
+  ],
+  "classification": {
+    "digest_pinned_archive_mutation": "PASS (scoped)",
+    "console_integrity_error_presentation": "FAIL; DEF-073 Low",
+    "modified_digest_or_ed25519_signature_verification": "UNVERIFIED",
+    "new_defect_assigned": "DEF-073"
+  },
+  "product_source_modified": false,
+  "production_signing_material_used": false,
+  "gate_rel_07": "BLOCKED"
+}

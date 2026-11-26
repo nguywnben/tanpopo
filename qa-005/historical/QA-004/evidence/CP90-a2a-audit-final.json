@@ -1,0 +1,59 @@
+{
+  "key_audit_events": [
+    {
+      "seq_no": 490,
+      "action": "virtual_key.revoked",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m8amqqh9e00aq1k1da5f6pg5",
+      "metadata": {
+        "mode": "STANDARD",
+        "reason": "Graceful drain revocation"
+      }
+    },
+    {
+      "seq_no": 485,
+      "action": "virtual_key.updated",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m8amqqh9e00aq1k1da5f6pg5",
+      "metadata": {
+        "allowed_planes": "A2A",
+        "allowed_routes": [
+          "/a2a/*"
+        ],
+        "max_concurrent_streams": 50,
+        "name": "QA004 CP90 Input-required cancel A2A-only"
+      }
+    },
+    {
+      "seq_no": 484,
+      "action": "virtual_key.created",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m8amqqh9e00aq1k1da5f6pg5",
+      "metadata": {
+        "allowed_planes": "A2A",
+        "env_id": "env_01m89de355e0088ns1czays31e"
+      }
+    },
+    {
+      "seq_no": 483,
+      "action": "virtual_key.revoked",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m8amnb9ye009zcafyjpa43b6",
+      "metadata": {
+        "mode": "STANDARD",
+        "reason": "Graceful drain revocation"
+      }
+    },
+    {
+      "seq_no": 482,
+      "action": "virtual_key.created",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m8amnb9ye009zcafyjpa43b6",
+      "metadata": {
+        "allowed_planes": "PROVIDER,A2A",
+        "env_id": "env_01m89de355e0088ns1czays31e"
+      }
+    }
+  ],
+  "chain_verification_ui": "S chain intact across 491 events.\nImmutable audit events\n4\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#489\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8amvzkte00agf9rf2pfehf9\n\t12:43:33 AM\t\nInspect\n\n#405\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8agq31ke009j8th0r3wgbgw\n\t11:30:09 PM\t\nInspect\n\n#401\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8agn3vve00ans12367zqrw6\n\t11:29:04 PM\t\nInspect\n\n#256\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8a7g52be008vs8ct6hsh8pa\n\t8:49:07 PM\t\nInspect"
+}

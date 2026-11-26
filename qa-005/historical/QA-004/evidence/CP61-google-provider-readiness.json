@@ -1,0 +1,20 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "credential": {"binding_name": "QA_GOOGLE_AI_STUDIO_API_KEY", "configured": true, "value_recorded": false},
+  "provider_catalog_request": {
+    "method": "GET",
+    "endpoint": "Google Generative Language models catalog",
+    "agent_runtime_direct_without_proxy": {"result": "ECONNREFUSED"},
+    "configured_https_proxy": {"status": 200, "models_returned": 50, "billable_inference_calls": 0}
+  },
+  "tanpopo_runtime": {
+    "installed_extensions_before": 0,
+    "cached_gemini_package": {"package": "@tanpopo/gemini", "version": "0.1.0", "origin_trust": "Unverified", "publisher_signature": "Unsigned", "execution_tier": "sandboxed_wasm"},
+    "permission_review": {"state": "explicit_unverified_external_warning_present", "host_permission": ["generativelanguage.googleapis.com"], "secret_slot": "api_key", "private_ip_access": "Disabled", "require_tls": "Enabled", "source_body_code_activated": false},
+    "candidate_discard_status": 204,
+    "installed_extensions_after": 0
+  },
+  "classification": "Provider credential and external catalog reachability PASS through configured HTTPS proxy (no inference spend). Tanpopo Gemini adapter activation and actual inference are BLOCKED pending authentic release-signing infrastructure or another product-authorized trust state. Unsigned/unverified policy was not bypassed; candidate was discarded. This is the known release-signing blocker, not a new integration defect.",
+  "spend": {"inference_requests": 0, "estimated_usd": 0},
+  "limitations": ["Agent-runner HTTPS proxy access does not prove that the Tanpopo runtime can reach Google", "No provider connection, model, route, or inference was configured", "No production signature or key was generated or accessed"]
+}

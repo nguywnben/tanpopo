@@ -1,0 +1,41 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "adapter_activation": {
+    "origin": "Official",
+    "publisher": "Unsigned",
+    "execution_tier": "declarative",
+    "permissions_reviewed": true,
+    "activated": true
+  },
+  "connection_defaults": {
+    "billing_mode": "SELF_HOSTED_INFRA",
+    "data_region": "ON_PREM",
+    "credential": "none",
+    "allow_private_ip": true,
+    "allowed_cidrs": "127.0.0.1/32"
+  },
+  "persisted_readback": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "con_01m889mse8e00a3mxsevra4wnp",
+        "name": "QA003 CP55 Ollama defaults",
+        "adapter_id": "adp_01m889hrjwe009s44ez08ddy1z",
+        "billing_mode": "SELF_HOSTED_INFRA",
+        "data_region": "ON_PREM",
+        "state": "CREATED_UNVERIFIED",
+        "allow_private_ip": true
+      }
+    ]
+  },
+  "probe": "not executed; no upstream request or provider spend",
+  "screenshots": [
+    "CP55-marketplace-initial.png",
+    "CP55-ollama-stage-review.png",
+    "CP55-ollama-consent.png",
+    "CP55-ollama-activated.png",
+    "CP55-new-connection-defaults.png",
+    "CP55-ollama-connection-created.png",
+    "CP55-ollama-persisted-refresh.png"
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "journey": "fresh-install and independent login",
+  "screenshots": [
+    "CP01-setup-initial.png",
+    "CP01-setup-provider-empty.png",
+    "CP01-setup-complete-overview.png",
+    "CP01-fresh-login-overview.png"
+  ],
+  "setupHeading": "Instance setup",
+  "stepper": [
+    {
+      "text": "English",
+      "aria": null,
+      "current": null
+    },
+    {
+      "text": "",
+      "aria": "Switch to dark theme",
+      "current": null
+    },
+    {
+      "text": "Owner account",
+      "aria": "Go to step 1: Owner account",
+      "current": null
+    },
+    {
+      "text": "2\nFirst connection",
+      "aria": "Go to step 2: First connection",
+      "current": null
+    },
+    {
+      "text": "3\nKey custody",
+      "aria": "Go to step 3: Key custody",
+      "current": null
+    },
+    {
+      "text": "4\nReview",
+      "aria": "Go to step 4: Review",
+      "current": null
+    },
+    {
+      "text": "",
+      "aria": "Show value",
+      "current": null
+    },
+    {
+      "text": "",
+      "aria": "Show value",
+      "current": null
+    },
+    {
+      "text": "",
+      "aria": "Show value",
+      "current": null
+    },
+    {
+      "text": "Continue",
+      "aria": null,
+      "current": null
+    }
+  ],
+  "providerEmptyState": true,
+  "setupCompleted": true,
+  "overviewHeading": "Overview",
+  "freshSessionLoginAndReload": true,
+  "reloadHeading": "Overview"
+}

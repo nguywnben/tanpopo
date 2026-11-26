@@ -1,0 +1,78 @@
+[
+  {
+    "label": "Project",
+    "group_by": "project",
+    "visible": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n1\nGroup by\nProject\nProject\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nQA002 Audit mwto47wa\t\nExact\n$0.012001\n\t\nEstimated\n$0.000000\n\t5 / 0\t\n0",
+    "exports": {
+      "csv": {
+        "status": 200,
+        "contentType": "text/csv; charset=utf-8",
+        "filename": "tanpopo-chargeback-project.csv",
+        "content": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\nQA002 Audit mwto47wa,12001,0,5,0,0\n"
+      },
+      "json": {
+        "status": 200,
+        "contentType": "application/json; charset=utf-8",
+        "filename": "tanpopo-chargeback-project.json",
+        "content": "[\n  {\n    \"group_key\": \"QA002 Audit mwto47wa\",\n    \"exact_micro_usd\": 12001,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 5,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  }\n]"
+      }
+    }
+  },
+  {
+    "label": "Environment",
+    "group_by": "env",
+    "visible": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExported JSON chargeback report.\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n1\nGroup by\nEnvironment\nEnvironment\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nstage\t\nExact\n$0.012001\n\t\nEstimated\n$0.000000\n\t5 / 0\t\n0",
+    "exports": {
+      "csv": {
+        "status": 200,
+        "contentType": "text/csv; charset=utf-8",
+        "filename": "tanpopo-chargeback-env.csv",
+        "content": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\nstage,12001,0,5,0,0\n"
+      },
+      "json": {
+        "status": 200,
+        "contentType": "application/json; charset=utf-8",
+        "filename": "tanpopo-chargeback-env.json",
+        "content": "[\n  {\n    \"group_key\": \"stage\",\n    \"exact_micro_usd\": 12001,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 5,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  }\n]"
+      }
+    }
+  },
+  {
+    "label": "Virtual Key",
+    "group_by": "key",
+    "visible": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExported JSON chargeback report.\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n4\nGroup by\nVirtual Key\nVirtual Key\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nQA002 CP68 A2A only\t\nExact\n$0.003000\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0\n\nqa002-a2a-only\t\nExact\n$0.006000\n\t\nEstimated\n$0.000000\n\t2 / 0\t\n0\n\nqa002-cp59-a2a-lifecycle\t\nExact\n$0.003000\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0\n\nqa002-provider-default\t\nExact\n$0.000001\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0",
+    "exports": {
+      "csv": {
+        "status": 200,
+        "contentType": "text/csv; charset=utf-8",
+        "filename": "tanpopo-chargeback-key.csv",
+        "content": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\nQA002 CP68 A2A only,3000,0,1,0,0\nqa002-a2a-only,6000,0,2,0,0\nqa002-cp59-a2a-lifecycle,3000,0,1,0,0\nqa002-provider-default,1,0,1,0,0\n"
+      },
+      "json": {
+        "status": 200,
+        "contentType": "application/json; charset=utf-8",
+        "filename": "tanpopo-chargeback-key.json",
+        "content": "[\n  {\n    \"group_key\": \"QA002 CP68 A2A only\",\n    \"exact_micro_usd\": 3000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-a2a-only\",\n    \"exact_micro_usd\": 6000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 2,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-cp59-a2a-lifecycle\",\n    \"exact_micro_usd\": 3000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-provider-default\",\n    \"exact_micro_usd\": 1,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  }\n]"
+      }
+    }
+  },
+  {
+    "label": "Model",
+    "group_by": "model",
+    "visible": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExported JSON chargeback report.\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n4\nGroup by\nModel\nModel\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nqa002-cp59-refresh-agent-r3\t\nExact\n$0.003000\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0\n\nqa002-cp68-private-agent\t\nExact\n$0.003000\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0\n\nqa002-local-agent\t\nExact\n$0.006000\n\t\nEstimated\n$0.000000\n\t2 / 0\t\n0\n\nqa002-ollama-model\t\nExact\n$0.000001\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0",
+    "exports": {
+      "csv": {
+        "status": 200,
+        "contentType": "text/csv; charset=utf-8",
+        "filename": "tanpopo-chargeback-model.csv",
+        "content": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count\nqa002-cp59-refresh-agent-r3,3000,0,1,0,0\nqa002-cp68-private-agent,3000,0,1,0,0\nqa002-local-agent,6000,0,2,0,0\nqa002-ollama-model,1,0,1,0,0\n"
+      },
+      "json": {
+        "status": 200,
+        "contentType": "application/json; charset=utf-8",
+        "filename": "tanpopo-chargeback-model.json",
+        "content": "[\n  {\n    \"group_key\": \"qa002-cp59-refresh-agent-r3\",\n    \"exact_micro_usd\": 3000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-cp68-private-agent\",\n    \"exact_micro_usd\": 3000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-local-agent\",\n    \"exact_micro_usd\": 6000,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 2,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  },\n  {\n    \"group_key\": \"qa002-ollama-model\",\n    \"exact_micro_usd\": 1,\n    \"estimated_micro_usd\": 0,\n    \"exact_request_count\": 1,\n    \"estimated_request_count\": 0,\n    \"unmetered_request_count\": 0\n  }\n]"
+      }
+    }
+  }
+]

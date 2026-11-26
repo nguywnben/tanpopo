@@ -1,0 +1,35 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": 18086,
+  "action": "Sync tools for private loopback URL http://127.0.0.1:19202/mcp with allowlist 127.0.0.2/32",
+  "fixture_before": {
+    "request_count": 0,
+    "requests": []
+  },
+  "fixture_after": {
+    "request_count": 0,
+    "requests": []
+  },
+  "apiEvents": [
+    {
+      "url": "/admin/v1/mcp/servers/mcp_01m86mfmpse00af9r77ns2w99t/sync-tools",
+      "method": "POST",
+      "body": null
+    },
+    {
+      "status": 502,
+      "url": "/admin/v1/mcp/servers/mcp_01m86mfmpse00af9r77ns2w99t/sync-tools",
+      "body": "{\"error\":{\"code\":\"mcp_sync_failed\",\"type\":\"upstream_error\",\"message\":\"upstream MCP tool synchronization failed\",\"request_id\":\"req_01m86mkbbde009wa6xyxbzk3h7\",\"retryable\":true}}\n"
+    }
+  ],
+  "persisted": {
+    "status": 200,
+    "record": {
+      "id": "mcp_01m86mfmpse00af9r77ns2w99t",
+      "slug": "qa002-cp103-cidr-deny",
+      "state": "ACTIVE",
+      "tool_count": 0
+    }
+  },
+  "visibleTail": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n6\nA2A Agents & Active Tasks\nupstream MCP tool synchronization failed\nRegistered MCP servers\n6\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 CP103 alternate runtime CIDR allow\nqa002-cp103-cidr-allow\n\thttp://127.0.0.1:19202/mcp\tActive\t0\t\nSync tools\n\n\nQA002 CP103 alternate runtime CIDR deny\nqa002-cp103-cidr-deny\n\thttp://127.0.0.1:19202/mcp\tActive\t0\t\nSync tools\n\n\nQA002 CP24 Synthetic MCP\nqa002-cp24-server\n\thttp://127.0.0.1:19109/mcp\tActive\t1\t\nSync tools\n\n\nQA002 CP25 allowed control\nqa002-cp25-allowed-control\n\thttp://127.0.0.1:19110/mcp\tSchema Drift Locked\t1\t\nSync tools\n\n\nQA002 CP25 CIDR mismatch fixture\nqa002-cp25-denied\n\thttp://127.0.0.1:19110/mcp\tActive\t0\t\nSync tools\n\n\nQA002 CP28 Synthetic Approval Server\nqa002-cp28-approval-server\n\thttp://127.0.0.1:19112/mcp\tActive\t1\t\nSync tools"
+}

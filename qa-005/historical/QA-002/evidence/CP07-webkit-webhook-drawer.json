@@ -1,0 +1,31 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated SQLite server 127.0.0.1:18083 behind local HTTPS reverse proxy",
+  "browser": "Playwright WebKit 26.5 headless, mobile viewport 375x844, touch enabled",
+  "authentication": {
+    "direct_http": "Secure __Host session cookie was not retained by WebKit; login endpoint returned 200 but subsequent session returned 401.",
+    "https_retest": "Self-signed local HTTPS proxy (browser ignored test certificate only) preserved the Secure session; authenticated Operations page reached successfully.",
+    "classification": "Direct HTTP-only browser harness limitation for a Secure cookie; no product defect inferred because the documented deployment requires HTTPS and the same local runtime worked over HTTPS."
+  },
+  "actions": [
+    "Logged in as synthetic Org Owner",
+    "Opened Operations > Webhooks",
+    "Opened Register webhook subscription drawer",
+    "Inspected the required URL, signing credential, event selection, and footer controls"
+  ],
+  "layout": {
+    "viewport_width": 375,
+    "document_client_width": 375,
+    "document_scroll_width": 375,
+    "drawer_heading": {"x": 73, "right": 323, "visible": true},
+    "form": {"x": 73, "right": 359, "visible": true},
+    "receiver_input": {"x": 82, "right": 350, "visible": true},
+    "secret_selector": {"x": 86, "right": 322, "visible": true},
+    "event_selector": {"x": 86, "right": 294, "visible": true},
+    "screenshot": "CP07-webkit-webhook-drawer-375.png"
+  },
+  "screenshots_visually_inspected": ["CP07-webkit-pre-drawer.png", "CP07-webkit-webhook-drawer-375.png"],
+  "page_errors": [],
+  "result": "Historical offscreen drawer position did not reproduce. Heading, controls, and footer were visible and usable at 375px; no document horizontal overflow. No webhook was submitted because no HMAC signing secret exists in this isolated tenant; the UI clearly explains this prerequisite and disables registration.",
+  "classification": "DEF-009 VERIFIED FIXED (scoped WebKit 26.5 / 375px / authenticated HTTPS flow). Prior conflicting QA-001 evidence remains preserved; other mobile/browser states remain open."
+}

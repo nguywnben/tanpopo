@@ -1,0 +1,28 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "disabled_runtime": {
+    "console_origin": "https://127.0.0.1:18445",
+    "a2a_agent_registration": "HTTP 201, synthetic loopback endpoint only",
+    "a2a_only_key_creation": "HTTP 201, allowed_planes [A2A], allowed_routes [/a2a/*]",
+    "data_plane_discovery": "HTTP 404 resource_not_found: A2A plane is disabled.",
+    "well_known_agent_card": "HTTP 404 resource_not_found: A2A plane is disabled.",
+    "task_submission": "HTTP 404 resource_not_found: A2A plane is disabled.",
+    "fixture_calls": 0,
+    "classification": "BLOCKED by runtime A2A configuration; effective config provenance not independently inspected",
+    "key_state_after_test": "REVOKED; never sent"
+  },
+  "enabled_runtime": {
+    "console_origin": "http://127.0.0.1:18084",
+    "agent_registration": "HTTP 201 to explicit 127.0.0.1/32 synthetic fixture",
+    "key_scope": "A2A only, /a2a/*",
+    "discovery_and_card": "HTTP 200",
+    "input_required_task": "HTTP 201; GET persisted same task ID and input-required state",
+    "after_navigation_and_reload": "same task ID remained visible and resumable",
+    "console_resume": "HTTP 200; same task ID completed, version 5",
+    "final_get": "HTTP 200; completed; 3000 micros settled",
+    "fixture": "2 calls; same task ID; approval marker only recorded as boolean; no Authorization forwarded; trace root present; hop 1",
+    "key_after_test": "REVOKED; replay returned HTTP 401 invalid_virtual_key"
+  },
+  "source_gate": "internal/ingress/a2a/task_coordinator.go: TaskCoordinator.Enabled reads cfg.Enabled; handlers emit the observed disabled-plane 404 when false; ErrA2ADisabled comment says disabled by default",
+  "product_defect": "none assigned; QA-OBS-010 tracks the control-plane/data-plane configuration contract"
+}

@@ -1,0 +1,48 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "artifact_run": "45581179274",
+  "method": "pg_dump custom format; no owner/ACL; restore into new database as application role",
+  "archive": {
+    "location": "/tmp/qa004-cp111-postgres.dump (not in repository)",
+    "bytes": 324855,
+    "mode": "0600",
+    "sha256": "f76504781c365aaf1904c61fc14b8b9d1bde04b2d95c7f3343a790f38d56c167",
+    "pg_restore_toc_entries": 600
+  },
+  "initial_restored_counts": {
+    "organizations": 1,
+    "principals": 2,
+    "audit_events": 85
+  },
+  "master_kek_byte_scan": {
+    "raw_bytes_present": false,
+    "hex_encoding_present": false,
+    "scope": "exact key bytes only"
+  },
+  "application_recovery": {
+    "runtime_port": 18135,
+    "role": "all for first recovery; control-plane in split-role retest",
+    "ready_http": 200,
+    "storage_engine": "postgresql",
+    "organization_count": 1,
+    "project_count": 2,
+    "environment_count": 2,
+    "member_count": 2,
+    "developer_project_binding_persisted": true,
+    "audit_chain_ui_http": 200,
+    "audit_chain_verified_count": 88
+  },
+  "valkey": {
+    "configured_cluster_nodes": 3,
+    "cluster_service_health": "healthy from prior CP105 infrastructure check",
+    "app_specific_rate_limit_or_failover_behavior": "UNVERIFIED"
+  },
+  "remaining": [
+    "PITR/WAL archiving",
+    "backup retention/rotation",
+    "restore interruption",
+    "cross-version restore",
+    "HA failover",
+    "production-scale RPO/RTO"
+  ]
+}

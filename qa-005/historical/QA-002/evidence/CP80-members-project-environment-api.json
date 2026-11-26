@@ -1,0 +1,15 @@
+{
+  "header": "QA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch",
+  "visible": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n9\nMembers & Roles\n4\nOrganization members\n4\nPrincipal\tKind\tAssigned roles\tActions\nqa002-cp71-def016@example.invalid\tHUMAN\t\nDeveloper\n\t\nEdit roles\n\nqa002-team-admin-created@example.invalid\tHUMAN\t\nDeveloper\n\t\nEdit roles\n\nqa002-team-admin@example.invalid\tHUMAN\t\nDeveloper\nTeam Admin\n\t\nEdit roles\n\nqa-002-a2a-owner@example.invalid\tHUMAN\t\nOrg Owner\n\t\nEdit roles",
+  "api": {
+    "status": 200,
+    "count": 4,
+    "has_more": false,
+    "ids": [
+      "prc_01m8667t7ye00bacznhftww7sf",
+      "prc_01m851gad9e00bsgradv1n799z",
+      "prc_01m851dr7ke009rasm25sqyxp1",
+      "prc_01m84xhbtwe00939kr14qg3khv"
+    ]
+  }
+}

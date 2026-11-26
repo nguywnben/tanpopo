@@ -1,0 +1,60 @@
+{
+  "runtime_port": 18128,
+  "scope": "QA004 Test Root Org / default / dev (Active workspace scope)",
+  "key": {
+    "id": "vky_01m8arzhtge00b57zyt66n6xm0",
+    "name": "QA004 CP98 Responses stream final",
+    "state": "CREATED_ACTIVE",
+    "allowed_routes": [
+      "/v1/responses"
+    ],
+    "project_id": "prj_01m895k8pee008b440xk2ef12p",
+    "env_id": "env_01m895k8pee008b5ah423mhysr",
+    "final_state": "Revoked"
+  },
+  "fixture_requests_before": 0,
+  "fixture_requests_after": 1,
+  "response": {
+    "status": 200,
+    "content_type": "text/event-stream; charset=utf-8",
+    "usage_accuracy": null,
+    "request_id": "req_01m8arzhxve0099rew9j1n5na4",
+    "body": "event: response.created\ndata: {\"response\":{\"created_at\":1795658000,\"id\":\"resp_qa004_cp98\",\"model\":\"qa004-mock\",\"object\":\"response\",\"output\":[],\"status\":\"in_progress\"},\"type\":\"response.created\"}\n\nevent: response.output_item.added\ndata: {\"item\":{\"content\":[],\"id\":\"msg_qa004_cp98\",\"role\":\"assistant\",\"status\":\"in_progress\",\"type\":\"message\"},\"output_index\":0,\"type\":\"response.output_item.added\"}\n\nevent: response.content_part.added\ndata: {\"content_index\":0,\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"part\":{\"text\":\"\",\"type\":\"output_text\"},\"type\":\"response.content_part.added\"}\n\nevent: response.output_text.delta\ndata: {\"content_index\":0,\"delta\":\"Hello from synthetic \",\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"type\":\"response.output_text.delta\"}\n\nevent: response.output_text.delta\ndata: {\"content_index\":0,\"delta\":\"Responses stream.\",\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"type\":\"response.output_text.delta\"}\n\nevent: response.output_text.done\ndata: {\"content_index\":0,\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"text\":\"Hello from synthetic Responses stream.\",\"type\":\"response.output_text.done\"}\n\nevent: response.content_part.done\ndata: {\"content_index\":0,\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"part\":{\"text\":\"Hello from synthetic Responses stream.\",\"type\":\"output_text\"},\"type\":\"response.content_part.done\"}\n\nevent: response.output_item.done\ndata: {\"item\":{\"content\":[{\"annotations\":[],\"text\":\"Hello from synthetic Responses stream.\",\"type\":\"output_text\"}],\"id\":\"msg_qa004_cp98\",\"role\":\"assistant\",\"status\":\"completed\",\"type\":\"message\"},\"output_index\":0,\"type\":\"response.output_item.done\"}\n\nevent: response.completed\ndata: {\"response\":{\"created_at\":1795658000,\"id\":\"resp_qa004_cp98\",\"model\":\"qa004-mock\",\"object\":\"response\",\"output\":[{\"content\":[{\"annotations\":[],\"text\":\"Hello from synthetic Responses stream.\",\"type\":\"output_text\"}],\"id\":\"msg_qa004_cp98\",\"role\":\"assistant\",\"status\":\"completed\",\"type\":\"message\"}],\"status\":\"completed\",\"usage\":{\"input_tokens\":7,\"output_tokens\":4,\"total_tokens\":11}},\"type\":\"response.completed\"}\n\ndata: [DONE]\n\n",
+    "events": [
+      "event: response.created\ndata: {\"response\":{\"created_at\":1795658000,\"id\":\"resp_qa004_cp98\",\"model\":\"qa004-mock\",\"object\":\"response\",\"output\":[],\"status\":\"in_progress\"},\"type\":\"response.created\"}",
+      "event: response.output_item.added\ndata: {\"item\":{\"content\":[],\"id\":\"msg_qa004_cp98\",\"role\":\"assistant\",\"status\":\"in_progress\",\"type\":\"message\"},\"output_index\":0,\"type\":\"response.output_item.added\"}",
+      "event: response.content_part.added\ndata: {\"content_index\":0,\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"part\":{\"text\":\"\",\"type\":\"output_text\"},\"type\":\"response.content_part.added\"}",
+      "event: response.output_text.delta\ndata: {\"content_index\":0,\"delta\":\"Hello from synthetic \",\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"type\":\"response.output_text.delta\"}",
+      "event: response.output_text.delta\ndata: {\"content_index\":0,\"delta\":\"Responses stream.\",\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"type\":\"response.output_text.delta\"}",
+      "event: response.output_text.done\ndata: {\"content_index\":0,\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"text\":\"Hello from synthetic Responses stream.\",\"type\":\"response.output_text.done\"}",
+      "event: response.content_part.done\ndata: {\"content_index\":0,\"item_id\":\"msg_qa004_cp98\",\"output_index\":0,\"part\":{\"text\":\"Hello from synthetic Responses stream.\",\"type\":\"output_text\"},\"type\":\"response.content_part.done\"}",
+      "event: response.output_item.done\ndata: {\"item\":{\"content\":[{\"annotations\":[],\"text\":\"Hello from synthetic Responses stream.\",\"type\":\"output_text\"}],\"id\":\"msg_qa004_cp98\",\"role\":\"assistant\",\"status\":\"completed\",\"type\":\"message\"},\"output_index\":0,\"type\":\"response.output_item.done\"}",
+      "event: response.completed\ndata: {\"response\":{\"created_at\":1795658000,\"id\":\"resp_qa004_cp98\",\"model\":\"qa004-mock\",\"object\":\"response\",\"output\":[{\"content\":[{\"annotations\":[],\"text\":\"Hello from synthetic Responses stream.\",\"type\":\"output_text\"}],\"id\":\"msg_qa004_cp98\",\"role\":\"assistant\",\"status\":\"completed\",\"type\":\"message\"}],\"status\":\"completed\",\"usage\":{\"input_tokens\":7,\"output_tokens\":4,\"total_tokens\":11}},\"type\":\"response.completed\"}",
+      "data: [DONE]"
+    ]
+  },
+  "fixture_log": [
+    {
+      "path": "/v1/responses",
+      "model": "qa004-mock",
+      "stream": true,
+      "keys": [
+        "input",
+        "model",
+        "stream"
+      ],
+      "auth_present": false,
+      "content_type": "application/json"
+    }
+  ],
+  "traces": [
+    {
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "qa004-mock",
+      "duration_ms": 251
+    }
+  ]
+}

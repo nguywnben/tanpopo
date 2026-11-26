@@ -1,0 +1,34 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 SQLite test root; no live provider configured",
+  "backup_create": {
+    "exit_code": 0,
+    "backup_id": "c6dc3da3040b42429019ee32cde872ee",
+    "archive_sha256": "b79c75097cba578ef2b39591c1769a7cb386aadafac445ed39423fc6d492f76c",
+    "archive_bytes": 69254
+  },
+  "verify_original": {
+    "exit_code": 0,
+    "result": "four files verified"
+  },
+  "restore_original": {
+    "exit_code": 0,
+    "verify_secrets_decrypt": true,
+    "restored_files": ["database.sqlite", "manifest.json", "tanpopo.yaml", "tanpopo.lock"],
+    "sqlite_integrity_check": "ok",
+    "application_table_count": 57
+  },
+  "tamper_probes": [
+    {
+      "mutation": "flipped one byte in plaintext envelope header",
+      "verify_exit_code": 14,
+      "rejection": "backup: invalid archive creation time"
+    },
+    {
+      "mutation": "flipped one byte in encrypted frame 0",
+      "verify_exit_code": 14,
+      "rejection": "backup: authenticate encrypted frame 0: cipher: message authentication failed"
+    }
+  ],
+  "cleanup": "Backup archives, restored database, tampered copies, and temporary directories were removed after verification."
+}

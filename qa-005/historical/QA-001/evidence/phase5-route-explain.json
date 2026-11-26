@@ -1,0 +1,12 @@
+{
+  "checkpoint": "5 \u2014 2026-11-23",
+  "operation": "Chromium UI Route Explain dry-run",
+  "target_model": "qa-gemini-flash-lite",
+  "data_region": "US",
+  "http_status": 200,
+  "dry_run": true,
+  "selected_candidates": 0,
+  "rejected_deployments": 0,
+  "observation": "The UI says the dry-run completed and shows 0 eligible / 0 rejected; it does not distinguish a model with no deployment from a filtered deployment.",
+  "visual_evidence": "routes-explain-no-deployment.png"
+}

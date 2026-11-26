@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-23",
+  "runtime": "fresh isolated listener 8083",
+  "browser": "Chromium 1440x1000",
+  "initialState": {
+    "initialized": false,
+    "availableAdapters": 0
+  },
+  "preBootstrapDataPlaneAuth": {
+    "status": 401,
+    "body": "invalid_virtual_key"
+  },
+  "validation": "token\nOwner email\nOwner password\nMinimum 12 characters.\nOwner password\nConfirm password\nRe-enter your owner password.\nConfirm password\nOrganization name\nFirst project name\nContinue",
+  "steps": {
+    "ownerAccount": "completed client-side validation; synthetic local owner and tenant submitted",
+    "connection": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\ncompleted\nFirst connection\n3\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nInitial provider connection\n\nOptional upstream provider\n\nNo provider adapters enabled yet\nFinish setup first, then open Extensions → Marketplace to activate one of 8 bundled official adapters (or stage a package via CLI) before adding connections.\nBack\nContinue",
+    "custody": "onnection\ncompleted\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nMaster key custody\n\nTanpopo encrypts provider credentials and secrets with the configured instance master key (KEK). Back it up in your approved secret manager—losing it renders encrypted credentials unrecoverable.\n\nI have securely backed up the Tanpopo master key\nBack\nContinue",
+    "review": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\ncompleted\nFirst connection\ncompleted\nKey custody\ncompleted\nReview\n\nAlready initialized? Sign in\n\nReview and initialize\n\nInitialize instance\n\nOwner email\nqa-fresh-cp38@example.invalid\nOrganization / Project\nQA Fresh Install CP38 / qa-fresh-project\nInitial connection\nSkipped\nBack\nComplete setup"
+  },
+  "bootstrapCompleteResponse": {
+    "method": "POST",
+    "path": "/admin/v1/bootstrap/complete",
+    "status": 201,
+    "code": null,
+    "message": null,
+    "hasSecret": false
+  },
+  "afterBootstrap": {
+    "url": "http://127.0.0.1:8083/overview",
+    "initialized": true,
+    "availableAdapterCount": 0,
+    "sessionRoles": [
+      "OPERATOR",
+      "ORG_OWNER"
+    ],
+    "sessionEmail": "qa-fresh-cp38@example.invalid",
+    "overviewText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-fresh-cp38@example.invalid\nOperator, Org Owner\nQA Fresh Install CP38\n/\nqa-fresh-project\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOverview\n\nUpdated 1:37:16 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.\nAll systems nominal No active operational alerts or pending remediation items."
+  },
+  "screenshots": [
+    "phase38-setup-step1-empty.png",
+    "phase38-setup-step1-validation.png",
+    "phase38-setup-step1-filled.png",
+    "phase38-setup-step2-no-adapters.png",
+    "phase38-setup-step3-custody.png",
+    "phase38-setup-step4-review.png",
+    "phase38-setup-complete-overview.png"
+  ],
+  "ownerPasswordStoredOnlyInMode600TempFile": true
+}

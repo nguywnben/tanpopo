@@ -1,0 +1,16 @@
+{
+  "clearResponse": [
+    {
+      "status": 200,
+      "active": false,
+      "cleared_by": true,
+      "version": 2,
+      "error": null
+    }
+  ],
+  "activeSwitchesAfterClear": {
+    "status": 200,
+    "count": 0
+  },
+  "uiShowsActiveSwitch": true
+}

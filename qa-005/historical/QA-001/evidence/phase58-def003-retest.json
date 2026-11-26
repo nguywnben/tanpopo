@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:8083/finops/budgets",
+  "budgetCount": false,
+  "emptyState": true,
+  "createControlPresent": false,
+  "bodyTail": "in content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-fresh-cp38@example.invalid\nOperator, Org Owner\nQA Fresh Install CP38\n/\nqa-fresh-project\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nFinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nBudgets & Holds\nChargeback\nExact settled\n$0.000000\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n0\nNo budgets configured\nBudget records appear once configured for your organization or project.\nNo budgets configured Budget records appear once configured for your organization or project.",
+  "buttons": [
+    "QA Fresh Install CP38\n/\nqa-fresh-project\n/\ndev\n(Active workspace scope)",
+    "QA Fresh Install CP38",
+    "qa-fresh-project",
+    "No project",
+    "dev",
+    "No env",
+    "Close popover",
+    "Jump\nCtrl\nK",
+    "English",
+    "Kill Switch",
+    "Export CSV",
+    "Export JSON",
+    "Budgets & Holds",
+    "Chargeback",
+    "Cancel",
+    "Create project",
+    "Cancel",
+    "Create environment"
+  ]
+}

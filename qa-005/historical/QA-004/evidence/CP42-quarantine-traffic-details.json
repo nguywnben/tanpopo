@@ -1,0 +1,81 @@
+{
+  "requests": [
+    {
+      "path": "/native/ollama/api/generate",
+      "status": 503,
+      "error": "no_compliant_deployment_available",
+      "response_request_id": "req_01m89rd6wje009khhbj5y9gke7",
+      "body": {
+        "error": {
+          "code": "no_compliant_deployment_available",
+          "message": "No compliant active deployment is available for model \"qa004-loopback\".",
+          "request_id": "req_01m89rd6wje009khhbj5y9gke7",
+          "retryable": true,
+          "type": "residency_unavailable_error"
+        }
+      }
+    },
+    {
+      "path": "/v1/chat/completions",
+      "status": 503,
+      "error": "no_compliant_deployment_available",
+      "response_request_id": "req_01m89rd6x6e00ahes4k03a7gb8",
+      "body": {
+        "error": {
+          "code": "no_compliant_deployment_available",
+          "type": "residency_unavailable_error",
+          "message": "No compliant active deployment is available for model \"qa004-loopback\".",
+          "request_id": "req_01m89rd6x6e00ahes4k03a7gb8",
+          "retryable": true
+        }
+      }
+    }
+  ],
+  "fixture_calls_during_test": 0,
+  "trace_api": [
+    {
+      "request_id": "trc_01m89rd6x6e00ahfargte06xzr",
+      "plane": "PROVIDER",
+      "route_slug": "/v1/chat/completions",
+      "status_code": 503,
+      "error_code": "no_compliant_deployment_available",
+      "deployment_id": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "created_at": "2026-11-25T16:25:18.503Z"
+    },
+    {
+      "request_id": "trc_01m89rd6wje009kj59ym3hwy5b",
+      "plane": "NATIVE",
+      "route_slug": "/native/{dialect}",
+      "status_code": 503,
+      "error_code": "no_compliant_deployment_available",
+      "deployment_id": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "created_at": "2026-11-25T16:25:18.483Z"
+    },
+    {
+      "request_id": "trc_01m89rbbr5e0099pv5mqrr6z7a",
+      "plane": "PROVIDER",
+      "route_slug": "/v1/chat/completions",
+      "status_code": 503,
+      "error_code": "no_compliant_deployment_available",
+      "deployment_id": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "created_at": "2026-11-25T16:24:17.926Z"
+    },
+    {
+      "request_id": "trc_01m89r17x1e00answng9sm3mx9",
+      "plane": "NATIVE",
+      "route_slug": "/native/{dialect}",
+      "status_code": 503,
+      "error_code": "no_compliant_deployment_available",
+      "deployment_id": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "created_at": "2026-11-25T16:18:46.305Z"
+    }
+  ]
+}

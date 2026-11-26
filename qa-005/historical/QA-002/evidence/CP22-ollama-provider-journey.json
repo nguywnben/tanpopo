@@ -1,0 +1,21 @@
+{
+  "before": "QA002 CP22 Synthetic Ollama\nhttp://127.0.0.1:19106\n\tadp_01m855gzs5e0094ptxcjk6s3hn\tON_PREM · Self-hosted\tUnverified\tNone bound\t",
+  "after": "QA002 CP22 Synthetic Ollama\nhttp://127.0.0.1:19106\n\tadp_01m855gzs5e0094ptxcjk6s3hn\tON_PREM · Self-hosted\tActive\tNone bound\t",
+  "api": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/connections",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/connections/con_01m855jjqze00b6qf38eamvqas/test",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/connections",
+      "status": 200
+    }
+  ]
+}

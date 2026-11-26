@@ -1,0 +1,24 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "scope": "default/dev",
+  "route_slug": "qa003-cp45-identity-probe",
+  "ingress_dialect": "ollama",
+  "response": {
+    "status": 200,
+    "url_path": "/admin/v1/routes/explain",
+    "body": {
+      "dry_run": true,
+      "route_slug": "qa003-cp45-identity-probe",
+      "strategy": "PRIORITY_FAILOVER",
+      "eligible_count": 0,
+      "rejections": [
+        {
+          "stage": "HARD_COMPLIANCE_FILTER",
+          "rule_code": "CONNECTION_INACTIVE",
+          "detail": "Connection \"con_01m87eqcdke009xw7j0g0485nk\" state is ARCHIVED."
+        }
+      ]
+    }
+  },
+  "dispatch": "not attempted; dry-run endpoint only"
+}

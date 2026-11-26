@@ -1,0 +1,268 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084",
+  "principal": "Org Owner + Operator",
+  "mutations": 0,
+  "records": [
+    {
+      "scope": "organization-only",
+      "selector": "QA-002 A2A Org\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+      "visible_text": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nNo project\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nRoutes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.\nNo routes in this environment Create a route to map model slugs to ordered or weighted deployments.",
+      "policy_api_calls": []
+    },
+    {
+      "scope": "project-only",
+      "selector": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)",
+      "visible_text": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)\nOrganization\nQA002 CP18 Audit Status Org\nQA002 CP18 Standalone Audit Org\nQA-002 A2A Org\nProject\nQA002 CP78 Fresh Budget\nQA002 Audit mwto47wa\nqa-002-a2a-project\nNo project\nEnv\nNo env\nClose popover\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nRoutes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.",
+      "policy_api_calls": []
+    },
+    {
+      "scope": "project-environment",
+      "selector": "QA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)",
+      "visible_text": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)\nOrganization\nQA002 CP18 Audit Status Org\nQA002 CP18 Standalone Audit Org\nQA-002 A2A Org\nProject\nQA002 CP78 Fresh Budget\nQA002 Audit mwto47wa\nqa-002-a2a-project\nNo project\nEnv\nstage\nNo env\nClose popover\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nRoutes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\n2\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, US, APAC, ON_PREM\tOrganization floor\nAllowed models\t*\tEnvironment policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tEnvironment policy\nTPM ceiling\tUnspecified\tEnvironment policy\nConcurrent streams ceiling\tUnspecified\tEnvironment policy\nGuardrail hooks\tNone attached\tEnvironment policy\nEdit policy scope\nScope to edit\nScope to edit\nEnvironment\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy",
+      "policy_api_calls": [
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective"
+        },
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns"
+        },
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns&env_id=env_01m84ymb8ae00b43av7shak1sf"
+        }
+      ]
+    },
+    {
+      "scope": "project-environment-after-navigation",
+      "selector": "QA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)",
+      "visible_text": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nRoutes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\n2\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, US, APAC, ON_PREM\tOrganization floor\nAllowed models\t*\tEnvironment policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tEnvironment policy\nTPM ceiling\tUnspecified\tEnvironment policy\nConcurrent streams ceiling\tUnspecified\tEnvironment policy\nGuardrail hooks\tNone attached\tEnvironment policy\nEdit policy scope\nScope to edit\nScope to edit\nEnvironment\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy\nAll systems nominal No active operational alerts or pending remediation items.",
+      "policy_api_calls": [
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective"
+        },
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns"
+        },
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns&env_id=env_01m84ymb8ae00b43av7shak1sf"
+        }
+      ]
+    },
+    {
+      "scope": "after-hard-refresh",
+      "selector": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)",
+      "visible_text": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nRoutes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.",
+      "policy_api_calls": [
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective"
+        },
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns"
+        },
+        {
+          "method": "GET",
+          "status": 200,
+          "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns&env_id=env_01m84ymb8ae00b43av7shak1sf"
+        }
+      ]
+    }
+  ],
+  "api_responses": [
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/auth/session"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/bootstrap/status"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations?limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/projects?limit=200"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/kill-switches?active_only=true"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/approvals?status=PENDING&limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/projects/prj_01m868q2jte00abmhf75asqts3/environments"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/overview/summary?window=24h"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=50"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/alerts/active?limit=50"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/projects/prj_01m868q2jte00abmhf75asqts3/environments"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/projects/prj_01m84ymb7we009px5hb5pfwsns/environments"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/routes?env_id=env_01m84ymb8ae00b43av7shak1sf&limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/models?limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/deployments?env_id=env_01m84ymb8ae00b43av7shak1sf&limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/traces?env_id=env_01m84ymb8ae00b43av7shak1sf&limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/policies/effective"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns&env_id=env_01m84ymb8ae00b43av7shak1sf"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=50"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/alerts/active?limit=50"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/overview/summary?window=24h"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/routes?env_id=env_01m84ymb8ae00b43av7shak1sf&limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/deployments?env_id=env_01m84ymb8ae00b43av7shak1sf&limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/models?limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/policies/effective"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/traces?env_id=env_01m84ymb8ae00b43av7shak1sf&limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/policies/effective?project_id=prj_01m84ymb7we009px5hb5pfwsns&env_id=env_01m84ymb8ae00b43av7shak1sf"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/auth/session"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/bootstrap/status"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/organizations?limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/projects?limit=200"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/kill-switches?active_only=true"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/approvals?status=PENDING&limit=100"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "/admin/v1/projects/prj_01m868q2jte00abmhf75asqts3/environments"
+    }
+  ]
+}

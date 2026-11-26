@@ -1,0 +1,95 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 artifact 45581179274 at 127.0.0.1:18132",
+  "actors": [
+    "synthetic Org Owner",
+    "activated project-scoped Team Admin"
+  ],
+  "syntheticProjects": {
+    "assigned": {
+      "id": "prj_01m89zaw43e008zhc0q6yyeshk",
+      "slug": "qa004-scope-invite-project"
+    },
+    "sibling": {
+      "id": "prj_01m8a06404e00b6p20dx4mhzg9",
+      "slug": "qa004-cross-scope-canary"
+    }
+  },
+  "owner": {
+    "scopePickerNewProject": "visible",
+    "createSiblingProjectStatus": 201,
+    "authenticatedProjectsStatus": 200,
+    "projectSlugs": [
+      "qa004-cross-scope-canary",
+      "qa004-scope-invite-project"
+    ],
+    "postDeniedWriteReadback": {
+      "status": 200,
+      "deniedSyntheticMemberPresent": false,
+      "visibleSyntheticMembers": [
+        "qa004-cp50-project-dev@example.invalid",
+        "qa004-cp49-teamadmin@example.invalid",
+        "qa004-cp49-owner@example.invalid"
+      ]
+    }
+  },
+  "teamAdmin": {
+    "roles": [
+      "DEVELOPER",
+      "TEAM_ADMIN"
+    ],
+    "activeWorkspace": "qa004-scope-invite-project/dev",
+    "projectPickerSlugs": [
+      "qa004-scope-invite-project"
+    ],
+    "projectListStatus": 200,
+    "projectListSlugs": [
+      "qa004-scope-invite-project"
+    ],
+    "assignedEnvironmentStatus": 200,
+    "assignedEnvironmentSlugs": [
+      "dev"
+    ],
+    "siblingEnvironmentStatus": 403,
+    "siblingEnvironmentError": "insufficient_role_permission",
+    "siblingProjectMemberCreateStatus": 403,
+    "siblingProjectMemberCreateError": "insufficient_role_permission",
+    "siblingProjectMemberCreated": false,
+    "organizationListStatus": 403,
+    "killSwitchListStatus": 403,
+    "refreshPreservedAssignedProjectAndEnvironment": true,
+    "initialScopedMemberList": {
+      "status": 200,
+      "path": "/admin/v1/members?project_id=<assigned-project>&limit=100",
+      "count": 1,
+      "members": [
+        "qa004-cp49-teamadmin@example.invalid"
+      ]
+    },
+    "unfilteredMemberList": {
+      "status": 403,
+      "error": "insufficient_role_permission"
+    },
+    "scopedMemberCreate": {
+      "consoleStatus": 201,
+      "member": "qa004-cp50-project-dev@example.invalid",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "projectScope": "assigned project",
+      "pendingActivationPersistedAfterRefresh": true,
+      "filteredListAfterCreate": {
+        "status": 200,
+        "count": 2,
+        "members": [
+          "qa004-cp50-project-dev@example.invalid",
+          "qa004-cp49-teamadmin@example.invalid"
+        ]
+      },
+      "oneTimeEnrollmentTokenIncludedInEvidence": false
+    },
+    "roleCombinationCaveat": "The activated account held both DEVELOPER and TEAM_ADMIN because the UI retained the default Developer role when Team Admin was added. This test demonstrates the combined principal\u2019s project boundary; a Team-Admin-only account remains unverified."
+  },
+  "interpretation": "The activated project-scoped Team Admin can enumerate and add members only in its assigned project. The Console filters collection reads by that project; unfiltered enumeration, sibling resource reads, and sibling-project member grants are denied. Workspace selection survives refresh.",
+  "coverage": "PASS (scoped) for invitation activation, project picker/list isolation, assigned environment read, same-org sibling read/write denial, same-project Developer invitation creation and persistence, refresh persistence, and filtered member-list refresh. Other resources, multi-project assignments, member role edits/removal, pagination, session revocation, and other roles/browsers remain unverified."
+}

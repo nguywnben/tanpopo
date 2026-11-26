@@ -1,0 +1,28 @@
+{
+  "checkpoint": "CP41",
+  "trace": {
+    "status": 200,
+    "request_id": "trc_01m8cyctaze0099w7jq4vqzjs2",
+    "plane": "NATIVE",
+    "route_slug": "qa005-native-vision",
+    "usage_accuracy": "EXACT",
+    "total_cost_micros": 100015,
+    "status_code": 200,
+    "error_code": null,
+    "data_region": "ON_PREM",
+    "has_debug_payload": false
+  },
+  "usage": {
+    "status": 200,
+    "rows": [
+      {
+        "group_key": "qa005-native-vision",
+        "exact_micro_usd": 100015,
+        "estimated_micro_usd": 0,
+        "exact_request_count": 1,
+        "estimated_request_count": 0,
+        "unmetered_request_count": 0
+      }
+    ]
+  }
+}

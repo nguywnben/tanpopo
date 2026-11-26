@@ -1,0 +1,35 @@
+{
+  "initialCount": 3,
+  "afterDeniedCount": 3,
+  "defaultPrivate": true,
+  "deniedVisible": "New provider connection\nBind an enabled adapter, upstream endpoint, and write-only secret slots.\nendpoint_url violates egress SSRF policy\nConnection name\n∙ Required\nProvider adapter\n@tanpopo/ollama (adp_01m87en7q2e008z362mgp36ra8)\nEndpoint URL\n∙ Required\nBilling mode\nSelf-hosted infra\nData region\nOn-prem\nCredential for api_key\nNo credential\nAllow private or loopback upstream\nRequires explicit non-wildcard CIDRs; metadata endpoints remain blocked.\nCancel\nCreate connection",
+  "deniedRequests": [
+    {
+      "status": 400,
+      "body": "{\"error\":{\"code\":\"ssrf_blocked_private_ip\",\"type\":\"invalid_request_error\",\"message\":\"endpoint_url violates egress SSRF policy\",\"request_id\":\"req_01m87gzsvxe009j7szr7enme23\",\"retryable\":false}}\n"
+    }
+  ],
+  "allowedTarget": {
+    "idSuffix": "8k78zaaf",
+    "state": "CREATED_UNVERIFIED",
+    "endpoint": "http://127.0.0.1:19189",
+    "allow_private_ip": true
+  },
+  "probeResponse": {
+    "method": "POST",
+    "path": "/admin/v1/connections/con_01m87gv9nbe00826pm8k78zaaf/test",
+    "status": 200,
+    "body": "{\"valid\":false,\"latency_ms\":10,\"detected_model_ids\":[],\"failure_code\":\"upstream_unreachable\",\"sanitized_message\":\"upstream connection could not be reached\"}\n"
+  },
+  "calls": [
+    {
+      "server": "redirect",
+      "method": "GET",
+      "path": "/v1/models"
+    }
+  ],
+  "final": {
+    "state": "CREATED_UNVERIFIED",
+    "allow_private_ip": true
+  }
+}

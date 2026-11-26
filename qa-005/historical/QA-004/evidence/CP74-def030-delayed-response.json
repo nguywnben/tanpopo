@@ -1,0 +1,33 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 browser runtime at 127.0.0.1:18128",
+  "browser": "Chromium, 1440x1000 viewport",
+  "actor": "synthetic Org Owner authorized for both same-organization projects",
+  "test": "Hold a prior-scope GET /admin/v1/routes response, switch workspace scope, let the new-scope read settle, then release the prior response.",
+  "source_scope": "QA004 Test Root Org / default / dev",
+  "source_response": {
+    "status": 200,
+    "query": "?env_id=env_01m895k8pee008b5ah423mhysr&limit=100",
+    "rows": [
+      {
+        "id": "rte_01m896capve00bxj3fmedpv16a",
+        "slug": "qa004-loopback",
+        "env_id": "env_01m895k8pee008b5ah423mhysr"
+      }
+    ]
+  },
+  "target_scope": "QA004 Test Root Org / QA-004 Isolated Canary / qa004-scope-canary-env",
+  "target_response": {
+    "status": 200,
+    "query": "?env_id=env_01m89de355e0088ns1czays31e&limit=100",
+    "rows": []
+  },
+  "visual_observation": "Before and after the held source response was released, the target Routes page showed Configured routes 0 and No routes in this environment. No stale route row or action menu was present.",
+  "result": "Non-reproduction of this one delayed-response variant on exact RC6. DEF-030 remains PARTIAL: the historical RC4/RC5 multi-row race is not recreated by this RC6 fixture, and refresh, navigation, rapid repeated switching, alternate roles, and stale action behavior remain unverified.",
+  "evidence": [
+    "CP74-target-before-release.png",
+    "CP74-target-after-release.png"
+  ],
+  "product_source_modified": false,
+  "notes": "The source screenshot captured during the held request showed a loading skeleton, so it is not included as visual proof of source content. Source rows are evidenced by the intercepted authenticated HTTP 200 response. Target screenshots were visually inspected. No cross-tenant or authorization boundary was crossed."
+}

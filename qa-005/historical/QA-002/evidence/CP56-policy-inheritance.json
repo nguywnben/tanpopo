@@ -1,0 +1,166 @@
+{
+  "result": "PASS; child editor exposed only inherited EU option while organization limit was EU, no child write was submitted; organization scope restored",
+  "before": [
+    {
+      "status": 200,
+      "scope": "ORGANIZATION",
+      "scope_id": "org_01m85fqs3ae009a5406gxzx57g",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 2
+    },
+    {
+      "status": 200,
+      "scope": "PROJECT",
+      "scope_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 1
+    },
+    {
+      "status": 200,
+      "scope": "ENVIRONMENT",
+      "scope_id": "env_01m85ry445e009xg6sr14c5q1z",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 1
+    }
+  ],
+  "restrictSave": {
+    "saved": true,
+    "confirmed": false
+  },
+  "restricted": [
+    {
+      "status": 200,
+      "scope": "ORGANIZATION",
+      "scope_id": "org_01m85fqs3ae009a5406gxzx57g",
+      "regions": [
+        "EU"
+      ],
+      "version": 3
+    },
+    {
+      "status": 200,
+      "scope": "PROJECT",
+      "scope_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+      "regions": [
+        "EU"
+      ],
+      "version": 1
+    },
+    {
+      "status": 200,
+      "scope": "ENVIRONMENT",
+      "scope_id": "env_01m85ry445e009xg6sr14c5q1z",
+      "regions": [
+        "EU"
+      ],
+      "version": 1
+    }
+  ],
+  "projectForm": [
+    {
+      "region": "EU",
+      "checked": true,
+      "disabled": false
+    }
+  ],
+  "envForm": [
+    {
+      "region": "EU",
+      "checked": true,
+      "disabled": false
+    }
+  ],
+  "childRelaxationRequestSent": false,
+  "restoreSave": {
+    "saved": true,
+    "confirmed": false
+  },
+  "restored": [
+    {
+      "status": 200,
+      "scope": "ORGANIZATION",
+      "scope_id": "org_01m85fqs3ae009a5406gxzx57g",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 4
+    },
+    {
+      "status": 200,
+      "scope": "PROJECT",
+      "scope_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 1
+    },
+    {
+      "status": 200,
+      "scope": "ENVIRONMENT",
+      "scope_id": "env_01m85ry445e009xg6sr14c5q1z",
+      "regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "version": 1
+    }
+  ],
+  "writes": [
+    {
+      "status": 200,
+      "url": "/admin/v1/policies/pol_tc0dy1195x010ydcj42zcr1rt8",
+      "body": {
+        "id": "pol_tc0dy1195x010ydcj42zcr1rt8",
+        "scope_tier": "ORGANIZATION",
+        "scope_id": "org_01m85fqs3ae009a5406gxzx57g",
+        "allowed_data_regions": [
+          "EU"
+        ],
+        "min_plugin_trust": "ANY_APPROVED",
+        "min_capability_assurance": "DECLARED",
+        "version": 3
+      }
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/policies/pol_tc0dy1195x010ydcj42zcr1rt8",
+      "body": {
+        "id": "pol_tc0dy1195x010ydcj42zcr1rt8",
+        "scope_tier": "ORGANIZATION",
+        "scope_id": "org_01m85fqs3ae009a5406gxzx57g",
+        "allowed_data_regions": [
+          "EU",
+          "US",
+          "APAC",
+          "ON_PREM"
+        ],
+        "min_plugin_trust": "ANY_APPROVED",
+        "min_capability_assurance": "DECLARED",
+        "version": 4
+      }
+    }
+  ]
+}

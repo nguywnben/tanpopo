@@ -1,0 +1,80 @@
+{
+  "key_id": "vky_01m8b9jsg5e00btbkjnn7545ba",
+  "rotation_http": 200,
+  "grace_override": {
+    "ui_requested_grace_seconds": 86400,
+    "test_override_seconds": 60
+  },
+  "immediate_old_and_new": [
+    {
+      "status": 200,
+      "error": null
+    },
+    {
+      "status": 200,
+      "error": null
+    }
+  ],
+  "old_credential_expiry": {
+    "status": 401,
+    "error": "invalid_virtual_key"
+  },
+  "elapsed_ms": 62317,
+  "new_credential_after_expiry": {
+    "status": 200,
+    "error": null
+  },
+  "state_after_expiry": {
+    "state": "ROTATING_DUAL_VALID",
+    "version": 2
+  },
+  "after_revoke": [
+    {
+      "status": 401,
+      "error": "invalid_virtual_key"
+    },
+    {
+      "status": 401,
+      "error": "invalid_virtual_key"
+    }
+  ],
+  "final": {
+    "state": "REVOKED",
+    "version": 3
+  },
+  "credential_values_printed": false,
+  "audit_events": [
+    {
+      "seq_no": 740,
+      "action": "virtual_key.rotated",
+      "target_id": "vky_01m8b9jsg5e00btbkjnn7545ba",
+      "chain_partition": "org_01m895k8pee008b3aeaswvpshy"
+    },
+    {
+      "seq_no": 741,
+      "action": "virtual_key.revoked",
+      "target_id": "vky_01m8b9jsg5e00btbkjnn7545ba",
+      "chain_partition": "org_01m895k8pee008b3aeaswvpshy"
+    }
+  ],
+  "rotation_finalized_event_observed_before_revoke": false,
+  "screenshots": [
+    "CP132-retest-dual-valid-before-expiry.png",
+    "CP132-retest-old-expired-new-active.png",
+    "CP132-retest-final-revoked.png"
+  ],
+  "classification": "FAIL (scoped expired-rotation state cleanup and documented error-code discrepancy); old credential was safely denied and new credential remained usable.",
+  "contract_error_codes": {
+    "planning_acceptance": "virtual_key_expired",
+    "contract_test_matrix": "key_expired",
+    "runtime_observed": "invalid_virtual_key",
+    "security_policy_resolution": "UNRESOLVED; retain uniform auth failure unless Security confirms a safe, documented differentiated contract."
+  },
+  "product_source_modified": false,
+  "gate": "GATE-REL-07 BLOCKED",
+  "exploratory_run_note": "Initial CP132 screenshots are retained as exploratory evidence only; its stdout/result record was not captured, so timing and HTTP assertions rely exclusively on the documented Retest run. The exploratory key was revoked.",
+  "exploratory_screenshots_not_used_for_result": [
+    "CP132-dual-valid-before-expiry.png",
+    "CP132-old-expired-new-active.png"
+  ]
+}

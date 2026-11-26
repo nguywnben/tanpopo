@@ -1,0 +1,63 @@
+Skip to main content
+Tanpopo
+Monitor
+Overview
+Traces
+FinOps
+Gateway
+Providers
+Models
+Routes & Policies
+Ecosystem
+Extensions
+MCP Hub
+Playground
+Governance
+Access & Keys
+Security
+Operations
+qa-fresh-cp38@example.invalid
+Operator, Org Owner
+QA Fresh Install CP38
+/
+qa-fresh-project
+/
+dev
+(Active workspace scope)
+Jump
+Ctrl
+K
+Language
+English
+Kill Switch
+Models & Deployments
+
+Logical model capability declarations, assurance tiers, and environment deployments.
+
+Register model
+Add deployment
+Deployments
+Logical Models
+Data region
+All regions
+Health state
+All states
+Environment deployments
+0
+No deployments found
+Bind a logical model to a provider connection with an integer nano-USD rate card.
+Register logical model
+New models start as DECLARED until test or verification evidence promotes them.
+Display name
+∙ Required
+Canonical model slug
+∙ Required
+Context tokens
+∙ Required
+Max output tokens
+∙ Required
+Declared capabilities
+Select model capabilities
+Cancel
+Register model
+No deployments found Bind a logical model to a provider connection with an integer nano-USD rate card.

@@ -1,0 +1,73 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "scenario": "Disposable tenant crypto-shred followed by encrypted backup verification and restore",
+  "targetTenant": "QA-003 Backup Retest CP02",
+  "archive": {
+    "backupId": "b847ba11fe4385a7017f739870126489",
+    "sha256": "051e996687cc47cebe0d2cbf231a8b94ebced47fa57fe5cf9710dccc82886176",
+    "sizeBytes": 28252,
+    "verify": "PASS; 4 files authenticated",
+    "restoreWithSecretDecryptVerification": "PASS"
+  },
+  "cryptoShred": {
+    "uiConfirmationAndDeletion": "PASS",
+    "deletedOrganizationAbsentFromLiveList": true,
+    "targetOrganizationRowsInRestoredDatabase": 0,
+    "targetRowsAfterShred": {
+      "org_encryption_keys": 0,
+      "projects": 0,
+      "environments": 0,
+      "virtual_keys": 0,
+      "principals": 0,
+      "role_bindings": 0,
+      "secret_credentials": 0,
+      "project_encryption_keys": 0
+    },
+    "retainedTargetAuditEvents": 5,
+    "retainedEventTypes": [
+      "organization.created",
+      "project.created",
+      "environment.created",
+      "virtual_key.created",
+      "organization.crypto_shredded"
+    ],
+    "finalTargetAuditEvent": "organization.crypto_shredded",
+    "productAuditVerifyAfterRestore": {
+      "httpStatus": 200,
+      "intact": true,
+      "checkedEvents": 5
+    }
+  },
+  "restoredRuntime": {
+    "health": "HTTP 200 /healthz",
+    "freshOwnerLogin": "PASS",
+    "survivingOrganizations": ["Default Organization"],
+    "deletedTenantAbsent": true,
+    "syntheticSurvivorCredentialListed": true,
+    "credentialResponseContainsPlaintext": false,
+    "defaultOrganizationAuditVerify": {
+      "httpStatus": 200,
+      "intact": true,
+      "checkedEvents": 24
+    }
+  },
+  "negativeCases": {
+    "wrongMasterKeyBackupVerify": "Rejected with authentication failure (exit 14)",
+    "tamperedArchiveRestore": "Rejected with authentication failure (exit 14)",
+    "destinationAfterTamperedRestoreExists": false
+  },
+  "screenshots": [
+    "CP02-crypto-shred-confirm.png",
+    "CP02-crypto-shred-ready.png",
+    "CP02-crypto-shred-complete.png",
+    "CP02-restored-overview.png",
+    "CP02-restored-audit.png"
+  ],
+  "notes": [
+    "All tenant, key, database, archive, and credential artifacts remained in private /tmp test paths and are excluded from this branch.",
+    "Only synthetic credentials and synthetic organization data were used.",
+    "The synthetic surviving credential was proven to persist as metadata and decrypt-verification passed for encrypted archive contents; the credential was not sent to a provider.",
+    "No provider API calls were made; cumulative provider spend remains USD 0.",
+    "Historical DEF-038 reproduction is verified fixed for this SQLite RC5 path. Other backends, crash/power-loss recovery, and upgrade compatibility remain unverified."
+  ]
+}

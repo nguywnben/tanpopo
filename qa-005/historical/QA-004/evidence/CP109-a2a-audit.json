@@ -1,0 +1,83 @@
+{
+  "events": {
+    "status": 200,
+    "events": [
+      {
+        "action": "a2a.task.resumed",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axnh12e008rawg2j6demgz"
+      },
+      {
+        "action": "a2a.task.resumed",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axnh12e008rawg2j6demgz"
+      },
+      {
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axnh12e008rawg2j6demgz"
+      },
+      {
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axnh12e008rawg2j6demgz"
+      },
+      {
+        "action": "a2a.task.submitted",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axnh12e008rawg2j6demgz"
+      },
+      {
+        "action": "a2a.task.canceled_by_admin",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axgwtye00bkpn8jss9k59s"
+      },
+      {
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axgwtye00bkpn8jss9k59s"
+      },
+      {
+        "action": "a2a.task.submitted",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axgwtye00bkpn8jss9k59s"
+      },
+      {
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axe80he00ayadqvyvqypda"
+      },
+      {
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axe80he00ayadqvyvqypda"
+      },
+      {
+        "action": "a2a.task.submitted",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axe80he00ayadqvyvqypda"
+      },
+      {
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axasbqe0084bg4t6nvq84z"
+      },
+      {
+        "action": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axasbqe0084bg4t6nvq84z"
+      },
+      {
+        "action": "a2a.task.submitted",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8axasbqe0084bg4t6nvq84z"
+      },
+      {
+        "action": "a2a.agent.registered",
+        "target_type": "agent_endpoint",
+        "target_id": "agt_01m8ax4jhme00bq35e10hnrvv7"
+      }
+    ]
+  },
+  "chain_ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 53 events.\nImmutable audit events\n53\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#53\tauth.login_succeeded\tprc_01m"
+}

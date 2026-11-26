@@ -1,0 +1,14 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "binary_version_commit": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime_role": "data-plane",
+  "runtime": "isolated local SQLite service on 127.0.0.1:18117 with generated test-only master key; no user data or provider credentials",
+  "readiness": {"healthz": 200, "readyz": 200},
+  "controls": [
+    {"method":"POST","path":"/v1/chat/completions","status":401,"content_type":"application/json; charset=utf-8","error_code":"invalid_virtual_key","tanpopo_request_id_present":true},
+    {"method":"POST","path":"/native/ollama/api/chat","status":404,"content_type":"text/plain; charset=utf-8","body":"404 page not found","tanpopo_request_id_present":false},
+    {"method":"POST","path":"/native/anthropic/v1/messages","status":404,"content_type":"text/plain; charset=utf-8","body":"404 page not found","tanpopo_request_id_present":false}
+  ],
+  "interpretation": "The separated data-plane role is healthy and exposes the documented normalized ingress, but does not expose the documented native passthrough paths. This extends DEF-048 beyond the combined role-all Console fallback.",
+  "secrets_or_credentials_recorded": false
+}

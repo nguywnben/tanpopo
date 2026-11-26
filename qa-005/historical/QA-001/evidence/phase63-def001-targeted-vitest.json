@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-23",
+  "command": "npm test -- src/pages/console.test.tsx -t 'hides unavailable presets|offers only adapters'",
+  "exitCode": 1,
+  "failedTests": 2,
+  "skippedTests": 11,
+  "failureRule": "axe-core 4.14 label-content-name-mismatch",
+  "affectedElement": "Setup progress button aria-label=\"Go to step 1: Owner ...\" omits visible button text",
+  "freshResult": "both original cases still fail axe assertion",
+  "relatedRuntimeEvidence": "CP31 Chromium axe reported zero violations for an authenticated live state; CP38 completed the wizard visually. Runtime and jsdom test states are not equivalent; root cause/harness mismatch remains unresolved."
+}

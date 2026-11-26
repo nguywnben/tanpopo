@@ -1,0 +1,10 @@
+[
+  {
+    "group_key": "dev",
+    "exact_micro_usd": 2468,
+    "estimated_micro_usd": 0,
+    "exact_request_count": 2,
+    "estimated_request_count": 0,
+    "unmetered_request_count": 0
+  }
+]

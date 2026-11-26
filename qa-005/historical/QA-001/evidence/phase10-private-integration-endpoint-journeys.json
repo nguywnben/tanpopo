@@ -1,0 +1,36 @@
+{
+  "phase": 10,
+  "date": "2026-11-23",
+  "environment": {
+    "isolated_listener": "127.0.0.1:8081",
+    "browser_origin": "https://127.0.0.1:8444",
+    "healthz": 200,
+    "readyz": 200,
+    "browser": "Chromium via official Playwright 1.62.0 container",
+    "role": "ORG_OWNER"
+  },
+  "journeys": [
+    {
+      "feature": "MCP private endpoint registration",
+      "steps": ["Sign in", "MCP Hub", "Register server", "Enter local test URL", "Enable private/loopback checkbox", "Submit"],
+      "request_status": 400,
+      "response": "allowed_cidrs is required when allow_private_ip is true",
+      "record_created": false,
+      "endpoint_requested": false,
+      "visual_evidence": ["phase10-mcp-hub-list.png", "phase10-mcp-register-form.png", "phase10-mcp-private-endpoint-validation.png"]
+    },
+    {
+      "feature": "A2A private endpoint registration",
+      "steps": ["Switch to A2A Agents & Active Tasks", "Register agent", "Enter local test URL", "Enable private/loopback checkbox", "Submit"],
+      "request_status": 400,
+      "response": "invalid agent configuration: allowed_cidrs is required when allow_private_ip is true",
+      "record_created": false,
+      "endpoint_requested": false,
+      "visual_evidence": ["phase10-a2a-agents-empty.png", "phase10-a2a-private-endpoint-rejected.png"]
+    }
+  ],
+  "findings": ["DEF-005"],
+  "existing_mcp_server_count": 0,
+  "existing_a2a_agent_count": 0,
+  "limitations": "This establishes the private endpoint form/API contract gap. It does not test public HTTPS MCP registration, tools/list, schema pinning, virtual-key grants, AgentCard fetching, task delegation or cancellation."
+}

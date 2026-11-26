@@ -1,0 +1,98 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime_role": "all",
+  "scenario": "first-time setup initial organization/project/default environment and audit records",
+  "step2": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\ncompleted\nFirst connection\n3\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nInitial provider connection\n\nOptional upstream provider\n\nNo provider adapters enabled yet\nFinish setup first, then open Extensions → Marketplace to activate one of 8 bundled official adapters (or stage a package via CLI) before adding connections.\nBack\nContinue",
+  "step3": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\ncompleted\nFirst connection\ncompleted\nKey custody\n4\nReview\n\nAlready initialized? Sign in\n\nMaster key custody\n\nTanpopo encrypts provider credentials and secrets with the configured instance master key (KEK). Back it up in your approved secret manager—losing it renders encrypted credentials unrecoverable.\n\nI have securely backed up the Tanpopo master key\nBack\nContinue",
+  "review": "Tanpopo\nLanguage\nEnglish\nInstance setup\n\nClaim this self-hosted gateway and provision its initial owner and route.\n\nOwner account\ncompleted\nFirst connection\ncompleted\nKey custody\ncompleted\nReview\n\nAlready initialized? Sign in\n\nReview and initialize\n\nInitialize instance\n\nOwner email\nqa003-audit-owner@example.invalid\nOrganization / Project\nQA003 Fresh Audit Bootstrap / default\nInitial connection\nSkipped\nBack\nComplete setup",
+  "bootstrap_complete_status": 201,
+  "bootstrap_complete_body": {
+    "org_id": "org_01m888jkf5e00b2bfcrjbqt3e0",
+    "project_id": "prj_01m888jkf5e00b2c4cyph3gt9a",
+    "env_id": "env_01m888jkf5e00b2d92a5xnjdaw",
+    "owner_principal_id": "prc_01m888jkf5e00b2ez59szspbp3"
+  },
+  "post_setup_path": "/overview",
+  "post_setup_text": "Immediate redirect after HTTP 201 showed the Overview loading placeholder. The later settled Overview state is recorded separately in overview and CP53-fresh-owner-overview.png.",
+  "overview": "Overview\n\nUpdated 2:29:24 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+  "state": {
+    "organization": {
+      "id": "org_01m888jkf5e00b2bfcrjbqt3e0",
+      "slug": "qa003-fresh-audit-bootstrap",
+      "name": "QA003 Fresh Audit Bootstrap"
+    },
+    "project": {
+      "id": "prj_01m888jkf5e00b2c4cyph3gt9a",
+      "slug": "default",
+      "name": "default"
+    },
+    "environments": {
+      "status": 200,
+      "rows": [
+        {
+          "id": "env_01m888jkf5e00b2d92a5xnjdaw",
+          "slug": "dev",
+          "name": "dev"
+        }
+      ]
+    },
+    "audit": {
+      "status": 200,
+      "count": 6,
+      "actions": [
+        "auth.login_succeeded",
+        "auth.login_succeeded",
+        "auth.login_succeeded",
+        "environment.created",
+        "project.created",
+        "organization.created"
+      ],
+      "events": [
+        {
+          "action": "auth.login_succeeded",
+          "target_type": "principal",
+          "target_id": "prc_01m888jkf5e00b2ez59szspbp3",
+          "actor": "prc_01m888jkf5e00b2ez59szspbp3"
+        },
+        {
+          "action": "auth.login_succeeded",
+          "target_type": "principal",
+          "target_id": "prc_01m888jkf5e00b2ez59szspbp3",
+          "actor": "prc_01m888jkf5e00b2ez59szspbp3"
+        },
+        {
+          "action": "auth.login_succeeded",
+          "target_type": "principal",
+          "target_id": "prc_01m888jkf5e00b2ez59szspbp3",
+          "actor": "prc_01m888jkf5e00b2ez59szspbp3"
+        },
+        {
+          "action": "environment.created",
+          "target_type": "environment",
+          "target_id": "env_01m888jkf5e00b2d92a5xnjdaw",
+          "actor": "prc_01m888jkf5e00b2ez59szspbp3"
+        },
+        {
+          "action": "project.created",
+          "target_type": "project",
+          "target_id": "prj_01m888jkf5e00b2c4cyph3gt9a",
+          "actor": "prc_01m888jkf5e00b2ez59szspbp3"
+        },
+        {
+          "action": "organization.created",
+          "target_type": "organization",
+          "target_id": "org_01m888jkf5e00b2bfcrjbqt3e0",
+          "actor": "prc_01m888jkf5e00b2ez59szspbp3"
+        }
+      ]
+    },
+    "chain": {
+      "status": 200,
+      "intact": true,
+      "checked_events": 6,
+      "first_broken_seq": null
+    }
+  },
+  "security_screen": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 6 events.\nImmutable audit events\n6\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#6\tauth.login_succeeded\tprc_01m888jkf5e00b2ez59szspbp3\t\nprincipal\nprc_01m888jkf5e00b2ez59szspbp3\n\t2:32:25 AM\t\nInspect\n\n#5\tauth.login_succeeded\tprc_01m888jkf5e00b2ez59szspbp3\t\nprincipal\nprc_01m888jkf5e00b2ez59szspbp3\n\t2:31:44 AM\t\nInspect\n\n#4\tauth.login_succeeded\tprc_01m888jkf5e00b2ez59szspbp3\t\nprincipal\nprc_01m888jkf5e00b2ez59szspbp3\n\t2:29:23 AM\t\nInspect\n\n#3\tenvironment.created\tprc_01m888jkf5e00b2ez59szspbp3\t\nenvironment\nenv_01m888jkf5e00b2d92a5xnjdaw\n\t2:29:23 AM\t\nInspect\n\n#2\tproject.created\tprc_01m888jkf5e00b2ez59szspbp3\t\nproject\nprj_01m888jkf5e00b2c4cyph3gt9a\n\t2:29:23 AM\t\nInspect\n\n#1\torganization.created\tprc_01m888jkf5e00b2ez59szspbp3\t\norganization\norg_01m888jkf5e00b2bfcrjbqt3e0\n\t2:29:23 AM\t\nInspect",
+  "verification_note": "Each subsequent owner login appends auth.login_succeeded; the recorded state and screenshot reflect this session, with the chain verified over the resulting complete event set."
+}

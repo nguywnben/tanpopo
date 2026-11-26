@@ -1,0 +1,25 @@
+{
+  "checkpoint": "CP23",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "toolchain": "go version go1.26.11 linux/amd64",
+  "toolchain_archive_sha256": "9849f4e04ee35303714e34fbc3ac8ab44ea3e448a95aa182f91e3b9b79c710ec",
+  "command": "GOFLAGS=-buildvcs=false go test -race ./...",
+  "cache_paths": {
+    "GOCACHE": "/tmp/qa002-gocache",
+    "GOMODCACHE": "/tmp/qa002-gomodcache",
+    "GOPATH": "/tmp/qa002-gopath"
+  },
+  "result": {
+    "exit_code": 0,
+    "packages_passed": 86,
+    "packages_without_test_files": 22,
+    "failures_or_race_reports": 0
+  },
+  "raw_log_sha256": "42146bda3572ea6f410a3d757f8f3fa63949c8ce800163689d52c9ff78d9b5a7",
+  "source_diff_from_baseline": "clean",
+  "notes": [
+    "The environment /usr/bin/go executable returned \"Go: Unknown option\" and is not a usable Go toolchain. The checksum-verified Go 1.26.11 tarball already present under /tmp was extracted and invoked by absolute path.",
+    "An initial invocation could not create the default /home/agent/.cache/go-build because that path is read-only; the rerun used fresh writable caches under /tmp.",
+    "This is an automated code-quality result only and does not substitute for Alpha/Beta product coverage. QA-002 remains in progress."
+  ]
+}

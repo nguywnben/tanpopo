@@ -1,0 +1,96 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e",
+  "runtime": "exact RC6 SQLite 18128",
+  "actor": "synthetic Org Owner",
+  "scope": "QA004 Test Root Org / default / dev",
+  "temporary_budget_increase": {
+    "before": {
+      "http_status": 200,
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 100,
+      "exact": 2036,
+      "estimated": 14,
+      "reserved": 0,
+      "version": 157
+    },
+    "save_status": 200,
+    "after": {
+      "http_status": 200,
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 5000,
+      "exact": 2036,
+      "estimated": 14,
+      "reserved": 0,
+      "version": 158
+    }
+  },
+  "playground": {
+    "route": "qa004-loopback",
+    "session_id": "vky_01m8bc4pvye00beyxwcssp68br",
+    "max_budget_micros": 1000,
+    "response": "HTTP 200 synthetic Ollama reply; exact project ledger increased by 1 micro-USD ($0.000001); no external provider egress",
+    "project_ledger_before_micros": 2036,
+    "project_ledger_after_micros": 2037,
+    "project_ledger_delta_micros": 1,
+    "org_aggregate_micros_seen_in_finops_screenshot": 2038,
+    "scope_note": "Org aggregate and this project's row are distinct; no defect inferred from their 1 micro-USD difference",
+    "exploratory_budget_blocked_attempts": [
+      {
+        "route": "qa004-cp121-priced-vision",
+        "http_status": 429,
+        "trace_cost": "0.000000",
+        "screenshot": "CP135-playground-active-session.png"
+      },
+      {
+        "route": "qa004-loopback",
+        "http_status": 429,
+        "trace_cost": "0.000000",
+        "screenshot": "CP135-retest-playground-active.png"
+      }
+    ]
+  },
+  "logout_status": 204,
+  "other_tab_signed_out": true,
+  "first_tab_admin_session_after_logout": 401,
+  "post_logout_cookie_free_chat_replay": {
+    "status": 401,
+    "code": "invalid_virtual_key"
+  },
+  "persistent_key_readback": {
+    "session_status": 200,
+    "vkey_list_status": 200,
+    "key": {
+      "state": "REVOKED",
+      "version": 2,
+      "name": "Playground session",
+      "project_id_present": true,
+      "env_id_present": true,
+      "plaintext_present": false
+    },
+    "audit_status": 200,
+    "matching_revocation_events": 1,
+    "seq_no": 775
+  },
+  "project_budget_restore": {
+    "before": {
+      "http_status": 200,
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 5000,
+      "exact": 2037,
+      "estimated": 14,
+      "reserved": 0,
+      "version": 160
+    },
+    "save_status": 200,
+    "after": {
+      "http_status": 200,
+      "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "limit": 100,
+      "exact": 2037,
+      "estimated": 14,
+      "reserved": 0,
+      "version": 161
+    }
+  },
+  "playground_secret_persisted": false
+}

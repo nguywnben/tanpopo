@@ -1,0 +1,7 @@
+{
+  "status": 200,
+  "intact": true,
+  "checkedEvents": 5,
+  "firstBrokenSeq": null,
+  "errorCode": null
+}

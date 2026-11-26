@@ -1,0 +1,29 @@
+{
+  "runtime": "isolated test-root 18124",
+  "role": "OPERATOR + ORG_OWNER",
+  "query_status": 200,
+  "events": [
+    {
+      "id": "aud_01m89r17cwe0088hj5zdxc0wn0",
+      "chain_partition": "SYSTEM",
+      "seq_no": 4,
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "action": "extension.quarantined",
+      "target_type": "extension_installation",
+      "target_id": "ins_01m895ph2ge00a3evn7jxp86st",
+      "metadata": {
+        "canonical_name": "@tanpopo/ollama",
+        "previous_state": "ENABLED_ACTIVE",
+        "quarantine_reason": "QA-004 adapter quarantine acceptance probe"
+      },
+      "created_at": "2026-11-25T16:18:45.788Z"
+    }
+  ],
+  "has_more": false,
+  "verify_status": 200,
+  "verification": {
+    "intact": true,
+    "checked_events_count": 4,
+    "first_broken_seq_no": null
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "api": [
+    {
+      "path": "/admin/v1/traces",
+      "status": 200
+    }
+  ],
+  "body": " Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nRequest traces\n\nMetadata-only execution telemetry. Zero prompt or completion bytes stored.\n\nMetadata-Only\nRequest ID lookup\nModel\nError code\nSearch\nRecent requests\n5\nRequest ID\tRoute\tStatus\tError\tMetering\tDuration\tTimestamp\n\ntrc_01m856b4yze00960j2ygdcaha2\n\tqa002-cp22-streamroute\t200\t—\tExact\t5 ms\t9:52:38 PM\n\ntrc_01m856a0rje00b375h6f9ycwq3\n\tqa002-cp22-streamroute\t200\t—\tExact\t4 ms\t9:52:01 PM\n\ntrc_01m856843ke009qbt74j28f191\n\tqa002-cp22-streamroute\t502\tupstream_malformed_response\tExact\t10 ms\t9:50:59 PM\n\ntrc_01m855yr25e00aktd6kanjebg8\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t9:45:52 PM\n\ntrc_01m853j3swe00ah0dwr098z919\n\t/v1/chat/completions\t503\tno_compliant_deployment_available\tExact\t0 ms\t9:04:01 PM\nAll systems nominal No active operational alerts or pending remediation items."
+}

@@ -1,0 +1,22 @@
+{
+  "organizations": [
+    {
+      "name": "QA003 Multi-shred A",
+      "slug": "qa003-multishred-a",
+      "status": "created-or-found",
+      "idSuffix": "pwmr3jhe"
+    },
+    {
+      "name": "QA003 Multi-shred B",
+      "slug": "qa003-multishred-b",
+      "status": "created-or-found",
+      "idSuffix": "21g09wtm"
+    }
+  ],
+  "rows": [
+    "Organization\tMin extension trust\tFour-eyes approval\tCreated\tActions",
+    "QA003 Multi-shred B\nqa003-multishred-b · org_01m87n4365e00ax4hm21g09wtm\n\tAny Approved\tDisabled\tNov 24, 2026, 8:49:25 PM\t\nSwitch\nCrypto-shred",
+    "QA003 Multi-shred A\nqa003-multishred-a · org_01m87n3dage00aw5mypwmr3jhe\n\tAny Approved\tDisabled\tNov 24, 2026, 8:49:02 PM\t\nSwitch\nCrypto-shred",
+    "Default Organization\nActive\ndefault-organization · org_01m87axgx7e008eg6c8zvy7h5b\n\tAny Approved\tDisabled\tNov 24, 2026, 5:51:04 PM\t\nSwitch\nCrypto-shred"
+  ]
+}

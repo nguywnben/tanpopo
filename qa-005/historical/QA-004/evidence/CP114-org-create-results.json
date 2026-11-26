@@ -1,0 +1,20 @@
+{
+  "create_http": 201,
+  "created": {
+    "id": "org_01m8b09bt7e00bs9e9hqzn2a88",
+    "name": "QA004 CP114 PostgreSQL Crypto Shred",
+    "slug": "qa004-cp114-pg-crypto-shred"
+  },
+  "api": {
+    "status": 200,
+    "targets": [
+      {
+        "id": "org_01m8b09bt7e00bs9e9hqzn2a88",
+        "name": "QA004 CP114 PostgreSQL Crypto Shred",
+        "slug": "qa004-cp114-pg-crypto-shred"
+      }
+    ]
+  },
+  "active_scope": "QA004 CP114 PostgreSQL Crypto Shred\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+  "uiTail": "ations\n2\nOrganization\tState\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA004 CP114 PostgreSQL Crypto Shred\nActive\nqa004-cp114-pg-crypto-shred · org_01m8b09bt7e00bs9e9hqzn2a88\n\tActive\tAny Approved\tDisabled\tNov 26, 2026, 4:02:15 AM\t\nSwitch\nCrypto-shred\n\n\nQA004 CP105 PostgreSQL\nqa004-cp105-postgresql · org_01m8awayeke00bfff33wkn2g8s\n\tActive\tAny Approved\tDisabled\tNov 26, 2026, 2:53:12 AM\t\nSwitch\nCrypto-shred"
+}

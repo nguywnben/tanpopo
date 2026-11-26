@@ -1,0 +1,50 @@
+{
+  "initial": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nLive Playground\nSDK Snippets\nModel or route slug\nComparison model (optional)\nSession budget cap (micro-USD)\n\nNo turns yet. Send a prompt below to mint an ephemeral key and stream from /v1/chat/completions.\n\nPrompt\nSend",
+  "after": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 12:18:23 AM\nEnd session\nLive Playground\nSDK Snippets\nNo compliant active deployment is available for model \"qa003-no-such-route-cp35\".\nModel or route slug\nqa003-no-such-route-cp35\nComparison model (optional)\nYou\nQA-003 synthetic error-path marker CP35. No personal or provider data.\nqa003-no-such-route-cp35\nPrompt\nSend\nExecution traces\nPrimary · trc_01m88078r6e009etaz25bw1wvd\nTrace not available yet.",
+  "dataPlane": {
+    "status": 503,
+    "trace_id": "trc_01m88078r6e009etaz25bw1wvd",
+    "request_id": "req_01m88078r6e009es0yrqac9nfa",
+    "error_code": "no_compliant_deployment_available",
+    "error_message": "No compliant active deployment is available for model \"qa003-no-such-route-cp35\"."
+  },
+  "project": "prj_01m87axgx7e008ehq1d016vqwt",
+  "environment": "dev",
+  "trace": {
+    "status": 200,
+    "keys": [
+      "request_id",
+      "plane",
+      "env_id",
+      "virtual_key_id",
+      "route_slug",
+      "deployment_id",
+      "data_region",
+      "status_code",
+      "error_code",
+      "usage_accuracy",
+      "total_cost_micros",
+      "ttft_ms",
+      "duration_ms",
+      "has_debug_payload",
+      "waterfall_stages",
+      "created_at"
+    ],
+    "request_id": "trc_01m88078r6e009etaz25bw1wvd",
+    "route_slug": "/v1/chat/completions",
+    "status_code": 503,
+    "error_code": "no_compliant_deployment_available",
+    "usage_accuracy": "EXACT",
+    "duration_ms": 0,
+    "total_cost_micros": 0,
+    "waterfall_stages": [
+      {
+        "stage": "Policy",
+        "outcome": "",
+        "duration_ms": 0
+      }
+    ],
+    "has_prompt": false,
+    "body_keys": []
+  }
+}

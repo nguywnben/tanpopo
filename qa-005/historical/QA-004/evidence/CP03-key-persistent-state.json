@@ -1,0 +1,23 @@
+{
+  "key": {
+    "id": "vky_01m894srwhe00bzh5ba54syzzf",
+    "state": "REVOKED",
+    "version": 2,
+    "allowed_planes": [
+      "PROVIDER"
+    ]
+  },
+  "events": [
+    {
+      "action": "virtual_key.revoked",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m894srwhe00bzh5ba54syzzf"
+    },
+    {
+      "action": "virtual_key.created",
+      "target_type": "virtual_key",
+      "target_id": "vky_01m894srwhe00bzh5ba54syzzf"
+    }
+  ],
+  "has_more": false
+}

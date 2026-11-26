@@ -1,0 +1,17 @@
+{
+  "date": "2026-11-23",
+  "browser": "Chromium",
+  "runtime": "8081 configured HTTPS origin 8444",
+  "createStatus": 201,
+  "revokeStatus": 200,
+  "keyID": "vky_01m846vbfhe00858ckvc5105h9",
+  "visibleRowAfterUIRevoke": "qa-cp37-ui-revoke\tvk_tp_qa-sandbox_…OPW3\tRevoked\tNov 23, 2026, 12:42:15 PM",
+  "dataPlaneAfterRevoke": {
+    "path": "GET /v1/models",
+    "status": 401,
+    "code": "invalid_virtual_key",
+    "message": "Virtual Key is invalid, expired, or revoked."
+  },
+  "secretPersisted": false,
+  "confirmationText": "andbox_…OPW3\tActive\tNov 23, 2026, 12:42:15 PM\t\n\nqa-cp36-lifecycle\tvk_tp_qa-sandbox_…jRQv\tRevoked\tNov 23, 2026, 12:39:38 PM\t\nqa-cp36-key-rotation\tvk_tp_qa-sandbox_…A70V\tRevoked\tNov 23, 2026, 12:33:03 PM\t\nqa-cp34-a2a-default-key\tvk_tp_qa-sandbox_…qgFK\tRevoked\tNov 23, 2026, 12:28:35 PM\t\nqa-cp33-a2a-default-key\tvk_tp_qa-sandbox_…04Hv\tRevoked\tNov 23, 2026, 12:27:51 PM\t\nqa-cp32-a2a-scope-boundary\tvk_tp_qa-sandbox_…B7ZN\tRevoked\tNov 23, 2026, 12:26:02 PM\t\nRevoke qa-cp37-ui-revoke\nRecent trace-derived traffic (last 1h): 0 requests.\nRevocation mode\nGraceful drain (allow active streams to finish)\n\nGraceful drain blocks new requests while letting in-flight streams finish.\n\nCancel\nRevoke (graceful drain)"
+}

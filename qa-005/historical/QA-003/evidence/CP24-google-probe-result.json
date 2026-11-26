@@ -1,0 +1,24 @@
+{
+  "responses": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/connections",
+      "status": 200,
+      "text": "{\"data\":[{\"id\":\"con_01m87wdqbwe008dkwtfkwva2jr\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"name\":\"QA003 Google CP24\",\"adapter_id\":\"adp_01m87wbzs2e008hzyz34yrg4ye\",\"billing_mode\":\"COMMERCIAL_API\",\"endpoint_url\":\"https://generativelanguage.googleapis.com\",\"data_region\":\"US\",\"allow_private_ip\":fals"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/connections/con_01m87wdqbwe008dkwtfkwva2jr/test",
+      "status": 200,
+      "text": "{\"valid\":false,\"latency_ms\":2081,\"detected_model_ids\":[],\"failure_code\":\"upstream_unreachable\",\"sanitized_message\":\"upstream connection could not be reached\"}\n"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/connections",
+      "status": 200,
+      "text": "{\"data\":[{\"id\":\"con_01m87wdqbwe008dkwtfkwva2jr\",\"project_id\":\"prj_01m87axgx7e008ehq1d016vqwt\",\"name\":\"QA003 Google CP24\",\"adapter_id\":\"adp_01m87wbzs2e008hzyz34yrg4ye\",\"billing_mode\":\"COMMERCIAL_API\",\"endpoint_url\":\"https://generativelanguage.googleapis.com\",\"data_region\":\"US\",\"allow_private_ip\":fals"
+    }
+  ],
+  "menu": "Probe connection\nEdit connection\nDisable connection\nDelete connection",
+  "screen": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n4\nVault Secrets\n2\nAdapters\n2\nQA003 Google CP24: upstream connection could not be reached\nConfigured connections\n4\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA003 Google CP24 (fkwva2jr)\nhttps://generativelanguage.googleapis.com\n\tadp_01m87wbzs2e008hzyz34yrg4ye\tUS · Commercial\tUnverified\tapi_key: ...6b6d\t\n\n\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tDisabled\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (4hst80xy)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t"
+}

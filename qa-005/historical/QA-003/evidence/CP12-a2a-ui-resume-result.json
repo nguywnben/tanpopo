@@ -1,0 +1,12 @@
+{
+  "taskId": "tsk_01m87hpcc5e008gc6kxzzg29z3",
+  "response": [
+    {
+      "status": 200,
+      "state": "completed",
+      "settled_cost_micros": 1234,
+      "version": 7
+    }
+  ],
+  "rowText": "tsk_01m87hpcc5e008gc6kxzzg29z3\nqa003-input-required-lifecycle\n\tCompleted\t1 / 5\tON_PREM\t$0.010000\t$0.001234\t—"
+}

@@ -1,0 +1,70 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "route_slug": "qa003-cp47-stream-route",
+  "responses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/playground/sessions",
+      "status": 201,
+      "session_id": "vky_01m886hzdke008txg49ng5chtq"
+    }
+  ],
+  "session_id": "vky_01m886hzdke008txg49ng5chtq",
+  "beforeEnd": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 2:09:05 AM\nEnd session\nLive Playground\nSDK Snippets\nModel or route slug\nqa003-cp47-stream-route\nComparison model (optional)\nYou\nSession lifecycle check.\nqa003-cp47-stream-route\nQA003 loopback mock reply\nPrompt\nSend\nExecution traces\nPrimary · trc_01m886hzeqe00amsv01mkr7zxz\nroute qa003-cp47-stream-route · HTTP 200 · $0.000000 · 27 ms\nExact",
+  "afterEnd": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nLive Playground\nSDK Snippets\nEphemeral session key cleared from this tab. Signing out revokes active Playground keys.\nModel or route slug\nqa003-cp47-stream-route\nComparison model (optional)\nSession budget cap (micro-USD)\n\nNo turns yet. Send a prompt below to mint an ephemeral key and stream from /v1/chat/completions.\n\nPrompt\nSend\nExecution traces\nPrimary · trc_01m886hzeqe00amsv01mkr7zxz\nroute qa003-cp47-stream-route · HTTP 200 · $0.000000 · 27 ms\nExact",
+  "virtualKeyReadback": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "vky_01m886hzdke008txg49ng5chtq",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m8863dkae00a7pfx8t1kz20c",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m885s90re00a71md5m3p5q92",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m885rvhee00bbeyqvdw4j2at",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m885rbwbe009ee4k0b03cm1t",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m885q7a4e008tt3w2qxjs4wt",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m880m8ase00ax7t2zk1wag31",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m880k55ne00bydpv6j76y391",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m880hx1ee009fztrm7rh4hee",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      },
+      {
+        "id": "vky_01m880ayw7e0081g5z7pd4m57a",
+        "state": "CREATED_ACTIVE",
+        "version": 1
+      }
+    ]
+  }
+}

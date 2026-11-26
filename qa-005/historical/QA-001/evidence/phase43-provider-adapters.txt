@@ -1,0 +1,51 @@
+Skip to main content
+Tanpopo
+Monitor
+Overview
+Traces
+FinOps
+Gateway
+Providers
+Models
+Routes & Policies
+Ecosystem
+Extensions
+MCP Hub
+Playground
+Governance
+Access & Keys
+Security
+Operations
+qa-fresh-cp38@example.invalid
+Operator, Org Owner
+QA Fresh Install CP38
+/
+qa-fresh-project
+/
+dev
+(Active workspace scope)
+Jump
+Ctrl
+K
+Language
+English
+Kill Switch
+Providers
+
+Upstream provider connections, write-only vault credentials, and protocol adapters.
+
+Seal secret
+New connection
+Connections
+Vault Secrets
+Adapters
+1
+Search adapters
+Wire protocol
+All protocols
+Execution tier
+All tiers
+Adapter	Protocol	Execution tier	Origin trust	State
+
+@tanpopo/ollama
+	openai_chat	declarative	Official	Active

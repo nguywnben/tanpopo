@@ -1,0 +1,105 @@
+{
+  "userRole": "DEVELOPER",
+  "assignedScope": "project:qa004-isolation-canary",
+  "scopePickerOptions": [
+    "QA-004 Isolated Canary",
+    "No project",
+    "No env"
+  ],
+  "api": [
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "body": {
+        "data": {
+          "count": 1,
+          "slugs": [
+            "qa004-isolation-canary"
+          ]
+        }
+      }
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "insufficient_role_permission",
+          "message": "insufficient role permission"
+        }
+      }
+    },
+    {
+      "path": "/admin/v1/models",
+      "status": 200,
+      "body": {
+        "data": {
+          "count": 1,
+          "slugs": [
+            "qa004-mock"
+          ]
+        }
+      }
+    },
+    {
+      "path": "/admin/v1/connections",
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "insufficient_role_permission",
+          "message": "insufficient role permission"
+        }
+      }
+    },
+    {
+      "path": "/admin/v1/overview/summary?window=24h",
+      "status": 200,
+      "body": {
+        "total_requests": 0,
+        "settled_micro_usd": 0,
+        "active_hold_micros": 0,
+        "unmetered_request_count": 0
+      }
+    },
+    {
+      "path": "/admin/v1/usage/summary?group_by=project",
+      "status": 200,
+      "body": {
+        "data": {
+          "count": 0,
+          "slugs": []
+        }
+      }
+    },
+    {
+      "path": "/admin/v1/budgets",
+      "status": 200,
+      "body": {
+        "data": {
+          "count": 0,
+          "slugs": []
+        }
+      }
+    },
+    {
+      "path": "/admin/v1/deployments",
+      "status": 200,
+      "body": {
+        "data": {
+          "count": 0,
+          "slugs": []
+        }
+      }
+    },
+    {
+      "path": "/admin/v1/routes",
+      "status": 200,
+      "body": {
+        "data": {
+          "count": 0,
+          "slugs": []
+        }
+      }
+    }
+  ]
+}

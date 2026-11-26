@@ -1,0 +1,6 @@
+{
+  "login_url": "/login",
+  "observed_error": "Sign-in failed: email address or password is not valid",
+  "result": "BLOCKED; no authenticated page/API access",
+  "no_password_or_secret_recorded": true
+}

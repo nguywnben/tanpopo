@@ -1,0 +1,128 @@
+{
+  "browser": "WebKit",
+  "viewport": "375x844",
+  "api": [
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "https://127.0.0.1:18445/admin/v1/mcp/servers?limit=100",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "status": 400,
+      "url": "https://127.0.0.1:18445/admin/v1/mcp/servers",
+      "body": "{\"project_id\":\"prj_01m85ry2gme00an7wydh1pd1gc\",\"slug\":\"qa002-cp66-invalid-cidr\",\"name\":\"QA002 CP66 invalid CIDR\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19996/mcp\",\"allow_private_ip\":true,\"allowed_cidrs\":[\"127.0.0.1/33\"]}"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "https://127.0.0.1:18445/admin/v1/mcp/servers",
+      "body": null
+    }
+  ],
+  "api_response": {
+    "error": {
+      "code": "invalid_request",
+      "type": "invalid_request_error",
+      "message": "allowed_cidrs must contain valid non-wildcard CIDR prefixes",
+      "request_id": "req_01m863m71re008m2y0syshmhvj",
+      "retryable": false
+    }
+  },
+  "state": {
+    "alertEvidence": {
+      "rect": {
+        "x": 56,
+        "y": 235.96875,
+        "width": 291,
+        "height": 48
+      },
+      "display": "block",
+      "visibility": "visible",
+      "opacity": "1",
+      "zIndex": "auto",
+      "elementAtCenter": {
+        "tag": "LABEL",
+        "text": "Streamable HTTP endpoint URL\n∙ Required",
+        "className": "astryx-field-label x78zum5 x6s0dn4 xzye2dw x9ynric xcr08ib x1kq96og x1e4wzip xv1l7n4 x1ypdohk x16khyan"
+      },
+      "withinDialog": false
+    },
+    "dialog_open": true,
+    "visible": "3\nSync tools\nSchema state\nActive\nEndpoint\nhttp://127.0.0.1:19170/redirect/303/mcp\nDetail (1)\nQA002 CP58 nip.io exact allowlist\nqa002-cp58-nipio-control\nSync tools\nSchema state\nSchema Drift Locked\nEndpoint\nhttp://127.0.0.1.nip.io:19183/mcp\nDetail (1)\nQA002 CP58 nip.io CIDR mismatch\nqa002-cp58-nipio-mismatch\nSync tools\nSchema state\nActive\nEndpoint\nhttp://127.0.0.1.nip.io:19183/mcp\nDetail (1)\nCP60 localhost dot mismatch\nqa002-cp60-localhost-dot-mismatch\nSync tools\nSchema state\nActive\nEndpoint\nhttp://localhost.:19183/mcp\nDetail (1)\nqa002-cp61-ipv6-allow-r2\nqa002-cp61-ipv6-allow-r2\nSync tools\nSchema state\nSchema Drift Locked\nEndpoint\nhttp://[::1]:19185/mcp\nDetail (1)\nqa002-cp61-ipv6-deny\nqa002-cp61-ipv6-deny\nSync tools\nSchema state\nActive\nEndpoint\nhttp://[::1]:19185/mcp\nDetail (1)\nqa002-cp61-ipv6-deny-r2\nqa002-cp61-ipv6-deny-r2\nSync tools\nSchema state\nActive\nEndpoint\nhttp://[::1]:19185/mcp\nDetail (1)\nRegister MCP server\nOnly Streamable HTTP transport is permitted.\nServer slug\n∙ Required\nDisplay name\n∙ Required\nStreamable HTTP endpoint URL\n∙ Required\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal MCP servers.\nAllowed CIDRs\n∙ Required\nCancel\nRegister server",
+    "errors": [
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "allowed_cidrs must contain valid non-wildcard CIDR prefixes",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      ""
+    ]
+  },
+  "list": {
+    "status": 200,
+    "slug_found": false,
+    "count": 17
+  },
+  "fixture_contact_expected": false
+}

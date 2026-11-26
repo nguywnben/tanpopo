@@ -1,0 +1,210 @@
+{
+  "browser": "Chromium Playwright 1.62",
+  "journeys": [
+    {
+      "name": "audit-chain-verification",
+      "visibleResult": [
+        "chain intact across 172 events."
+      ],
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase17-audit-chain-verify.png"
+    },
+    {
+      "name": "webhook-register-prerequisite",
+      "drawerText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nHMAC-signed webhook subscriptions\n0\nAdd webhook\nNo webhook subscriptions\nRegister a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.\nRegister webhook subscription\nFull receiver URLs are sealed in the vault; only the origin is stored in metadata.\nHTTPS receiver URL\n∙ Required\nSigning credential (WEBHOOK_HMAC_SECRET)\nSeal a WEBHOOK_HMAC_SECRET credential in Providers → Vault Secrets first.\nSelect signing secret\nEvents\nkill_switch.triggered, mcp.approval.pending\nCancel\nRegister webhook\nNo webhook subscriptions Register a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.",
+      "submitDisabled": true,
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase17-webhook-register-form.png"
+    },
+    {
+      "name": "upgrade-preflight",
+      "visibleResult": "Upgrade compatibility preflight\n\nValidate installed extension ABI compatibility before upgrading Tanpopo Core.\n\nTarget Core version\nRun preflight\nCompatible\nState: READY_TO_UPGRADE\n",
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase17-upgrade-preflight-result.png"
+    }
+  ],
+  "responses": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/audit-events/verify",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/webhooks",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/secrets",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/extensions/lockfile",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/ops/cluster-status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/extensions/lockfile",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/ops/cluster-status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/webhooks",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/secrets",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/ops/upgrades/preflight",
+      "status": 200,
+      "method": "POST"
+    }
+  ]
+}

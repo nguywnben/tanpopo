@@ -1,0 +1,127 @@
+{
+  "role_editor_after_selection": "Edit roles for qa002-cp28-reviewer@example.invalid\nAssigned roles\nDeveloper\nScoped projects\ngoogle-default-test (google-default-test)\nCancel\nSave roles",
+  "patch_http_status": 200,
+  "patch_error_code": null,
+  "persisted_member": [
+    {
+      "id": "prc_01m85b7ftbe008ptbtee5w4hvc",
+      "email": "qa002-cp28-reviewer@example.invalid",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "version": 3
+    }
+  ],
+  "existing_session_session_endpoint": {
+    "status": 401
+  },
+  "after_downgrade_security_page_text": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nGovernance\nAccess & Keys\nSecurity\nqa002-cp28-reviewer@example.invalid\nSecurity Reviewer\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.",
+  "after_reload_session": {
+    "status": 401
+  },
+  "security_nav_matches_after_reload": 0,
+  "reviewer_api_responses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/audit-events",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 401,
+      "code": "unauthenticated"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 401,
+      "code": "unauthenticated"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 401,
+      "code": "unauthenticated"
+    }
+  ]
+}

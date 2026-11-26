@@ -1,0 +1,35 @@
+{
+  "checkpoint": "CP51",
+  "date": "2026-11-23",
+  "screenshot": "phase47-finops-chargeback.png",
+  "sameScreenHeadline": {
+    "exactSettled": "$0.000000",
+    "estimatedSettled": "$0.000000",
+    "activeHolds": "$0.000000"
+  },
+  "sameScreenChargebackRow": {
+    "project": "qa-fresh-project",
+    "exact": "$0.000001",
+    "estimated": "$0.000000",
+    "exactRequests": 1
+  },
+  "readOnlyDatabase": {
+    "budgetLedgerScopeCount": 0,
+    "budgetLedgersExactMicros": 0,
+    "usageSettlementCount": 1,
+    "usageSettlementExactMicros": 1,
+    "inputTokens": 13,
+    "outputTokens": 10,
+    "settlements": [
+      {
+        "logical_model_slug": "llama3-2-qa-local",
+        "billing_mode": "SELF_HOSTED_INFRA",
+        "usage_accuracy": "EXACT",
+        "input_tokens": 13,
+        "output_tokens": 10,
+        "total_cost_micros": 1
+      }
+    ]
+  },
+  "implementationEvidence": "FinOpsPage computes headline exact/estimated/holds from listBudgets() rows while rendering chargeback rows from getUsageChargebackSummary(). With zero budget ledgers and one exact settlement, headline is zero while chargeback is nonzero."
+}

@@ -1,0 +1,48 @@
+{
+  "campaign": "QA-005",
+  "checkpoint": "CP14",
+  "classification": "FAIL",
+  "defect_id": "DEF-081",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "artifact": {
+    "kind": "local source build",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "runtime_url": "http://127.0.0.1:18146",
+    "database": "ephemeral PostgreSQL 16",
+    "cache": "ephemeral standalone Valkey 8.1",
+    "browser": "Chromium via Playwright, 1440x1000"
+  },
+  "trust_limitation": "The bundle was accepted only through a QA-created ephemeral Ed25519 root and test signatures. This is not production signing, publisher-key provenance, or release-artifact verification.",
+  "reproduction_steps": [
+    "Start the exact-source runtime with isolated PostgreSQL 16 and Valkey, a non-superuser/non-BYPASSRLS database application login, and the documented tanpopo_webhook_worker role/membership required by the PostgreSQL webhook dispatcher.",
+    "Complete the real first-install wizard in Chromium and sign in as the synthetic owner.",
+    "Open Extensions -> Marketplace, stage @tanpopo/ollama, inspect the permission diff and explicitly consent to its loopback/private-IP permission expansion.",
+    "Select Approve & activate and capture the HTTP result and rendered notification.",
+    "Read back /admin/v1/extensions/installations and /admin/v1/provider-adapters."
+  ],
+  "observed": {
+    "activation_http_status": 500,
+    "activation_error_code": "adapter_registration_failed",
+    "rendered_error": "extension activated cleanly, but failed registering provider adapters",
+    "installation_state_after_error": "ENABLED_ACTIVE",
+    "provider_adapter_list_status": 200,
+    "provider_adapter_count": 0,
+    "postgres_forced_rls_tables": 55,
+    "postgres_public_tables": 67,
+    "postgres_policies": 58,
+    "app_role_superuser": false,
+    "app_role_bypassrls": false
+  },
+  "cross_engine_control": "The same source build, package, test-root material, and explicit permission consent successfully activated and registered @tanpopo/ollama in the isolated SQLite runtime (CP03).",
+  "root_cause_hypothesis": "The post-activation provider catalog registration or its PostgreSQL snapshot/changelog synchronization fails after the extension installation transaction commits. More granular cause is unknown because the response exposes only a generic error envelope and server emitted no actionable diagnostic in the captured runtime output.",
+  "evidence": [
+    "screenshots/CP14-postgres-ollama-activated.png",
+    "screenshots/CP14-postgres-extension-installed.png",
+    "screenshots/CP14-postgres-provider-adapters.png",
+    "screenshots/CP14-postgres-marketplace.png",
+    "screenshots/CP14-postgres-ollama-consent.png"
+  ],
+  "paid_provider_calls": 0,
+  "product_code_modified": false,
+  "gate_rel_07": "BLOCKED"
+}

@@ -1,0 +1,95 @@
+{
+  "http_status": 202,
+  "response": {
+    "installation_id": "ins_01m8aksq1ne0090tv6hv4s1kt4",
+    "package_id": "ext_01m8aksq1ne0090rhnfqm2xtxg",
+    "active_version": null,
+    "candidate_version": "0.1.0",
+    "origin_trust_tier": "unverified_external",
+    "signature_verified": false,
+    "enterprise_signed": false,
+    "execution_tier": "declarative",
+    "active_execution_tier": null,
+    "active_allowed_hosts": [],
+    "candidate_allowed_hosts": [
+      "api.qa004.invalid"
+    ],
+    "added_allowed_hosts": [
+      "api.qa004.invalid"
+    ],
+    "removed_allowed_hosts": [],
+    "secret_slots": [],
+    "active_secret_slots": [],
+    "added_secret_slots": null,
+    "quota_escalated": false,
+    "active_quotas": null,
+    "quotas": {
+      "max_memory_mib": 0,
+      "max_cpu_ms_per_call": 0,
+      "max_stream_chunk_cpu_ms": 0
+    },
+    "active_permissions": null,
+    "candidate_permissions": {
+      "allowed_hosts": [
+        "api.qa004.invalid"
+      ],
+      "require_tls": true,
+      "execution_tier": "DECLARATIVE_T1"
+    },
+    "permission_delta": {
+      "added_hosts": [
+        "api.qa004.invalid"
+      ]
+    },
+    "has_escalation": true
+  },
+  "before": {
+    "installations": [
+      {
+        "id": "ins_01m89x55nhe008skng4b6kv0qe",
+        "package_id": "ext_01m89x55nhe008sh9e22wwvcvx",
+        "state": "ENABLED_ACTIVE",
+        "version": 9
+      }
+    ]
+  },
+  "after": {
+    "installations": [
+      {
+        "id": "ins_01m8aksq1ne0090tv6hv4s1kt4",
+        "package_id": "ext_01m8aksq1ne0090rhnfqm2xtxg",
+        "state": "PENDING_PERMISSION_APPROVAL",
+        "version": 1
+      },
+      {
+        "id": "ins_01m89x55nhe008skng4b6kv0qe",
+        "package_id": "ext_01m89x55nhe008sh9e22wwvcvx",
+        "state": "ENABLED_ACTIVE",
+        "version": 9
+      }
+    ]
+  },
+  "screen": "isher\tExecution tier\tActions\n\n@tanpopo-qa004-spoof/canary\next_01m8aksq1ne0090rhnfqm2xtxg\nActive: \u2014 \u2192 Candidate: 0.1.0\n\tPending Permission Approval\tUnverified\tUnsigned\tdeclarative\t\n\n\n@qa004/lifecycle-canary\next_01m89x55nhe008sh9e22wwvcvx\nActive: 0.1.0\n\tActive\tUnverified\tUnsigned\tdeclarative\t\nExtension permission review\next_01m8aksq1ne0090rhnfqm2xtxg \u00b7 new \u2192 0.1.0\nOrigin trust\nUnverified\nPublisher signature\nUnsigned\nEnterprise signature\nNone\nExecution tier\ndeclarative\nThis package does not carry a verified offline release signature and runs as unverified_external unless release signing keys are configured.\nPermission\tActive\tCandidate\nHost: api.qa004.invalid\t\u2014\t\napi.qa004.invalid\nAdded\n\nExecution tier\tNone\t\nDECLARATIVE_T1\n\nPrivate IP access\tNone\t\nDisabled\n\nRequire TLS\tNone\t\nEnabled\n\nInspect request body\tNone\t\nDisabled\n\nInspect response body\tNone\t\nDisabled\n\nResource limits\tNone\t\nMem default \u00b7 Call default \u00b7 Chunk default\nI reviewed and explicitly consent to these permission escalations and resource limits\nI acknowledge this package is from an unverified external publisher\nConsent does not waive DEC-004 or TP-BR-0301 compliance boundaries.\nCancel\nApprove, keep disabled\nApprove & activate",
+  "archive": {
+    "source_uri": "tanpopo-local://cp88-reserved-namespace.tpkg",
+    "expected_sha256": "256d49ee2c8eb429083acca3612fb30114885a6b30b6086e2b648fd4586c5745",
+    "archive_bytes": 402,
+    "manifest_sha256": "1b4a16c9e4670d4dc214674fe303076cc6d77ca593cd2a685d4dc6db94f883f5",
+    "package_id": "@tanpopo-qa004-spoof/canary"
+  },
+  "environment": "isolated frozen RC6 runtime 18129; declarative manifest only; no code or external network",
+  "contract": {
+    "expected_status": 403,
+    "expected_error": "reserved_namespace_spoofing",
+    "source": "openapi/admin-v1.yaml POST /admin/v1/extensions/install; summary requires reserved namespace rejection"
+  },
+  "actual": {
+    "status": 202,
+    "state": "PENDING_PERMISSION_APPROVAL",
+    "name": "@tanpopo-qa004-spoof/canary",
+    "trust": "unverified_external",
+    "signature_verified": false,
+    "consent_granted": false,
+    "code_executed": false
+  }
+}

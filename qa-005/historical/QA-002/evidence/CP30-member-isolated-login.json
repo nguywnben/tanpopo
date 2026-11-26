@@ -1,0 +1,7 @@
+{
+  "http_status": 401,
+  "error_code": "invalid_credentials",
+  "error_category": null,
+  "sign_in_failed_visible": true,
+  "form_recovery_actions": []
+}

@@ -1,0 +1,66 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact RC6 SQLite 18128",
+  "actor": "synthetic Org Owner",
+  "scope": "QA004 Test Root Org / default / dev",
+  "input_name": "=HYPERLINK(\"http://example.invalid\",\"CP137\")",
+  "key_id": "vky_01m8be37d8e008vn93v9ph3d6n",
+  "key_secret_persisted": false,
+  "initial_budget": {
+    "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+    "limit": 100,
+    "exact": 2037,
+    "estimated": 14,
+    "reserved": 0,
+    "version": 163
+  },
+  "raised_budget": {
+    "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+    "limit": 5000,
+    "exact": 2037,
+    "estimated": 14,
+    "reserved": 0,
+    "version": 164
+  },
+  "request": {
+    "status": 200,
+    "error": null,
+    "message": null,
+    "reply_present": true
+  },
+  "exports": {
+    "CSV": {
+      "filename": "tanpopo-chargeback-key.csv",
+      "bytes": 1883,
+      "sha256": "041b0b1e0c8d11f736ff993525cb7723216a9a0f2d22a7b73fa77f89b6d675b8",
+      "row_present": true,
+      "candidate_line": "\"'=HYPERLINK(\"\"http://example.invalid\"\",\"\"CP137\"\")\",1,0,1,0,0",
+      "neutralized_apostrophe": true,
+      "unsafe_formula_at_cell_start": false
+    },
+    "JSON": {
+      "filename": "tanpopo-chargeback-key.json",
+      "bytes": 9164,
+      "sha256": "ace2c50cbe6b4445edf104e550a988a3fa0f65a75456ebd24c21d284ce3328f1",
+      "row_present": true,
+      "candidate_line": "    \"group_key\": \"=HYPERLINK(\\\"http://example.invalid\\\",\\\"CP137\\\")\",",
+      "neutralized_apostrophe": false,
+      "unsafe_formula_at_cell_start": false
+    }
+  },
+  "revoke_http_status": 200,
+  "key_readback": {
+    "state": "REVOKED",
+    "version": 2,
+    "plaintext_present": false
+  },
+  "restored_budget": {
+    "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+    "limit": 100,
+    "exact": 2038,
+    "estimated": 14,
+    "reserved": 0,
+    "version": 167
+  },
+  "external_provider_spend_usd": 0
+}

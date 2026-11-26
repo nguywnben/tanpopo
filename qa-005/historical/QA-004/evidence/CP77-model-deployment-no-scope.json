@@ -1,0 +1,42 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "browser": "Chromium",
+  "viewport": "1440x1000",
+  "role": "ORG_OWNER",
+  "scope": "QA004 Test Root Org\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+  "models_text": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nModels & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\nLogical Models\n1\nData region\nAll regions\nHealth state\nAll states\nAll environment deployments\n0\nNo deployments found\nBind a logical model to a provider connection with an integer nano-USD rate card.",
+  "main_buttons": [
+    "Register model",
+    "Add deployment",
+    "DeploymentsDeployments",
+    "Logical ModelsLogical Models1",
+    "All regions",
+    "All states",
+    "",
+    "Select model capabilities",
+    "Cancel",
+    "Register model",
+    "",
+    "qa004-mock",
+    "QA004 synthetic Ollama 401 (SELF_HOSTED_INFRA · f3w7j125)",
+    "Cancel",
+    "Save deployment",
+    "Cancel",
+    "Disable deployment"
+  ],
+  "drawer_opened": true,
+  "drawer_text": "",
+  "drawer_selectors": [],
+  "unfiltered_inventory": {
+    "/admin/v1/models?limit=100": {
+      "status": 200,
+      "count": 1
+    },
+    "/admin/v1/deployments?limit=100": {
+      "status": 200,
+      "count": 2
+    }
+  },
+  "screenshot": "CP77-model-deployment-drawer-no-scope.png",
+  "submitted": false
+}

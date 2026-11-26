@@ -1,0 +1,33 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "credentials_supplied": false,
+  "checks": [
+    {
+      "case": "forwarded_loopback",
+      "http_status": 401,
+      "error_code": "unauthenticated",
+      "cors_allow_origin": null,
+      "cors_allow_credentials": null
+    },
+    {
+      "case": "forwarded_multiple",
+      "http_status": 401,
+      "error_code": "unauthenticated",
+      "cors_allow_origin": null,
+      "cors_allow_credentials": null
+    },
+    {
+      "case": "foreign_origin",
+      "http_status": 401,
+      "error_code": "unauthenticated",
+      "cors_allow_origin": null,
+      "cors_allow_credentials": null
+    },
+    {
+      "case": "foreign_origin_preflight",
+      "http_status": 405,
+      "allow_origin": null,
+      "allow_credentials": null
+    }
+  ]
+}

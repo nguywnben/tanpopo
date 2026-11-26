@@ -1,0 +1,10 @@
+[
+  {
+    "group_key": "stage",
+    "exact_micro_usd": 12001,
+    "estimated_micro_usd": 0,
+    "exact_request_count": 5,
+    "estimated_request_count": 0,
+    "unmetered_request_count": 0
+  }
+]

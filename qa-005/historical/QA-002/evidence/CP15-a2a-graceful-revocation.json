@@ -1,0 +1,65 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated SQLite and server 127.0.0.1:18084; synthetic A2A endpoint 127.0.0.1:19108; explicit allowlist 127.0.0.1/32",
+  "agent": {
+    "id": "agt_01m851y95je00afccqgb0wjscq",
+    "registration_status": 201
+  },
+  "key": {
+    "id": "vky_01m85252n1e00bk7pc6zpp7cmg",
+    "issue_status": 201,
+    "allowed_planes": [
+      "A2A"
+    ],
+    "allowed_routes": [
+      "/a2a/*"
+    ],
+    "revoke_status": 200,
+    "final_state": "REVOKED",
+    "severed_streams_count": 0
+  },
+  "in_flight_submission": {
+    "task_id": "tsk_01m85262pte00ah355z6avmm3d",
+    "upstream_observed_request": true,
+    "upstream_received_caller_authorization": false,
+    "upstream_received_trace_context": true,
+    "console_revoke_mode": "GRACEFUL_DRAIN",
+    "data_plane_response_status": 400,
+    "data_plane_error_code": "invalid_request",
+    "data_plane_error_message": "context canceled",
+    "persisted_task_state": "FAILED",
+    "persisted_version": 3,
+    "settled_cost_micros": 0,
+    "reservation_state": "RELEASED_UNUSED",
+    "reservation_hold_micros": 5000
+  },
+  "observations": [
+    "The real Console displayed the task as Working while the loopback endpoint was deliberately held open.",
+    "The real Console revoke dialog described graceful drain as allowing active streams to finish; it also displayed 0 recent trace-derived requests.",
+    "After revoke, the existing A2A HTTP task request was canceled and persisted as Failed. The A2A task request is not an SSE stream.",
+    "A second controlled attempt also persisted Failed after graceful revoke; its response body was not retained. One earlier harness attempt terminated before reliable result capture and is excluded from the asserted reproduction.",
+    "Existing requirements describe graceful treatment for long-lived SSE streams. They do not define in-flight A2A task dispatch behavior; defect classification remains UNVERIFIED pending a contract decision."
+  ],
+  "audit_observations": {
+    "key_revocation_event": "virtual_key.revoked",
+    "task_transition_event": "a2a.task.transitioned working-to-failed",
+    "both_events_present": true,
+    "cryptographic_chain_verification_for_this_run": {
+      "status": "PASS",
+      "intact": true,
+      "checked_events_count": 122,
+      "first_broken_seq_no": null
+    }
+  },
+  "visual_evidence": [
+    "CP15-a2a-drain-key-form.png",
+    "CP15-a2a-drain-key-persisted.png",
+    "CP15-a2a-drain-in-flight.png",
+    "CP15-a2a-drain-revoke-dialog.png",
+    "CP15-a2a-drain-revoked.png",
+    "CP15-a2a-drain-final-task-state.png",
+    "CP15-a2a-audit-log.png"
+  ],
+  "classification": "UNRESOLVED CONTRACT / CROSS-FEATURE OBSERVATION; not assigned a defect ID",
+  "gate": "GATE-REL-07 BLOCKED"
+}

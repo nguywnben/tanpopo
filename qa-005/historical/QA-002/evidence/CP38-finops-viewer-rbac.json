@@ -1,0 +1,115 @@
+{
+  "session": {
+    "status": 200,
+    "roles": [
+      "FINOPS_VIEWER"
+    ]
+  },
+  "finops": {
+    "visible": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nBudgets & Holds\n15\nChargeback\nExact settled\n$0.000010\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n15\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nVIRTUAL_KEY\nvky_01m85d6pnee0088n4f182mskxf\n\tMONTHLY\t$0.000001\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m85d6pnee0088n4f182mskxf\n\n\nVIRTUAL_KEY\nvky_01m85abte4e00akzsz7s4hcthn\n\tMONTHLY\t$0.000001\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m85abte4e00akzsz7s4hcthn\n\n\nVIRTUAL_KEY\nvky_01m85a8xmbe00ad3sb9wyanh0r\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m85a8xmbe00ad3sb9wyanh0r\n\n\nVIRTUAL_KEY\nvky_01m85a7zbne00bbgqhtjd4bx7e\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_",
+    "createBudgetActionCount": 0
+  },
+  "budgetsRead": {
+    "status": 200,
+    "count": 15
+  },
+  "writeAttempt": {
+    "status": 403,
+    "code": "insufficient_role_permission",
+    "message": "insufficient role permission"
+  },
+  "projectBefore": {
+    "id": "bgt_project_prj_01m853e561e00byw750arfmw8y_monthly",
+    "period": "MONTHLY",
+    "limit": 10,
+    "version": 20
+  },
+  "projectAfter": {
+    "id": "bgt_project_prj_01m853e561e00byw750arfmw8y_monthly",
+    "period": "MONTHLY",
+    "limit": 10,
+    "version": 20
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/usage/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/virtual-keys",
+      "status": 403
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets",
+      "status": 200
+    },
+    {
+      "method": "PUT",
+      "path": "/admin/v1/budgets/bgt_project_prj_01m853e561e00byw750arfmw8y_monthly",
+      "status": 403
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets",
+      "status": 200
+    }
+  ]
+}

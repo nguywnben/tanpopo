@@ -1,0 +1,99 @@
+{
+  "approval_requests": [
+    {
+      "id": "apr_01m85baxyae00ad2vxg9wr9xhe",
+      "action_kind": "MCP_DESTRUCTIVE_CALL",
+      "state": "CONSUMED",
+      "requester_virtual_key_id": "vky_01m85b1r16e00bh7p1wcxhk09c",
+      "requester_principal_id": "prc_01m853e561e00byye5wtq3s746",
+      "decided_by_principal_id": "prc_01m85b7ftbe008ptbtee5w4hvc",
+      "decision_reason": "Reviewed (approve) in Tanpopo Console.",
+      "params_jcs_sha256": "3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9",
+      "version": 3,
+      "approved_mcp_server_id": "mcp_01m85anzbhe00agd0mfdnjcc78",
+      "approved_mcp_tool_id": "mcp_01m85apf22e00bay8fngccsjtg",
+      "approved_schema_sha256": "24df16c78406619c9a648441ba322b929411c2857bdc1667a4d5f04fc76eda1b",
+      "consumed_at_ms": 1795476123614
+    },
+    {
+      "id": "apr_01m85bg48xe009s19x7vc0yp2p",
+      "action_kind": "MCP_DESTRUCTIVE_CALL",
+      "state": "REJECTED",
+      "requester_virtual_key_id": "vky_01m85b1r16e00bh7p1wcxhk09c",
+      "requester_principal_id": "prc_01m853e561e00byye5wtq3s746",
+      "decided_by_principal_id": "prc_01m85b7ftbe008ptbtee5w4hvc",
+      "decision_reason": "Reviewed (reject) in Tanpopo Console.",
+      "params_jcs_sha256": "1e8bc3550617b37dd244b83c7b07a2dfc981fdf05cbdfc8c32d1ccc28ea3c66c",
+      "version": 2,
+      "approved_mcp_server_id": "mcp_01m85anzbhe00agd0mfdnjcc78",
+      "approved_mcp_tool_id": "mcp_01m85apf22e00bay8fngccsjtg",
+      "approved_schema_sha256": "24df16c78406619c9a648441ba322b929411c2857bdc1667a4d5f04fc76eda1b",
+      "consumed_at_ms": null
+    }
+  ],
+  "approval_audit_events": [
+    {
+      "event_type": "mcp.approval.requested",
+      "actor_kind": "VIRTUAL_KEY",
+      "actor_id": "vky_01m85b1r16e00bh7p1wcxhk09c",
+      "target_type": "approval_request",
+      "target_id": "apr_01m85baxyae00ad2vxg9wr9xhe",
+      "metadata_json": "{\"binding_sha256\":\"3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9\"}"
+    },
+    {
+      "event_type": "mcp.self_approval_blocked",
+      "actor_kind": "PRINCIPAL",
+      "actor_id": "prc_01m853e561e00byye5wtq3s746",
+      "target_type": "approval_request",
+      "target_id": "apr_01m85baxyae00ad2vxg9wr9xhe",
+      "metadata_json": "{}"
+    },
+    {
+      "event_type": "mcp.approval_decided",
+      "actor_kind": "PRINCIPAL",
+      "actor_id": "prc_01m85b7ftbe008ptbtee5w4hvc",
+      "target_type": "approval_request",
+      "target_id": "apr_01m85baxyae00ad2vxg9wr9xhe",
+      "metadata_json": "{\"approval_binding_hash\":\"3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9\",\"decision\":\"APPROVE\"}"
+    },
+    {
+      "event_type": "mcp.approval.consumed",
+      "actor_kind": "VIRTUAL_KEY",
+      "actor_id": "vky_01m85b1r16e00bh7p1wcxhk09c",
+      "target_type": "approval_request",
+      "target_id": "apr_01m85baxyae00ad2vxg9wr9xhe",
+      "metadata_json": "{\"binding_sha256\":\"3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9\"}"
+    },
+    {
+      "event_type": "mcp.approval.requested",
+      "actor_kind": "VIRTUAL_KEY",
+      "actor_id": "vky_01m85b1r16e00bh7p1wcxhk09c",
+      "target_type": "approval_request",
+      "target_id": "apr_01m85bg48xe009s19x7vc0yp2p",
+      "metadata_json": "{\"binding_sha256\":\"1e8bc3550617b37dd244b83c7b07a2dfc981fdf05cbdfc8c32d1ccc28ea3c66c\"}"
+    },
+    {
+      "event_type": "mcp.approval_decided",
+      "actor_kind": "PRINCIPAL",
+      "actor_id": "prc_01m85b7ftbe008ptbtee5w4hvc",
+      "target_type": "approval_request",
+      "target_id": "apr_01m85bg48xe009s19x7vc0yp2p",
+      "metadata_json": "{\"approval_binding_hash\":\"1e8bc3550617b37dd244b83c7b07a2dfc981fdf05cbdfc8c32d1ccc28ea3c66c\",\"decision\":\"REJECT\"}"
+    }
+  ],
+  "test_keys": [
+    {
+      "id": "vky_01m85av81re00b9vm6pnfkjbga",
+      "state": "REVOKED",
+      "allowed_planes": "PROVIDER,MCP",
+      "allowed_mcp_tools_json": "[\"qa002-cp28-approval-server__record_synthetic_action\"]"
+    },
+    {
+      "id": "vky_01m85b1r16e00bh7p1wcxhk09c",
+      "state": "REVOKED",
+      "allowed_planes": "MCP",
+      "allowed_mcp_tools_json": "[\"qa002-cp28-approval-server__record_synthetic_action\"]"
+    }
+  ],
+  "pre_approval_token_material_included": false
+}

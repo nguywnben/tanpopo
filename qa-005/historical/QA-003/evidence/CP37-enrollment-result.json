@@ -1,0 +1,63 @@
+{
+  "member": {
+    "email": "qa003-cp37-1795565714292@example.invalid",
+    "id": "prc_01m880x21re00aad8wzpykks8y",
+    "roles": [
+      "DEVELOPER"
+    ],
+    "initial_state": {
+      "pending": true,
+      "has_password": false
+    }
+  },
+  "reissue_status": 201,
+  "reissue": {
+    "member_match": true,
+    "has_token": true,
+    "expires_at": "2026-11-26T00:17:10.269Z"
+  },
+  "invalid_token": {
+    "status": 401,
+    "error_code": "invalid_enrollment_token"
+  },
+  "before_redeem": {
+    "pending": true,
+    "has_password": false,
+    "roles": [
+      "DEVELOPER"
+    ]
+  },
+  "activate": {
+    "status": 200,
+    "error_code": "",
+    "has_session": true
+  },
+  "replay": {
+    "status": 401,
+    "error_code": "invalid_enrollment_token",
+    "has_session": false
+  },
+  "final_readback": {
+    "found": true,
+    "pending": false,
+    "has_password": true,
+    "roles": [
+      "DEVELOPER"
+    ]
+  },
+  "token": "[omitted]",
+  "password": "[omitted]",
+  "first_login_redirect": {
+    "path": "/overview"
+  },
+  "early_capture": {
+    "ui_state": "Loading console\u2026",
+    "note": "The initial screenshot was taken before client hydration and was not used as login acceptance evidence."
+  },
+  "first_login_confirmation": {
+    "path": "/overview",
+    "heading": "Overview",
+    "screenshot": "CP37-member-first-login.png",
+    "visually_inspected": true
+  }
+}

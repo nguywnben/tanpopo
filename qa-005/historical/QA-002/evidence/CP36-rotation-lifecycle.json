@@ -1,0 +1,33 @@
+{
+  "key_id": "vky_01m85emr5ze0092wkwan98tpmb",
+  "scope": {
+    "plane": "PROVIDER",
+    "routes": ["*"],
+    "model": "qa002-cp22-streamroute"
+  },
+  "pre_rotation": {
+    "issue_http_status": 201,
+    "state": "CREATED_ACTIVE",
+    "old_secret_inference_http_status": 200
+  },
+  "rotate": {
+    "console_action": "Rotate key",
+    "http_status": 200,
+    "state": "ROTATING_DUAL_VALID",
+    "ui_grace_window": "24 hours",
+    "old_secret_during_grace_http_status": 200,
+    "new_secret_during_grace_http_status": 200
+  },
+  "revoke": {
+    "console_mode": "graceful drain",
+    "http_status": 200,
+    "persisted_state": "REVOKED",
+    "persisted_version": 3,
+    "previous_key_hash_retained": false,
+    "old_secret_after_revoke": {"http_status": 401, "code": "invalid_virtual_key"},
+    "new_secret_after_revoke": {"http_status": 401, "code": "invalid_virtual_key"}
+  },
+  "persistent_usage": {
+    "exact_settlement_rows": 3
+  }
+}

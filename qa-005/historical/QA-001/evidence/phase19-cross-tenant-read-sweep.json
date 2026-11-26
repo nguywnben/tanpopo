@@ -1,0 +1,175 @@
+{
+  "browser": "Chromium 1.62",
+  "principal": "qa-boundary-probe@example.invalid (Developer + Team Admin, no Operator)",
+  "test": "GET resource collections under own and second-org X-Tanpopo-Org-ID; payloads not retained",
+  "results": [
+    {
+      "path": "/admin/v1/projects?limit=100",
+      "scope": "bound",
+      "status": 200,
+      "code": null,
+      "count": 2,
+      "keys": [
+        "data",
+        "has_more"
+      ]
+    },
+    {
+      "path": "/admin/v1/projects?limit=100",
+      "scope": "other",
+      "status": 404,
+      "code": "resource_not_found",
+      "count": null,
+      "keys": [
+        "error"
+      ]
+    },
+    {
+      "path": "/admin/v1/members?limit=100",
+      "scope": "bound",
+      "status": 200,
+      "code": null,
+      "count": 4,
+      "keys": [
+        "data",
+        "has_more"
+      ]
+    },
+    {
+      "path": "/admin/v1/members?limit=100",
+      "scope": "other",
+      "status": 404,
+      "code": "resource_not_found",
+      "count": null,
+      "keys": [
+        "error"
+      ]
+    },
+    {
+      "path": "/admin/v1/models?limit=100",
+      "scope": "bound",
+      "status": 200,
+      "code": null,
+      "count": 1,
+      "keys": [
+        "data",
+        "has_more"
+      ]
+    },
+    {
+      "path": "/admin/v1/models?limit=100",
+      "scope": "other",
+      "status": 404,
+      "code": "resource_not_found",
+      "count": null,
+      "keys": [
+        "error"
+      ]
+    },
+    {
+      "path": "/admin/v1/connections?limit=100",
+      "scope": "bound",
+      "status": 200,
+      "code": null,
+      "count": 1,
+      "keys": [
+        "data",
+        "has_more"
+      ]
+    },
+    {
+      "path": "/admin/v1/connections?limit=100",
+      "scope": "other",
+      "status": 404,
+      "code": "resource_not_found",
+      "count": null,
+      "keys": [
+        "error"
+      ]
+    },
+    {
+      "path": "/admin/v1/routes?limit=100",
+      "scope": "bound",
+      "status": 200,
+      "code": null,
+      "count": 0,
+      "keys": [
+        "data",
+        "has_more"
+      ]
+    },
+    {
+      "path": "/admin/v1/routes?limit=100",
+      "scope": "other",
+      "status": 404,
+      "code": "resource_not_found",
+      "count": null,
+      "keys": [
+        "error"
+      ]
+    },
+    {
+      "path": "/admin/v1/budgets?limit=100",
+      "scope": "bound",
+      "status": 200,
+      "code": null,
+      "count": 1,
+      "keys": [
+        "data",
+        "has_more"
+      ]
+    },
+    {
+      "path": "/admin/v1/budgets?limit=100",
+      "scope": "other",
+      "status": 404,
+      "code": "resource_not_found",
+      "count": null,
+      "keys": [
+        "error"
+      ]
+    },
+    {
+      "path": "/admin/v1/traces?limit=100",
+      "scope": "bound",
+      "status": 200,
+      "code": null,
+      "count": 1,
+      "keys": [
+        "data",
+        "has_more"
+      ]
+    },
+    {
+      "path": "/admin/v1/traces?limit=100",
+      "scope": "other",
+      "status": 404,
+      "code": "resource_not_found",
+      "count": null,
+      "keys": [
+        "error"
+      ]
+    },
+    {
+      "path": "/admin/v1/secrets?limit=100",
+      "scope": "bound",
+      "status": 200,
+      "code": null,
+      "count": 1,
+      "keys": [
+        "data",
+        "has_more"
+      ]
+    },
+    {
+      "path": "/admin/v1/secrets?limit=100",
+      "scope": "other",
+      "status": 404,
+      "code": "resource_not_found",
+      "count": null,
+      "keys": [
+        "error"
+      ]
+    }
+  ]
+}

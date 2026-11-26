@@ -1,0 +1,124 @@
+{
+  "key_id": "vky_01m8ajqb1fe00a246nx7yha8jm",
+  "traces": {
+    "status": 200,
+    "rows": [
+      {
+        "request_id": "trc_01m8ajv0b9e00agw4zz0sgbcjb",
+        "plane": "NATIVE",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 610
+      },
+      {
+        "request_id": "trc_01m8ajrtv9e00bn0cb7jn5ad21",
+        "plane": "NATIVE",
+        "status_code": 200,
+        "error_code": "mid_stream_abort",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 208
+      },
+      {
+        "request_id": "trc_01m8ajrt7xe008dvnpwp4mwvnp",
+        "plane": "NATIVE",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 613
+      },
+      {
+        "request_id": "trc_01m8ajqbvqe009rtee8j939bds",
+        "plane": "NATIVE",
+        "status_code": 200,
+        "error_code": "mid_stream_abort",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 210
+      },
+      {
+        "request_id": "trc_01m8ajqb8ee008gycd6f8f6sey",
+        "plane": "NATIVE",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 610
+      }
+    ]
+  },
+  "finops": {
+    "group_by": "Virtual Key",
+    "row_text": "QA004 CP86 native stream cancellation\t\nExact\n$0.000000\n\t\nEstimated\n$0.000005\n\t0 / 5\t\n0"
+  },
+  "fixture": [
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "full_tool_stream",
+      "event": "started"
+    },
+    {
+      "path": "/api/chat",
+      "kind": "full_tool_stream",
+      "event": "completed",
+      "chunks_sent": 4
+    },
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "client_cancel",
+      "event": "started"
+    },
+    {
+      "path": "/api/chat",
+      "kind": "client_cancel",
+      "event": "client_disconnected",
+      "chunks_sent": 3
+    },
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "full_tool_stream",
+      "event": "started"
+    },
+    {
+      "path": "/api/chat",
+      "kind": "full_tool_stream",
+      "event": "completed",
+      "chunks_sent": 4
+    },
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "client_cancel",
+      "event": "started"
+    },
+    {
+      "path": "/api/chat",
+      "kind": "client_cancel",
+      "event": "client_disconnected",
+      "chunks_sent": 3
+    },
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "full_tool_stream",
+      "event": "started"
+    },
+    {
+      "path": "/api/chat",
+      "kind": "full_tool_stream",
+      "event": "completed",
+      "chunks_sent": 4
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "ui_actions": [
+    "Disable deployment",
+    "Delete deployment"
+  ],
+  "api": {
+    "attempt": {
+      "status": 422,
+      "error": {
+        "code": "connection_not_active",
+        "message": "backing provider connection con_01m897rgv1e00b2n9vf3w7j125 is CREATED_UNVERIFIED; verify the connection before activating deployment"
+      }
+    },
+    "before": {
+      "state": "PROVISIONED",
+      "connection_state": "CREATED_UNVERIFIED",
+      "version": 1
+    },
+    "after": {
+      "state": "PROVISIONED",
+      "connection_state": "CREATED_UNVERIFIED",
+      "version": 1
+    }
+  }
+}

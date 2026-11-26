@@ -1,0 +1,107 @@
+{
+  "status": 201,
+  "id": "org_01m85fqs3ae009a5406gxzx57g",
+  "slug": "qa002-cp39-isolation",
+  "name": "QA002 CP39 Isolation Org",
+  "bodyKeys": [
+    "id",
+    "slug",
+    "name",
+    "min_plugin_trust",
+    "four_eyes_enabled",
+    "version",
+    "created_at"
+  ],
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/ops/cluster-status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/extensions/lockfile",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/audit-events",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/webhooks",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/secrets",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/organizations",
+      "status": 201
+    }
+  ]
+}

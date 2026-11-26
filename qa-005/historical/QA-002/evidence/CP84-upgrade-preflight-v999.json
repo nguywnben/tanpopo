@@ -1,0 +1,55 @@
+{
+  "visible": "Operations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\n1\nUpgrades\nOrganizations\nWebhooks\nUpgrade compatibility preflight\n\nValidate installed extension ABI compatibility before upgrading Tanpopo Core.\n\nTarget Core version\nRun preflight\nUpgrade blocked\nState: BLOCKED_INCOMPATIBLE\nBlocking extensions\n[\n  {\n    \"installation_id\": \"ins_01m8504abme008b1wchsjf7czg\",\n    \"package_id\": \"ext_01m8504abme008azgwpd4xh459\",\n    \"installed_version\": \"0.1.0\",\n    \"core_version_range\": \">=0.1.0 <0.3.0\",\n    \"reason\": \"target core version is outside the extension compatibility range\"\n  },\n  {\n    \"installation_id\": \"ins_01m852r1p3e008ae1h5ms062ve\",\n    \"package_id\": \"ext_01m852r1p3e008acn3fzbd80bw\",\n    \"installed_version\": \"0.1.0\",\n    \"core_version_range\": \">=0.1.0 <0.3.0\",\n    \"reason\": \"target core version is outside the extension compatibility range\"\n  }\n]\nCurrent tanpopo.lock pins\n{\n  \"lockfileVersion\": 1,\n  \"generatedAt\": \"2026-11-23T20:52:01Z\",\n  \"extensions\": {\n    \"@tanpopo/gemini\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://gemini.tpkg\",\n      \"artifactSha256\": \"bd2c4bd3b11b166fb92eae37a3078bb7174a7688bcae9c8b3061794094f0a7a8\",\n      \"contractVersion\": \"0.1\",\n      \"trustTier\": \"official\",\n      \"signingKeyFingerprint\": \"9cc763db705cecbd5d68eaf0fb0a633dd1413ed4d1d54f02cda65cf10a4f8acb\",\n      \"executionTier\": \"WASM_SANDBOX_T2\",\n      \"approvedPermissions\": {\n        \"approvedBy\": \"prc_01m84xhbtwe00939kr14qg3khv\",\n        \"approvedAt\": \"2026-11-23T20:52:01Z\",\n        \"allowedHosts\": [\n          \"generativelanguage.googleapis.com\"\n        ],\n        \"requireTls\": true,\n        \"executionTier\": \"WASM_SANDBOX_T2\",\n        \"secretSlots\": [\n          \"api_key\"\n        ],\n        \"secretBindingModes\": {\n          \"api_key\": \"host_blind_inject\"\n        },\n        \"hooks\": [\n          \"guardrail:evaluate_guardrail\",\n          \"provider:build_validation_probe\",\n          \"provider:extract_usage\",\n          \"provider:inspect_native_request\",\n          \"provider:normalize_error\",\n          \"provider:transform_request\",\n          \"provider:transform_response\",\n          \"provider:transform_stream_chunk\",\n          \"provider:verify_validation_result\"\n        ],\n        \"maxMemoryMib\": 16,\n        \"inspectRequestBody\": true,\n        \"inspectResponseBody\": true\n      }\n    },\n    \"@tanpopo/ollama\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://ollama.tpkg\",\n      \"artifactSha256\": \"06b3685d23df37d51ff92e6d07b296a1803e40dab4800a0176eff39edb27ab63\",\n      \"contractVersion\": \"0.1\",\n      \"trustTier\": \"official\",\n      \"signingKeyFingerprint\": \"9cc763db705cecbd5d68eaf0fb0a633dd1413ed4d1d54f02cda65cf10a4f8acb\",\n      \"executionTier\": \"DECLARATIVE_T1\",\n      \"approvedPermissions\": {\n        \"approvedBy\": \"prc_01m84xhbtwe00939kr14qg3khv\",\n        \"approvedAt\": \"2026-11-23T20:06:51Z\",\n        \"allowedHosts\": [\n          \"127.0.0.1\",\n          \"localhost\",\n          \"ollama.internal\"\n        ],\n        \"allowPrivateIp\": true,\n        \"executionTier\": \"DECLARATIVE_T1\",\n        \"secretSlots\": [\n          \"api_key\"\n        ],\n        \"secretBindingModes\": {\n          \"api_key\": \"host_blind_inject\"\n        },\n        \"hooks\": [\n          \"provider:build_validation_probe\",\n          \"provider:extract_usage\",\n          \"provider:inspect_native_request\",\n          \"provider:normalize_error\",\n          \"provider:transform_request\",\n          \"provider:transform_response\",\n          \"provider:transform_stream_chunk\",\n          \"provider:verify_validation_result\"\n        ]\n      }\n    }\n  }\n}",
+  "response": {
+    "status": 200,
+    "body": {
+      "compatible": false,
+      "state": "BLOCKED_INCOMPATIBLE",
+      "blocking_extensions": [
+        {
+          "installation_id": "ins_01m8504abme008b1wchsjf7czg",
+          "package_id": "ext_01m8504abme008azgwpd4xh459",
+          "installed_version": "0.1.0",
+          "core_version_range": ">=0.1.0 <0.3.0",
+          "reason": "target core version is outside the extension compatibility range"
+        },
+        {
+          "installation_id": "ins_01m852r1p3e008ae1h5ms062ve",
+          "package_id": "ext_01m852r1p3e008acn3fzbd80bw",
+          "installed_version": "0.1.0",
+          "core_version_range": ">=0.1.0 <0.3.0",
+          "reason": "target core version is outside the extension compatibility range"
+        }
+      ]
+    }
+  },
+  "audit": {
+    "status": 200,
+    "events": [
+      {
+        "seq_no": 6,
+        "action": "ops.upgrade_preflight_ran",
+        "target_id": "v999.0.0",
+        "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+        "metadata": {
+          "blocking_extension_count": 2,
+          "compatible": false,
+          "state": "BLOCKED_INCOMPATIBLE"
+        },
+        "chain_partition": "SYSTEM"
+      },
+      {
+        "seq_no": 5,
+        "action": "ops.upgrade_preflight_ran",
+        "target_id": "v0.2.0",
+        "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+        "metadata": {
+          "blocking_extension_count": 0,
+          "compatible": true,
+          "state": "READY_TO_UPGRADE"
+        },
+        "chain_partition": "SYSTEM"
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "request": {
+    "model": "qa004-loopback",
+    "messages": [
+      {
+        "role": "user",
+        "content": "QA004 synthetic native passthrough"
+      }
+    ],
+    "stream": false,
+    "keep_alive": "5m",
+    "options": {
+      "temperature": 0.2,
+      "num_ctx": 4096
+    }
+  },
+  "response": {
+    "status": 200,
+    "request_id": "req_01m896ffnpe008022gm2abkba0",
+    "trace_id": "trc_01m896ffnqe008n4g8t0qmnqb3",
+    "content_type": "application/json",
+    "usage_accuracy": "ESTIMATED",
+    "response_sha256": "fe72d046cdfd16bba53bb9dd4fdddb217c0e7d2dd098dab6fbb42b677ba295fd",
+    "body": {
+      "model": "qa004-mock",
+      "created_at": "2026-11-25T10:00:00Z",
+      "message": {
+        "role": "assistant",
+        "content": "Native synthetic response."
+      },
+      "done": true,
+      "prompt_eval_count": 6,
+      "eval_count": 3
+    }
+  }
+}

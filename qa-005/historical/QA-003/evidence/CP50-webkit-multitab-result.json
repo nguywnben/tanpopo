@@ -1,0 +1,25 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "browser": "WebKit",
+  "test": "cross-tab sign-out and first-tab Playground state",
+  "session_creation_status": 201,
+  "logout_responses": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/logout",
+      "status": 204
+    }
+  ],
+  "second_tab_after_logout": "/login",
+  "first_tab_send_after_logout": {
+    "status": 401,
+    "error_code": "invalid_virtual_key"
+  },
+  "first_tab_state": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 2:28:28 AM\nEnd session\nLive Playground\nSDK Snippets\nVirtual Key is invalid, expired, or revoked.\nModel or route slug\nqa003-cp47-stream-route\nComparison model (optional)\nYou\nWebKit cross-tab session check.\nqa003-cp47-stream-route\nQA003 loopback mock reply\nYou\nWebKit send after sign-out in second tab.\nqa003-cp47-stream-route\nPrompt\nSend\nExecution traces\nPrimary · trc_01m887ngpve00atvgk4r796mar\nTrace not available yet.",
+  "page_errors": []
+}

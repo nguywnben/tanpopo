@@ -1,0 +1,108 @@
+{
+  "runtime_port": 18133,
+  "first_readback": {
+    "/admin/v1/organizations?limit=100": {
+      "status": 200,
+      "rows": [
+        {
+          "id": "org_01m8awayeke00bfff33wkn2g8s",
+          "name": "QA004 CP105 PostgreSQL",
+          "slug": "qa004-cp105-postgresql"
+        }
+      ]
+    },
+    "/admin/v1/projects?limit=100": {
+      "status": 200,
+      "rows": [
+        {
+          "id": "prj_01m8awayeke00bfgn140arcw3y",
+          "name": "default",
+          "slug": "default",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s"
+        }
+      ]
+    },
+    "/admin/v1/environments?limit=100": {
+      "status": 404,
+      "rows": []
+    },
+    "/admin/v1/audit-events?limit=100": {
+      "status": 200,
+      "rows": [
+        {
+          "id": "aud_01m8awfeppe008abt31hqtfpe5",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+          "action": "auth.login_succeeded",
+          "target_type": "principal"
+        },
+        {
+          "id": "aud_01m8awet2ye0084nh4x2gfe3tc",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+          "action": "auth.login_succeeded",
+          "target_type": "principal"
+        },
+        {
+          "id": "aud_01m8awcpgwe00bvwbyby6s2kt1",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+          "action": "auth.login_succeeded",
+          "target_type": "principal"
+        },
+        {
+          "id": "aud_01m8awayrae00akmyse4fcp5j6",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+          "action": "auth.login_succeeded",
+          "target_type": "principal"
+        },
+        {
+          "id": "aud_01m8awayf5e00armk2z8ct1abj",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+          "action": "environment.created",
+          "target_type": "environment"
+        },
+        {
+          "id": "aud_01m8awayf3e00a7ntmjzh2kwgf",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+          "action": "project.created",
+          "target_type": "project"
+        },
+        {
+          "id": "aud_01m8awayf1e009yaqas2bcq9p0",
+          "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+          "action": "organization.created",
+          "target_type": "organization"
+        }
+      ]
+    }
+  },
+  "after_refresh_url": "http://127.0.0.1:18133/ops/health",
+  "operations_text": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nReadiness (/readyz)\nReady\nServing traffic\nConfig epoch\n1\nCopy-on-write snapshot\nSnapshot age\n—\nLast config refresh\nStorage engine\npostgres\nActive persistence backend\nCluster nodes\n1\nNode ID\tConfig epoch\tSnapshot age\tHealth\nprimary\t1\t0 ms\tOK",
+  "ops": {
+    "status": 200,
+    "body": {
+      "backup_supported": false,
+      "backup_unavailable_reason": "Console snapshot backups currently support SQLite storage only; use PostgreSQL backup tooling for PostgreSQL deployments",
+      "current_epoch": 1,
+      "nodes": [
+        {
+          "config_epoch": 1,
+          "health": "ok",
+          "id": "primary",
+          "wal_bytes": 0
+        }
+      ],
+      "storage_engine": "postgres"
+    }
+  },
+  "audit_chain": {
+    "status": 405,
+    "body": {
+      "error": {
+        "code": "method_not_allowed",
+        "type": "invalid_request_error",
+        "message": "method not allowed",
+        "request_id": "req_01m8awfgxge0090h31d9z5gz6n",
+        "retryable": false
+      }
+    }
+  }
+}

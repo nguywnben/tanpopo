@@ -1,0 +1,20 @@
+{
+  "api": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/mcp/servers",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/mcp/servers/mcp_01m857dpwke009mpecryx6h56f/sync-tools",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/mcp/servers",
+      "status": 200
+    }
+  ],
+  "body": "sions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n1\nA2A Agents & Active Tasks\nSynced 1 tools on QA002 CP24 Synthetic MCP; 1 schema changes require approval.\nRegistered MCP servers\n1\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 CP24 Synthetic MCP\nqa002-cp24-server\n\thttp://127.0.0.1:19109/mcp\tSchema Drift Locked\t1\t\nSync tools\nQA002 CP24 Synthetic MCP tools\n1\nTool\tObserved JCS hash\tSchema review\tGrant to Virtual Key\nqa002-cp24-server__echo_status\t10d22b76c1339087403769dd906c9bd421a6a86584ac69148ccf3958804f224a\t\nDrift locked\nApprove schema\n\t\nVirtual key for echo_status\nSelect key\nGrant\nAll systems nominal No active operational alerts or pending remediation items."
+}

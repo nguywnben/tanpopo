@@ -1,0 +1,17 @@
+{
+  "responses": [
+    {
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "status": 200
+    }
+  ],
+  "row": "QA002 CP28 destructive approval\tvk_tp_dev_…0bts\t\nPROVIDER, MCP\n*\n\tRevoked\tNov 23, 2026, 11:11:20 PM\t"
+}

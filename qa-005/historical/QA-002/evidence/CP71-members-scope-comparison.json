@@ -1,0 +1,45 @@
+{
+  "api": {
+    "status": 200,
+    "count": 3,
+    "records": [
+      {
+        "id": "prc_01m851gad9e00bsgradv1n799z",
+        "email": "qa002-team-admin-created@example.invalid",
+        "kind": "HUMAN",
+        "roles": [
+          "DEVELOPER"
+        ],
+        "project_ids": [
+          "prj_01m84ymb7we009px5hb5pfwsns"
+        ]
+      },
+      {
+        "id": "prc_01m851dr7ke009rasm25sqyxp1",
+        "email": "qa002-team-admin@example.invalid",
+        "kind": "HUMAN",
+        "roles": [
+          "DEVELOPER",
+          "TEAM_ADMIN"
+        ],
+        "project_ids": [
+          "prj_01m84ymb7we009px5hb5pfwsns"
+        ]
+      },
+      {
+        "id": "prc_01m84xhbtwe00939kr14qg3khv",
+        "email": "qa-002-a2a-owner@example.invalid",
+        "kind": "HUMAN",
+        "roles": [
+          "ORG_OWNER"
+        ],
+        "project_ids": []
+      }
+    ]
+  },
+  "states": {
+    "organizationOnly": "ies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nNo project\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nOrganization members\n0\nNo members found\nNo members found",
+    "projectNoEnvironment": "tem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nOrganization members\n0\nNo members found\nNo members found",
+    "projectAndEnvironment": "viders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-002-a2a-owner@example.invalid\nOperator, Org Owner\nQA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n9\nMembers & Roles\n3\nOrganization members\n3\nPrincipal\tKind\tAssigned roles\tActions\nqa002-team-admin-created@example.invalid\tHUMAN\t\nDeveloper\n\t\nEdit roles\n\nqa002-team-admin@example.invalid\tHUMAN\t\nDeveloper\nTeam Admin\n\t\nEdit roles\n\nqa-002-a2a-owner@example.invalid\tHUMAN\t\nOrg Owner\n\t\nEdit roles\nNo members found"
+  }
+}

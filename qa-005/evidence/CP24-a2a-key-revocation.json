@@ -1,0 +1,18 @@
+[
+  {
+    "port": 18145,
+    "post_revoke_a2a_access": {
+      "http": 404,
+      "error_code": "resource_not_found"
+    },
+    "inventory_excerpt": "xpiry acceptance\tvk_tp_dev_…iO59\t\nPROVIDER\n*\n\tActive\tNov 26, 2026, 7:36:02 PM\t\n\nPlayground session\tvk_tp_dev_…iueu\t\nPROVIDER\n/v1/chat/completions\n\tActive\tNov 26, 2026, 6:56:35 PM\t\n\nPlayground session\tvk_tp_dev_…EClq\t\nPROVIDER\n/v1/chat/completions\n\tActive\tNov 26, 2026, 6:55:32 PM\t\n\nQA005 loopback provider v2\tvk_tp_dev_…Shf9\t\nPROVIDER\n/v1/chat/completions\n\tActive\tNov 26, 2026, 6:54:14 PM\t\n\nQA005 loopback provider only\tvk_tp_dev_…66yD\t\nPROVIDER\n/v1/chat/completions\n\tActive\tNov 26, 2026, 6:52:26 PM\t"
+  },
+  {
+    "port": 18147,
+    "post_revoke_a2a_access": {
+      "http": 401,
+      "error_code": "invalid_credential_plane"
+    },
+    "inventory_excerpt": "xpiry acceptance\tvk_tp_dev_…iO59\t\nPROVIDER\n*\n\tActive\tNov 26, 2026, 7:36:02 PM\t\n\nPlayground session\tvk_tp_dev_…iueu\t\nPROVIDER\n/v1/chat/completions\n\tActive\tNov 26, 2026, 6:56:35 PM\t\n\nPlayground session\tvk_tp_dev_…EClq\t\nPROVIDER\n/v1/chat/completions\n\tActive\tNov 26, 2026, 6:55:32 PM\t\n\nQA005 loopback provider v2\tvk_tp_dev_…Shf9\t\nPROVIDER\n/v1/chat/completions\n\tActive\tNov 26, 2026, 6:54:14 PM\t\n\nQA005 loopback provider only\tvk_tp_dev_…66yD\t\nPROVIDER\n/v1/chat/completions\n\tActive\tNov 26, 2026, 6:52:26 PM\t"
+  }
+]

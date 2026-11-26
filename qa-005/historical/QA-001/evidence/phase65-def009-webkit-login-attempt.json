@@ -1,0 +1,14 @@
+{
+  "checkpoint": "CP65",
+  "browser": "Playwright WebKit 26.5 / official Playwright 1.62.0 Noble container",
+  "viewport": {"width": 375, "height": 844},
+  "attempt": "Opened the login form in WebKit and submitted the isolated CP38 owner credentials, then attempted the SPA navigation path to Operations → Webhooks.",
+  "observed": {
+    "finalUrl": "http://127.0.0.1:8083/login",
+    "visibleState": "Sign-in form returned with empty email/password fields; sign-in button disabled",
+    "operationsDrawerReached": false,
+    "webhookDrawerGeometry": null,
+    "screenshot": "phase65-webkit-after-login.png"
+  },
+  "classification": "UNVERIFIED: this attempt did not retain an authenticated WebKit session and did not exercise the webhook drawer. No UI pass/fail result is inferred. Prior CP18/CP27 evidence remains conflicting."
+}

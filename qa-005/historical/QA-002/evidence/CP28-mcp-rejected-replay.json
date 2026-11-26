@@ -1,0 +1,64 @@
+{
+  "initialize_status": 200,
+  "session_issued": true,
+  "tampered": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "parameter_hash_mismatch",
+        "message": "The approval does not match this tool call.",
+        "request_id": "req_01m85bh3n7e009fn0nzmaq9cw6",
+        "retryable": false,
+        "type": "permission_error"
+      }
+    }
+  },
+  "fixture_after_tamper": {
+    "mutations": [
+      {
+        "ticket_id": "qa002-cp28-ticket-001",
+        "amount": 37
+      }
+    ]
+  },
+  "correct": {
+    "status": 200,
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 5,
+      "error": {
+        "code": -32003,
+        "message": "approval_invalid_state"
+      }
+    }
+  },
+  "fixture_after_correct": {
+    "mutations": [
+      {
+        "ticket_id": "qa002-cp28-ticket-001",
+        "amount": 37
+      }
+    ]
+  },
+  "replay": {
+    "status": 200,
+    "body": {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "error": {
+        "code": -32003,
+        "message": "approval_invalid_state"
+      }
+    }
+  },
+  "fixture_after_replay": {
+    "mutations": [
+      {
+        "ticket_id": "qa002-cp28-ticket-001",
+        "amount": 37
+      }
+    ]
+  },
+  "session_id_included": false,
+  "approval_token_included": false
+}

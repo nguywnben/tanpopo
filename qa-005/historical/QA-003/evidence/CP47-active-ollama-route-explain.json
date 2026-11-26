@@ -1,0 +1,34 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "route_slug": "qa003-cp47-ollama-route",
+  "deployment_state": "ACTIVE_HEALTHY",
+  "explain": [
+    {
+      "dialect": "Unified normalized (/v1/*)",
+      "status": 200,
+      "body": {
+        "dry_run": true,
+        "eligible": [
+          {
+            "deployment_id": "dpl_01m885jc6be009ja93p3dk758j"
+          }
+        ],
+        "rejected": []
+      }
+    },
+    {
+      "dialect": "ollama",
+      "status": 200,
+      "body": {
+        "dry_run": true,
+        "eligible": [
+          {
+            "deployment_id": "dpl_01m885jc6be009ja93p3dk758j"
+          }
+        ],
+        "rejected": []
+      }
+    }
+  ],
+  "routePage": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\n2\nRoute Explain\nPolicies\nCreated route \"qa003-cp47-ollama-route\".\n\nInherited data residency ceiling: EU, US, APAC, ON_PREM\n\nConfigured routes\n2\nRoute slug\tStrategy\tFallback chain\tTarget health\tActions\nqa003-cp47-ollama-route\tPriority failover\tQA003 CP47 Ollama loopback mock / qa003-mock-ollama:latest · dk758j (100%)\t\nHealthy\n\t\n\nqa003-cp45-identity-probe\tPriority failover\tQA003 RC5 Ollama 401 / qa003-synthetic-unauthorized · 0js4t4 (100%)\t\nProvisioned\n\t"
+}

@@ -1,0 +1,118 @@
+{
+  "keys": [
+    {
+      "id": "vky_01m8ajqb1fe00a246nx7yha8jm",
+      "state": "CREATED_ACTIVE",
+      "allowed_routes": [
+        "/native/ollama/*"
+      ]
+    }
+  ],
+  "full": {
+    "status": 200,
+    "contentType": "text/event-stream; charset=utf-8",
+    "usageAccuracy": null,
+    "chunks": 4,
+    "body": "{\"model\":\"qa004-loopback\",\"message\":{\"role\":\"assistant\",\"content\":\"Checking \"},\"done\":false}\n{\"model\":\"qa004-loopback\",\"message\":{\"role\":\"assistant\",\"content\":\"synthetic order.\"},\"done\":false}\n{\"model\":\"qa004-loopback\",\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"function\":{\"name\":\"lookup_order\",\"arguments\":{\"order_id\":\"QA-106\"}}}]},\"done\":false}\n{\"model\":\"qa004-loopback\",\"done\":true,\"prompt_eval_count\":17,\"eval_count\":4}\n"
+  },
+  "cancelled": {
+    "status": 200,
+    "contentType": "text/event-stream; charset=utf-8",
+    "usageAccuracy": null,
+    "chunks": 2,
+    "body": "{\"model\":\"qa004-loopback\",\"message\":{\"role\":\"assistant\",\"content\":\"native-chunk-0 \"},\"done\":false}\n{\"model\":\"qa004-loopback\",\"message\":{\"role\":\"assistant\",\"content\":\"native-chunk-1 \"},\"done\":false}\n"
+  },
+  "fixture": [
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "full_tool_stream",
+      "event": "started"
+    },
+    {
+      "path": "/api/chat",
+      "kind": "full_tool_stream",
+      "event": "completed",
+      "chunks_sent": 4
+    },
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "client_cancel",
+      "event": "started"
+    },
+    {
+      "path": "/api/chat",
+      "kind": "client_cancel",
+      "event": "client_disconnected",
+      "chunks_sent": 3
+    },
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "full_tool_stream",
+      "event": "started"
+    },
+    {
+      "path": "/api/chat",
+      "kind": "full_tool_stream",
+      "event": "completed",
+      "chunks_sent": 4
+    },
+    {
+      "path": "/api/chat",
+      "model": "qa004-loopback",
+      "stream": true,
+      "kind": "client_cancel",
+      "event": "started"
+    }
+  ],
+  "traces": {
+    "status": 200,
+    "rows": [
+      {
+        "request_id": "trc_01m8ajrtv9e00bn0cb7jn5ad21",
+        "plane": "NATIVE",
+        "route_slug": "qa004-loopback",
+        "status_code": 200,
+        "error_code": "mid_stream_abort",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 208
+      },
+      {
+        "request_id": "trc_01m8ajrt7xe008dvnpwp4mwvnp",
+        "plane": "NATIVE",
+        "route_slug": "qa004-loopback",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 613
+      },
+      {
+        "request_id": "trc_01m8ajqbvqe009rtee8j939bds",
+        "plane": "NATIVE",
+        "route_slug": "qa004-loopback",
+        "status_code": 200,
+        "error_code": "mid_stream_abort",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 210
+      },
+      {
+        "request_id": "trc_01m8ajqb8ee008gycd6f8f6sey",
+        "plane": "NATIVE",
+        "route_slug": "qa004-loopback",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "duration_ms": 610
+      }
+    ]
+  }
+}

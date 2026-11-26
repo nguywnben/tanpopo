@@ -1,0 +1,18 @@
+{
+  "revoked_key_initialize": {
+    "status": 401,
+    "body": "{\"error\":{\"code\":\"invalid_virtual_key\"}}\n"
+  },
+  "fixture_state": {
+    "schema_mode": 2,
+    "calls": [
+      {
+        "name": "echo_status",
+        "argument_keys": [
+          "message"
+        ]
+      }
+    ]
+  },
+  "secret_material_included": false
+}

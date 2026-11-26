@@ -1,0 +1,23 @@
+{
+  "a2aKeyOnMcpStatus": 401,
+  "a2aKeyError": "invalid_virtual_key",
+  "initialize": {
+    "status": 200,
+    "sessionPresent": true
+  },
+  "notification": {
+    "status": 202
+  },
+  "list": {
+    "status": 200,
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"description\":\"Read a synthetic invoice record for QA.\",\"inputSchema\":{\"additionalProperties\":false,\"properties\":{\"invoice_id\":{\"type\":\"string\"}},\"required\":[\"invoice_id\"],\"type\":\"object\"},\"name\":\"qa003-mcp-sync-fixture__lookup_synthetic_invoice\"}]}}\n"
+  },
+  "invoke": {
+    "status": 200,
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"text\":\"Synthetic invoice INV-QA-003 status: paid; amount: 42.00 USD.\",\"type\":\"text\"}],\"isError\":false}}\n"
+  },
+  "denied": {
+    "status": 200,
+    "body": "{\"jsonrpc\":\"2.0\",\"id\":4,\"error\":{\"code\":-32003,\"message\":\"tool_access_denied\"}}\n"
+  }
+}

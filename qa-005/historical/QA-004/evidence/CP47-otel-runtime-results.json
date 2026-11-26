@@ -1,0 +1,54 @@
+{
+  "checkpoint": "CP47",
+  "baseline": {
+    "source_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+    "artifact_run": "45581179274",
+    "executable_version": "0.0.1-snapshot",
+    "executable_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+    "executable_sha256": "9a62f8844a85aa1fd3fd9be22365b04e9ce655a470fbe9de670e19678644d34b"
+  },
+  "environment": {
+    "server": "127.0.0.1:18131",
+    "collector": "127.0.0.1:4320",
+    "server_data": "fresh isolated SQLite directory under /tmp",
+    "network": "offline except loopback test traffic",
+    "process_readiness": "healthz=200, readyz=200",
+    "endpoint_variables_set": [
+      "OTEL_EXPORTER_OTLP_ENDPOINT",
+      "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+      "TANPOPO_OTLP_ENDPOINT"
+    ]
+  },
+  "browser_requests": [
+    {
+      "path": "GET /v1/models",
+      "status": 401,
+      "error_code": "invalid_virtual_key",
+      "trace_id_header_present": true,
+      "screenshot": "CP47-otel-v1-models-error.png"
+    },
+    {
+      "path": "POST /v1/chat/completions",
+      "status": 401,
+      "error_code": "invalid_credential_plane",
+      "trace_id": "trc_01m89yh7d7e008d7f6gv2pgtme",
+      "test_payload_and_auth_markers": "fabricated canaries only; no real credentials",
+      "screenshot": "CP47-otel-request-response.png"
+    }
+  ],
+  "synthetic_collector_summary_after_browser_requests": {
+    "requests": 0,
+    "paths": [],
+    "sensitive_prompt_present": false,
+    "sensitive_auth_present": false,
+    "content_types": []
+  },
+  "status": {
+    "runtime_trace_export_configuration": "FAIL — no collector POST with tested endpoint variables; source wiring omits exporter settings",
+    "otlp_metrics_and_logs": "FAIL — source implements trace exporter only; Prometheus/JSON are separate local sinks",
+    "authorized_inference_export": "UNVERIFIED — request was rejected before provider dispatch",
+    "exported_span_privacy": "UNVERIFIED — no spans reached the collector",
+    "product_source_modified": false,
+    "release_gate": "BLOCKED"
+  }
+}

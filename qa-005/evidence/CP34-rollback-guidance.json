@@ -1,0 +1,37 @@
+{
+  "checkpoint": "CP34",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "storage": "isolated SQLite",
+    "base_url": "http://127.0.0.1:18149",
+    "browser": "Chromium 1440x1000"
+  },
+  "installation": {
+    "package": "@tanpopo/ollama",
+    "state": "INSTALLED_DISABLED",
+    "version": 4,
+    "previous_rollback_version": null
+  },
+  "result": "PARTIAL",
+  "observed": {
+    "rollback_menu_item_present": true,
+    "aria_disabled": true,
+    "guidance": "No previous pin exists. Use Quarantine for emergency cutoff.",
+    "http_status": 200,
+    "keyboard_enter_on_focused_item": "no rollback request issued",
+    "post_interaction_readback": {
+      "http_status": 200,
+      "state": "INSTALLED_DISABLED",
+      "version": 4,
+      "previous_rollback_version": null
+    }
+  },
+  "limitations": [
+    "The UI action menu was inspected after the recovery lifecycle while installation was INSTALLED_DISABLED, not in the initial ACTIVE state of the historical report.",
+    "Screen-reader announcement was not tested.",
+    "The initial ACTIVE row state was not retested.",
+    "The enabled rollback path after upgrade was not tested."
+  ],
+  "screenshot": "screenshots/CP34-disabled-rollback-guidance.png"
+}
