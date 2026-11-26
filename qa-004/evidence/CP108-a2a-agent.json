@@ -1,0 +1,22 @@
+{
+  "http": 201,
+  "returned": {
+    "id": "agt_01m8ax4jhme00bq35e10hnrvv7",
+    "slug": "qa004-cp108-cancel-agent",
+    "name": "QA004 CP108 Delayed Cancellation Agent",
+    "status": "ACTIVE"
+  },
+  "read": {
+    "status": 200,
+    "items": [
+      {
+        "id": "agt_01m8ax4jhme00bq35e10hnrvv7",
+        "slug": "qa004-cp108-cancel-agent",
+        "name": "QA004 CP108 Delayed Cancellation Agent",
+        "status": "ACTIVE",
+        "endpoint_url": "http://127.0.0.1:18134",
+        "project_id": "prj_01m8awtt8we00b41f10ekb4bxt"
+      }
+    ]
+  }
+}

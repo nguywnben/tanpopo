@@ -1,0 +1,17 @@
+{
+  "control_task_id": "tsk_01m8axe80he00ayadqvyvqypda",
+  "task_create_response": {
+    "http": 201,
+    "state": "completed",
+    "version": 3
+  },
+  "task_api_readback": {
+    "state": "completed",
+    "version": 3
+  },
+  "ui_observations": [
+    "a screenshot taken while the delayed request was still in flight showed Working",
+    "a subsequent authenticated session and page reload showed Completed"
+  ],
+  "classification": "no persistent stale UI defect confirmed; screenshots reflect different points in the in-flight lifecycle"
+}

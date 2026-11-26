@@ -21,6 +21,10 @@ Canceling a Working A2A task in the Console persists the task as Canceled and di
 
 The sanitized machine-readable results are [CP82 evidence](../evidence/CP82-a2a-active-cancellation-results.json). Visual evidence: [Working with Cancel available](../evidence/CP82-a2a-active-working-before-cancel.png) and [Canceled with success banner](../evidence/CP82-a2a-active-working-after-cancel.png). Both screenshots were visually inspected. The synthetic endpoint call had one text input, no forwarded caller Authorization header, and zero settled cost. No provider credential, external endpoint or real user data was used.
 
+## Independent CP108 PostgreSQL retest
+
+Repeated the active-cancel flow on the separate PostgreSQL 16-backed exact-RC6 runtime with A2A explicitly enabled. A loopback endpoint with a 10-second delay received an authorized, environment-bound A2A-only request without caller Authorization. The real Console displayed Working and Cancel; Cancel returned 200 and API readback persisted Canceled v3. The fixture nevertheless sent HTTP 200 `completed_response_sent`, after which the original create call returned HTTP 400 `canceled -> completed`; final state remained Canceled v3. The before/after screenshots were visually inspected. See [CP108](../checkpoints/CP108-def069-postgres-runtime-retest.md) and its sanitized [result JSON](../evidence/CP108-a2a-postgres-cancel-results.json). This independently confirms DEF-069 on PostgreSQL; no new defect ID was assigned.
+
 ## Expected versus actual
 
 - **Expected:** the documented SM-09 workflow says `working → canceled` propagates the cancellation signal downstream. The cancel caller should receive a stable canceled result, downstream execution should stop, and any late completion should not turn the original create into an unrelated invalid-transition error.

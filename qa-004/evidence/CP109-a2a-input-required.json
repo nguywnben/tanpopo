@@ -1,0 +1,60 @@
+{
+  "runtime": 18133,
+  "scope": "No project\n/\nNo env\n(Active workspace scope)",
+  "agent": {
+    "id": "agt_01m8ax4jhme00bq35e10hnrvv7",
+    "slug": "qa004-cp108-cancel-agent"
+  },
+  "create": {
+    "status": 201,
+    "body": {
+      "task_id": "tsk_01m8axnh12e008rawg2j6demgz",
+      "target_agent_id": "agt_01m8ax4jhme00bq35e10hnrvv7",
+      "target_agent_slug": "qa004-cp108-cancel-agent",
+      "state": "input-required",
+      "prompt_message": "Please provide an account period.",
+      "hop_count": 1,
+      "call_chain_ids": [
+        "agt_01m8ax4jhme00bq35e10hnrvv7"
+      ],
+      "trace_root_id": "trc_01m8axnh12e008rb6rezy3revx",
+      "enforced_region": "US",
+      "sub_budget_hold_micros": 0,
+      "version": 3,
+      "created_at": "2026-11-26T03:16:28.322Z",
+      "updated_at": "2026-11-26T03:16:28.341Z"
+    }
+  },
+  "task_list": {
+    "task_id": "tsk_01m8axnh12e008rawg2j6demgz",
+    "target_agent_id": "agt_01m8ax4jhme00bq35e10hnrvv7",
+    "target_agent_slug": "qa004-cp108-cancel-agent",
+    "state": "input-required",
+    "prompt_message": "Please provide an account period.",
+    "hop_count": 1,
+    "call_chain_ids": [
+      "agt_01m8ax4jhme00bq35e10hnrvv7"
+    ],
+    "trace_root_id": "trc_01m8axnh12e008rb6rezy3revx",
+    "enforced_region": "US",
+    "sub_budget_hold_micros": 0,
+    "version": 3,
+    "created_at": "2026-11-26T03:16:28.322Z",
+    "updated_at": "2026-11-26T03:16:28.341Z"
+  },
+  "row_count": 1,
+  "row_text": "tsk_01m8axnh12e008rawg2j6demgz\nqa004-cp108-cancel-agent\nPlease provide an account period.\n\tInput required\t1 / 5\tUS\t$0.000000\t$0.000000\t\nResume\nCancel",
+  "buttons": [
+    "Resume",
+    "Cancel"
+  ],
+  "fixture_log": [
+    {
+      "path": "/tasks",
+      "state_returned": "input-required",
+      "input_parts_count": 1,
+      "has_auth": false,
+      "hop_header": "1"
+    }
+  ]
+}

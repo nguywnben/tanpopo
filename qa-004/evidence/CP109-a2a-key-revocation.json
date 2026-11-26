@@ -1,0 +1,24 @@
+{
+  "revoke_http": 200,
+  "key_readback": {
+    "id": "vky_01m8axmra2e00a1pr1pdm389m7",
+    "state": "REVOKED",
+    "allowed_planes": [
+      "A2A"
+    ],
+    "allowed_routes": [
+      "/a2a/*"
+    ]
+  },
+  "cookie_free_replay": {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": "invalid_virtual_key",
+        "message": "Invalid or inactive Virtual Key.",
+        "request_id": "trc_01m8axwwqhe00bhn8aggw6fwj6",
+        "type": "authentication_error"
+      }
+    }
+  }
+}
