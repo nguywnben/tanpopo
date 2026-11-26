@@ -58,6 +58,8 @@ CP46 expanded the runtime topology to an isolated three-node Valkey Cluster and 
 
 CP47 retested orderly cross-node Virtual Key revocation on that split Control Plane/two-Data-Plane PostgreSQL/Valkey setup. The real UI revoked a synthetic environment-bound key with HTTP 200 and state `REVOKED`; replay on the other Data Plane returned HTTP 401 `invalid_virtual_key`, after the pre-revoke request had been authenticated and failed only because the synthetic model had no route. The key was revoked and the screenshot visually inspected. Revocation latency bounds, active-stream severance, race/outage fallback and multi-tenant/role cases remain open.
 
+CP48–49 added scoped A2A lifecycle and authorization checks on PostgreSQL/three-node Valkey. CP48 drove the real Console task from `input-required` through approved resume to `completed`, rendered the synthetic result, and settled $0.003 against a $0.010 hold. Its credential had both PROVIDER and A2A planes (corrected in the CP48–49 record). CP49 issued two provider-only keys; both A2A discovery and task creation were denied with HTTP 403 `scope_or_plane_denied`, no synthetic dispatch occurred, and both keys were revoked. These runs do not change DEF-069's fresh FAIL: CP28 observed that delegated work continues after cancellation. A2A failure/cancel budget conservation, cancellation on this PG/Valkey topology, multi-tenant and non-Owner roles, task retries, and real interoperability remain open.
+
 ## Baseline identity and evidence integrity
 
 - All QA-005 tests so far use a local Linux amd64 binary built from the exact source commit; SHA-256 is `62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9`. Go build metadata records the frozen revision and `vcs.modified=false`.
@@ -117,5 +119,6 @@ Coverage remains incomplete for the 57 unverified historical findings, PostgreSQ
 - CP45: DEF-072 healthy split-role PostgreSQL inventory and Data Plane loss follow-up
 - CP46: shared RPM admission across two Data Planes over isolated PostgreSQL/Valkey Cluster
 - CP47: cross-Data Plane Virtual Key revocation and replay denial
+- CP48–49: PostgreSQL/Valkey A2A input-required resume and provider-only key denial for discovery/task creation
 - [Full evidence directory](evidence/)
 - [Historical campaigns](historical/)
