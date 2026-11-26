@@ -21,8 +21,9 @@ This creates a reconciliation gap between the spend used for project budget avai
 5. In real Chromium, open FinOps → Chargeback and then FinOps → Budgets & Holds for the same `default / dev` scope. The visually inspected Chargeback summary displays `$0.002044` exact / `$0.000015` estimated; the project budget row displays `$0.002043` exact / `$0.000014` estimated. The hard limit is restored to 100 micro-USD.
 6. Historical corroboration: CP136 reports the same November project rollup `2038 / 15`; CP137's initial persisted project budget readback is `2037 / 14`, before CP137's request. CP138/CP139 each add their independently recorded local usage while preserving the same one-micro difference in both fields.
 7. CP140 boundary confirmation: with budget at `2043 / 14` and Chargeback at `2044 / 15`, raised the hard limit to `2058` micro-USD. One `qa004-loopback` request returned HTTP 200. Budget settled at `2044 / 14` (exactly the `2058` limit), while Chargeback rose to `2045 / 15` (`2060` total). The key was revoked and the limit restored to 100. This confirms the visible Chargeback total can end two micro-USD above the configured cap when ledger headroom is one.
+8. CP142 repeated the read-only comparison on a separate restored PostgreSQL runtime (`18124`): monthly project budget `1 / 1` exact/estimated versus November project summary `2 / 2`, including a `from=2026-11-01` query. The real budget screen showed `$0.000001 / $0.000001`; Chargeback showed `$0.000002 / $0.000002`. No writes or inference calls were made. This confirms the discrepancy is not limited to the 18128 SQLite runtime.
 
-Sanitized readbacks are in [CP139 reconciliation results](../evidence/CP139-finops-budget-reconciliation-results.json) and [CP140 boundary results](../evidence/CP140-budget-headroom-results.json). Visually inspected real screens include [CP139 Chargeback](../evidence/CP139-control-chargeback.png), [CP139 project budget](../evidence/CP139-budget-vs-usage.png), [CP140 one-micro headroom](../evidence/CP140-budget-one-micro-headroom.png), and [CP140 post-request Chargeback](../evidence/CP140-chargeback-after-headroom.png), and [CP140 revoked key](../evidence/CP140-key-revoked.png). CP136 and CP137 historical evidence links are in the checkpoint records.
+Sanitized readbacks are in [CP139 reconciliation results](../evidence/CP139-finops-budget-reconciliation-results.json), [CP140 boundary results](../evidence/CP140-budget-headroom-results.json), and [CP142 PostgreSQL comparison](../evidence/CP142-postgres-budget-reconciliation.json). Visually inspected real screens include [CP139 Chargeback](../evidence/CP139-control-chargeback.png), [CP139 project budget](../evidence/CP139-budget-vs-usage.png), [CP140 one-micro headroom](../evidence/CP140-budget-one-micro-headroom.png), and [CP140 post-request Chargeback](../evidence/CP140-chargeback-after-headroom.png), and [CP140 revoked key](../evidence/CP140-key-revoked.png), [CP142 PostgreSQL budget](../evidence/CP142-postgres-project-budget.png), and [CP142 PostgreSQL Chargeback](../evidence/CP142-postgres-chargeback.png). CP136 and CP137 historical evidence links are in the checkpoint records.
 
 ## Expected versus actual
 
@@ -41,6 +42,7 @@ Finance and operations cannot reconcile budget availability to chargeback totals
 - The budget row is monthly and reports `2043` exact / `14` estimated; the usage summary since November 1 reports `2044` exact / `15` estimated.
 - The UI shows those same different values. Project limit is restored to 100 micro-USD, with zero active reservations.
 - Historical checkpoints show the same one-micro difference in both accuracy buckets.
+- A separate restored PostgreSQL runtime shows the same one-micro difference in each bucket, with lower absolute totals; the discrepancy is not isolated to SQLite.
 - Read-only frozen-source inspection shows the usage summary aggregates `usage_settlements`; the budget DTO reads `budget_ledgers`. No database mutation or source edit was performed for this finding.
 
 **Hypotheses, not confirmed causes:** a settlement may not have updated the budget ledger, a period/scope mapping may exclude one row, or one projection may be stale. No single request has been attributed as the missing exact and estimated amount, and this report does not claim a source-level root cause.
@@ -54,6 +56,6 @@ Finance and operations cannot reconcile budget availability to chargeback totals
 
 ## Related findings and coverage
 
-DEF-051/052 cover native provider metering and trace-versus-settlement projection mismatches; this report is a separate cross-view discrepancy between the monthly budget ledger and project chargeback summary. Root overlap is unknown. Remaining work includes request-level settlement-to-ledger attribution, other periods and scopes, PostgreSQL, and concurrency.
+DEF-051/052 cover native provider metering and trace-versus-settlement projection mismatches; this report is a separate cross-view discrepancy between the monthly budget ledger and project chargeback summary. Root overlap is unknown. Remaining work includes request-level settlement-to-ledger attribution, other periods and scopes, and concurrency.
 
 QA-004 remains incomplete. **GATE-REL-07 remains BLOCKED.**
