@@ -1,0 +1,53 @@
+{
+  "before": {
+    "status": 200,
+    "count": 1,
+    "ids": [
+      "prc_01m8awayeke00bfjv073fafrb6"
+    ]
+  },
+  "after": {
+    "status": 200,
+    "count": 2,
+    "members": [
+      {
+        "email": "qa004-cp110-developer@example.invalid",
+        "kind": "HUMAN",
+        "roles": [
+          "DEVELOPER"
+        ]
+      },
+      {
+        "email": "qa004-pg-owner@example.invalid",
+        "kind": "HUMAN",
+        "roles": [
+          "ORG_OWNER"
+        ]
+      }
+    ]
+  },
+  "body": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n3\nMembers & Roles\n2\nMember added.\nOrganization members\n2\nPrincipal\tKind\tAssigned roles\tActions\n\nqa004-cp110-developer@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa004-pg-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n[One-time enrollment prompt omitted from evidence.]",
+  "responses": [
+    {
+      "url": "/admin/v1/members?limit=100",
+      "status": 200
+    },
+    {
+      "url": "/admin/v1/members?limit=100",
+      "status": 200
+    },
+    {
+      "url": "/admin/v1/members",
+      "status": 201
+    },
+    {
+      "url": "/admin/v1/members?limit=100",
+      "status": 200
+    },
+    {
+      "url": "/admin/v1/members?limit=100",
+      "status": 200
+    }
+  ],
+  "enrollment_dialog_redacted": true
+}

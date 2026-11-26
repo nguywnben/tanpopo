@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "total": 2,
+  "developer": {
+    "kind": "HUMAN",
+    "roles": [
+      "DEVELOPER"
+    ],
+    "project_ids": [
+      "prj_01m8awtt8we00b41f10ekb4bxt"
+    ],
+    "enrollment_pending": false,
+    "has_password": true
+  }
+}
