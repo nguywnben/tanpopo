@@ -112,6 +112,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP127 Firefox browser runtime blocker](checkpoints/CP127-firefox-browser-runtime-blocker.md)
 - [CP128 Virtual Key rotation grace and revocation](checkpoints/CP128-virtual-key-rotation-grace-and-revocation.md)
 - [CP129 consecutive Virtual Key rotation](checkpoints/CP129-consecutive-virtual-key-rotation.md)
+- [CP130 stale-ETag rotation conflict](checkpoints/CP130-stale-rotation-optimistic-conflict.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -317,3 +318,6 @@ CP128 exercised the real Owner Access & Keys rotation lifecycle for one route/mo
 
 
 CP129 exercised a second real-UI key rotation before the prior grace elapsed. After the second rotation, the oldest credential returned 401 while the immediately previous and current credentials remained valid; final graceful revoke invalidated all three. Two rotation audit events and the revoke event linked to the same key. All three screenshots were visually inspected, the one successful canary key was revoked, and earlier setup-retry keys were cleaned and verified revoked. This is a scoped lifecycle PASS; concurrent/stale-version rotations, exact grace expiration, restart, other roles and active-stream behavior remain open. No defect was assigned. Historical counts and the 24 confirmed new failures (DEF-051–074) are unchanged. QA continues; **GATE-REL-07 remains BLOCKED.** Evidence: [CP129](checkpoints/CP129-consecutive-virtual-key-rotation.md) and [sanitized results](evidence/CP129-consecutive-vkey-rotation-results.json).
+
+
+CP130 replayed the original v1 rotation request after the real UI had advanced the key to v2. RC6 returned the documented 409 `optimistic_lock_conflict` and ETag v2; state and both current credentials remained unchanged/valid, then UI revoke denied both. Audit sequences 730–731 target the same key. The screenshots were visually inspected and the key revoked. This is a scoped concurrency-control PASS; simultaneous live writes, expiration, restart and other roles remain unverified. No new defect; defect totals unchanged and QA remains ongoing. **GATE-REL-07 remains BLOCKED.** Evidence: [CP130](checkpoints/CP130-stale-rotation-optimistic-conflict.md) and [sanitized results](evidence/CP130-stale-rotation-conflict-results.json).
