@@ -99,6 +99,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP94 native idempotency replay and per-key isolation](checkpoints/CP94-native-idempotency-per-key-replay.md)
 - [CP95 native same-dialect mismatch guard](checkpoints/CP95-native-dialect-mismatch-guard.md)
 - [CP96 idempotency trace/chargeback reconciliation](checkpoints/CP96-idempotency-trace-chargeback-reconciliation.md)
+- [CP97 unified Responses API idempotency and settlement](checkpoints/CP97-responses-api-idempotency-and-settlement.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -213,3 +214,6 @@ CP95 repeated the native cross-dialect request in the correct default/dev scope 
 
 
 CP96 reconciled persisted CP94 rows. Each VKEY had one 1-micro-USD Estimated FinOps charge for its single upstream dispatch; replay did not add a charge, payload mismatch remained zero-settlement, and revoked-key replay was denied. The real Traces screen labels all five request/replay/error rows Exact/$0, while Chargeback groups one Estimated request per key. Screenshots were visually inspected. This confirms and extends DEF-051/052; it is not a new defect. QA continues and GATE-REL-07 remains BLOCKED.
+
+
+CP97 exercised a real cookie-free unified `/v1/responses` request on the default/dev synthetic Ollama route. Same-key exact replay returned an identical body without a second fixture call; changed-payload reuse returned 422 without dispatch, the same idempotency value remained isolated per VKEY, and both temporary keys were revoked. Persistent readback and visually inspected Traces/Chargeback screenshots show six trace rows labeled Exact/$0 but only one exact $0.000001 settlement per key for the two actual dispatches. This extends DEF-052 to `/v1/responses`; no new defect was assigned. Streaming, background retrieval, tools, modality variants, external SDK compatibility, and distributed idempotency remain unverified. See [CP97](checkpoints/CP97-responses-api-idempotency-and-settlement.md). QA continues and **GATE-REL-07 remains BLOCKED.**

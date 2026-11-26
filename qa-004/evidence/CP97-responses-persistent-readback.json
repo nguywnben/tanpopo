@@ -1,0 +1,94 @@
+{
+  "keys": [
+    {
+      "id": "vky_01m8aqnx7se008nbts0femdf2q",
+      "name": "QA004 CP97 Responses API captured",
+      "state": "REVOKED"
+    },
+    {
+      "id": "vky_01m8aqkpeye00bbmnghmbadgz1",
+      "name": "QA004 CP97 Responses API",
+      "state": "REVOKED"
+    }
+  ],
+  "traces": [
+    {
+      "trace_id": "trc_01m8aqnxeve00b9cmsde11asxw",
+      "virtual_key_id": "vky_01m8aqnx7se008nbts0femdf2q",
+      "status_code": 422,
+      "error_code": "idempotency_key_reused_mismatch",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "/v1/responses",
+      "created_at": "2026-11-26T01:31:49.596Z"
+    },
+    {
+      "trace_id": "trc_01m8aqnxepe0098v845kkeb1e0",
+      "virtual_key_id": "vky_01m8aqnx7se008nbts0femdf2q",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "/v1/responses",
+      "created_at": "2026-11-26T01:31:49.591Z"
+    },
+    {
+      "trace_id": "trc_01m8aqnxe4e0098qt52z3fxp5k",
+      "virtual_key_id": "vky_01m8aqnx7se008nbts0femdf2q",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "qa004-mock",
+      "created_at": "2026-11-26T01:31:49.583Z"
+    },
+    {
+      "trace_id": "trc_01m8aqkpmse00av72q76sjysa3",
+      "virtual_key_id": "vky_01m8aqkpeye00bbmnghmbadgz1",
+      "status_code": 422,
+      "error_code": "idempotency_key_reused_mismatch",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "/v1/responses",
+      "created_at": "2026-11-26T01:30:37.082Z"
+    },
+    {
+      "trace_id": "trc_01m8aqkpmne00beev8y2zf59fk",
+      "virtual_key_id": "vky_01m8aqkpeye00bbmnghmbadgz1",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "/v1/responses",
+      "created_at": "2026-11-26T01:30:37.077Z"
+    },
+    {
+      "trace_id": "trc_01m8aqkpm5e00a9cn3m6y0p6wn",
+      "virtual_key_id": "vky_01m8aqkpeye00bbmnghmbadgz1",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "route_slug": "qa004-mock",
+      "created_at": "2026-11-26T01:30:37.071Z"
+    }
+  ],
+  "chargeback": [
+    {
+      "group_key": "QA004 CP97 Responses API",
+      "exact_micro_usd": 1,
+      "estimated_micro_usd": 0,
+      "exact_request_count": 1,
+      "estimated_request_count": 0,
+      "unmetered_request_count": 0
+    },
+    {
+      "group_key": "QA004 CP97 Responses API captured",
+      "exact_micro_usd": 1,
+      "estimated_micro_usd": 0,
+      "exact_request_count": 1,
+      "estimated_request_count": 0,
+      "unmetered_request_count": 0
+    }
+  ]
+}
