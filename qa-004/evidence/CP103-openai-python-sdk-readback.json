@@ -1,0 +1,41 @@
+{
+  "key": {
+    "id": "vky_01m8avnmbme0085dc7ap867580",
+    "name": "QA004 CP103 OpenAI Python SDK",
+    "allowed_routes": [
+      "/v1/chat/completions"
+    ]
+  },
+  "readback": {
+    "traces": [
+      {
+        "request_id": "trc_01m8avp4fme0085gf4d1agrxpk",
+        "route_slug": "qa004-mock",
+        "status_code": 200,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "request_id": "trc_01m8avp4f7e009vctqck4n551t",
+        "route_slug": "qa004-mock",
+        "status_code": 200,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      }
+    ],
+    "chargeback": [
+      {
+        "group_key": "QA004 CP103 OpenAI Python SDK",
+        "exact_micro_usd": 2,
+        "estimated_micro_usd": 0,
+        "exact_request_count": 2,
+        "estimated_request_count": 0,
+        "unmetered_request_count": 0
+      }
+    ]
+  },
+  "finalKey": {
+    "state": "REVOKED",
+    "version": 2
+  }
+}
