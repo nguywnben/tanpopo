@@ -95,6 +95,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP89 Console backup verify/restore](checkpoints/CP89-console-backup-verify-restore-and-tamper.md)
 - [CP90 A2A input-required cancellation](checkpoints/CP90-a2a-input-required-cancellation.md)
 - [CP91 A2A mobile task cards](checkpoints/CP91-a2a-mobile-task-cards.md)
+- [CP92 native dialect authorization and traversal](checkpoints/CP92-native-dialect-authorization-and-traversal.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -198,3 +199,6 @@ CP90 exercised a distinct A2A input-required cancellation path in a loopback-onl
 
 
 CP91 opened the persisted CP90 canceled A2A task on the real Chromium Console at 390×844 and expanded its detail card. The canceled state, 1/5 hops, zero sub-budget hold and zero settled cost remained readable; viewport, document, body and main widths stayed 390 before and after expansion. Both actual screenshots were visually inspected. This is a scoped responsive PASS only; more widths, roles, browsers, keyboard/text scaling and task states remain unverified. No defect was added. QA continues and GATE-REL-07 remains BLOCKED.
+
+
+CP92 used a real Owner-issued PROVIDER key restricted to `/native/anthropic/*`. A request to `/native/ollama/api/chat` was denied 403 `scope_or_plane_denied`, and an encoded path traversal probe was denied 403 `native_path_not_allowed`. The key was revoked and readback persisted REVOKED v2; key inventory screenshots were visually inspected. Actual Anthropic dispatch returned 503 `no_compliant_deployment_available` because this isolated runtime has no Anthropic deployment, so interoperability is BLOCKED and the 400 dialect-mismatch contract remains UNVERIFIED. This is not classified as a product defect. QA continues and GATE-REL-07 remains BLOCKED.
