@@ -89,6 +89,8 @@ Recommended stabilization sequence:
 
 ## Coverage and limitations
 
+CP52 exercised accepted FMEA-07 dual-dependency partition behavior against the three exact-source runtime roles. After PostgreSQL and all Valkey primaries remained unavailable for 13 seconds, `/healthz` remained HTTP 200, each `/readyz` returned HTTP 503 `not_ready`, and an authenticated request at both Data Planes returned HTTP 503 `snapshot_not_ready`. This scoped fail-closed behavior passed. The disposable PostgreSQL test container had no persistent volume and was removed when stopped, so its temporary QA database and key could not be restarted. QA restored testing with a fresh isolated PostgreSQL/Valkey stack, the documented least-privilege roles, and a real Chromium first-install flow; setup and recovered Operations screenshots were visually inspected and all three runtime roles returned Ready. The container replacement and PostgreSQL backup/restore are UNVERIFIED; the test infrastructure data loss is not classified as a Tanpopo defect.
+
 The live [coverage matrix](COVERAGE-AND-EVIDENCE-MATRIX.md) owns exact PASS/FAIL/PARTIAL/BLOCKED/UNVERIFIED boundaries. Current completed slices include fresh SQLite setup and real Console rendering, one deterministic streamed and one exact-priced loopback inference path, project hard-budget rejection before egress, FinOps Viewer role checks, SQLite encrypted backup/restore, runtime restart/readiness, PostgreSQL 16 schema/RLS smoke, and audit hash-chain verification. The full Go race suite passed after correcting environment prerequisites (locked Node dependencies installed and umask `0022` for the security-mode test).
 
 Coverage remains incomplete for the 57 unverified historical findings, PostgreSQL routed traffic, Valkey rate-limit/budget/rebuild behavior, real provider interoperability, extension recovery/provenance breadth, most A2A acceptance paths, credential-vault lifecycle, multi-tenant API/RBAC boundaries, pricing migrations/concurrency/modalities, telemetry integrity/export, cluster/failover, Windows/macOS, cross-browser/mobile/accessibility/responsive/localization, worker shutdown, and corruption/crash recovery. Successful webhook delivery, HMAC verification and other SSRF forms remain unverified. DEF-083 also leaves the native streaming usage-header contract failing on the tested Ollama endpoints. CP40–41 only cover a deterministic local Ollama-compatible fixture on SQLite. The narrow mobile/localization/export checks in CP17–19 do not resolve those broader gaps. See the matrix and [residual risk register](RESIDUAL-RISK-REGISTER.md).
@@ -126,6 +128,7 @@ Coverage remains incomplete for the 57 unverified historical findings, PostgreSQ
 - CP48–49: PostgreSQL/Valkey A2A input-required resume and provider-only key denial for discovery/task creation
 - CP50: PostgreSQL/Valkey DEF-069 reproduction with nonzero hold and direct reservation-state readback
 - CP51: full Valkey outage RPM/revocation fallback and cluster recovery
+- CP52: PostgreSQL + Valkey dual-dependency partition fail-closed acceptance and isolated test environment recovery
 - CP50: DEF-069 PostgreSQL/Valkey delayed-work cancellation with nonzero hold and durable reservation-state readback
 - [Full evidence directory](evidence/)
 - [Historical campaigns](historical/)

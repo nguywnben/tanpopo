@@ -1,0 +1,72 @@
+{
+  "checkpoint": "CP52",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": {
+    "original_control_plane": "127.0.0.1:18151",
+    "original_data_planes": ["127.0.0.1:18152", "127.0.0.1:18153"],
+    "postgresql": "isolated PostgreSQL 16 disposable container; original container had no persistent volume and was removed when stopped",
+    "valkey": "three-node Valkey 8.1 Cluster; all three primary containers were stopped",
+    "runtime_mode": "exact-source local Linux/amd64 build; split Control Plane and two Data Planes",
+    "browser": "Chromium used to create the active synthetic provider key before partition; setup recovery screenshots are from the replacement empty database",
+    "provider": "no provider route or upstream call; no paid usage"
+  },
+  "contract": {
+    "sources": [
+      "docs/operations/monitoring-incidents.md, FMEA-07: partition from PostgreSQL and Valkey for longer than 10 seconds",
+      "docs/architecture/deployment-topology.md, degraded persistence behavior",
+      "docs/planning/units/TP-IMP-0040.md and docs/reviews/tp-imp-0040-execution.md, fail-closed stale-node acceptance"
+    ],
+    "expected": "Liveness remains available, readiness becomes not_ready after the sustained dual-dependency partition, and authenticated Virtual Key traffic is rejected while the persistence snapshot is not ready."
+  },
+  "precondition": {
+    "synthetic_key_created_through_console": true,
+    "key_name": "CP52 stale-snapshot breaker probe",
+    "key_last_four": "57dF",
+    "test_request_result_before_partition": [503, 503],
+    "pre_partition_error": "no_compliant_deployment_available",
+    "interpretation": "The key was accepted through authentication and rejected only because no matching route existed; no upstream provider was contacted."
+  },
+  "partition": {
+    "dependencies_stopped": ["PostgreSQL 16", "Valkey Cluster primary 1", "Valkey Cluster primary 2", "Valkey Cluster primary 3"],
+    "wait_seconds_before_readiness_assertion": 13,
+    "healthz": [
+      {"role": "control-plane", "http_status": 200, "body": "ok"},
+      {"role": "data-plane-1", "http_status": 200, "body": "ok"},
+      {"role": "data-plane-2", "http_status": 200, "body": "ok"}
+    ],
+    "readyz": [
+      {"role": "control-plane", "http_status": 503, "body": "not_ready"},
+      {"role": "data-plane-1", "http_status": 503, "body": "not_ready"},
+      {"role": "data-plane-2", "http_status": 503, "body": "not_ready"}
+    ],
+    "authenticated_data_plane_requests": [
+      {"role": "data-plane-1", "http_status": 503, "error": "snapshot_not_ready"},
+      {"role": "data-plane-2", "http_status": 503, "error": "snapshot_not_ready"}
+    ],
+    "classification": "PASS (scoped accepted FMEA-07 fail-closed behavior)"
+  },
+  "environment_recovery": {
+    "limitation": "The original PostgreSQL container used an ephemeral writable layer. Stopping it removed the container and its test database. This invalidated the pre-partition key and test data; it is a QA infrastructure durability/setup loss, not evidence of a Tanpopo storage defect.",
+    "recovery": "Created a replacement isolated PostgreSQL 16 container and a non-superuser, non-BYPASSRLS application login; provisioned only the documented NOLOGIN webhook-worker role and narrow grants. Restarted the same exact-source binary against fresh PostgreSQL plus a recovered 3-node Valkey cluster. Completed a real Chromium first-install flow and inspected the Owner form, review, Overview, and Operations screenshots. The three runtime roles returned /readyz HTTP 200 and Operations showed PostgreSQL, config epoch 1, and 3 healthy process nodes.",
+    "not_demonstrated": ["restoration of the removed database or its test data", "PostgreSQL backup/restore", "durable persistence across container replacement", "post-recovery replay of the now-invalid pre-partition Virtual Key"]
+  },
+  "evidence": [
+    "../checkpoints/CP52-postgresql-valkey-partition-fail-closed.md",
+    "../evidence/screenshots/CP52-stale-breaker-key-form.png",
+    "../evidence/screenshots/CP52-setup-owner-form.png",
+    "../evidence/screenshots/CP52-setup-provider-step.png",
+    "../evidence/screenshots/CP52-setup-custody-step.png",
+    "../evidence/screenshots/CP52-setup-review.png",
+    "../evidence/screenshots/CP52-recovered-overview.png",
+    "../evidence/screenshots/CP52-recovered-operations.png"
+  ],
+  "new_product_defect": false,
+  "coverage": {
+    "dual_dependency_partition_fmea07": "PASS (scoped)",
+    "database_container_replacement_durability": "UNVERIFIED (test infrastructure had no persistent volume)",
+    "database_backup_restore": "UNVERIFIED",
+    "campaign_historical_defect_counts_changed": false
+  },
+  "release_gate": "GATE-REL-07 remains BLOCKED"
+}
