@@ -108,6 +108,7 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP123 normalized OpenAI image pricing comparison](checkpoints/CP123-normalized-openai-image-pricing-comparison.md)
 - [CP124 normalized OpenAI project-budget boundary](checkpoints/CP124-normalized-openai-project-budget-boundary.md)
 - [CP125 native Ollama Generate image pricing](checkpoints/CP125-native-generate-image-unit-settlement.md)
+- [CP126 native Generate malformed image error settlement](checkpoints/CP126-native-generate-malformed-image-error-settlement.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -301,3 +302,6 @@ CP124 checked the normalized OpenAI control after restoring the project hard lim
 
 
 CP125 exercised native Ollama `/api/generate` with its top-level `images` array against the same 1,000,000-nano-USD image price. The local fixture received both ordered image hashes and returned 200; Chargeback again recorded zero exact/estimated micro-USD and one estimated request instead of the expected $0.002, while Traces said Exact/$0. This extends Major DEF-074 across both tested native Ollama `/api/chat` and `/api/generate` request shapes and separately extends DEF-052. The temporary project limit was raised then restored to 100, with no additional settlement; the temporary key was revoked and original fixture health returned. Screenshots were visually inspected. No new defect was assigned; DEF-051–074 remain 24 confirmed failures. Historical status remains 24 scoped PASS, 6 PARTIAL, 1 FAIL (DEF-025), and 19 UNVERIFIED. QA continues; **GATE-REL-07 remains BLOCKED.** Evidence: [CP125](checkpoints/CP125-native-generate-image-unit-settlement.md) and [`sanitized result`](evidence/CP125-native-generate-image-pricing-results.json).
+
+
+CP126 submitted one malformed synthetic image to native Ollama `/api/generate` on the nonzero image-rate route. The loopback fixture received the invalid image marker and returned 400; Tanpopo returned non-retryable `upstream_bad_request`. Persistent Chargeback had no row, budget settlement stayed unchanged, and no active hold remained after restoring the original 100-micro limit. The test key was revoked, fixture restored and healthy, and Traces/Chargeback/key/budget screenshots visually inspected. This is a scoped error-path PASS and does not cure DEF-074 for valid native images. No new defect was assigned; DEF-051–074 remain 24 confirmed failures; historical status is unchanged. QA continues; **GATE-REL-07 remains BLOCKED.** Evidence: [CP126](checkpoints/CP126-native-generate-malformed-image-error-settlement.md) and [`sanitized result`](evidence/CP126-malformed-generate-image-results.json).
