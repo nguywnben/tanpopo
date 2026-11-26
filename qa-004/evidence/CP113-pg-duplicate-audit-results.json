@@ -1,0 +1,109 @@
+{
+  "status": "PASS (scoped): duplicate project and environment slugs rejected without extra success audit events",
+  "before": {
+    "projects": {
+      "status": 200,
+      "total": 2,
+      "matches": [
+        {
+          "id": "prj_01m8awtt8we00b41f10ekb4bxt",
+          "name": "QA004 CP107 PostgreSQL Scope",
+          "slug": "qa004-cp107-pg-scope"
+        }
+      ]
+    },
+    "projectCreated": {
+      "status": 200,
+      "count": 2,
+      "has_more": false,
+      "actions": [
+        "project.created",
+        "project.created"
+      ]
+    },
+    "environments": {
+      "status": 200,
+      "total": 1,
+      "matches": [
+        {
+          "id": "env_01m8awtveye0085gp3ywq7cxsb",
+          "name": "qa004-cp107-qa",
+          "slug": "qa004-cp107-qa"
+        }
+      ]
+    },
+    "environmentCreated": {
+      "status": 200,
+      "count": 2,
+      "has_more": false,
+      "actions": [
+        "environment.created",
+        "environment.created"
+      ]
+    }
+  },
+  "duplicateProject": {
+    "http": 409,
+    "error": {
+      "code": "resource_already_exists",
+      "type": "conflict_error",
+      "message": "project slug already exists in organization",
+      "request_id": "req_01m8b02k74e0085189mcneby9z",
+      "retryable": false
+    },
+    "ui": "New project\nCreate a workspace project with isolated environments, routes, and virtual keys.\nproject slug already exists in organization\nProject name\n∙ Required\nProject slug\n∙ Required\nCancel\nCreate project"
+  },
+  "duplicateEnvironment": {
+    "http": 409,
+    "error": {
+      "code": "resource_already_exists",
+      "type": "conflict_error",
+      "message": "environment slug already exists in project",
+      "request_id": "req_01m8b02n1ze00abs803w9h1de3",
+      "retryable": false
+    },
+    "ui": "New environment\nAdd an isolated environment (such as prod or staging) inside QA004 CP107 PostgreSQL Scope.\nenvironment slug already exists in project\nEnvironment name\n∙ Required\nEnvironment slug\n∙ Required\nCancel\nCreate environment"
+  },
+  "after": {
+    "projects": {
+      "status": 200,
+      "total": 2,
+      "matches": [
+        {
+          "id": "prj_01m8awtt8we00b41f10ekb4bxt",
+          "name": "QA004 CP107 PostgreSQL Scope",
+          "slug": "qa004-cp107-pg-scope"
+        }
+      ]
+    },
+    "projectCreated": {
+      "status": 200,
+      "count": 2,
+      "has_more": false,
+      "actions": [
+        "project.created",
+        "project.created"
+      ]
+    },
+    "environments": {
+      "status": 200,
+      "total": 1,
+      "matches": [
+        {
+          "id": "env_01m8awtveye0085gp3ywq7cxsb",
+          "name": "qa004-cp107-qa",
+          "slug": "qa004-cp107-qa"
+        }
+      ]
+    },
+    "environmentCreated": {
+      "status": 200,
+      "count": 2,
+      "has_more": false,
+      "actions": [
+        "environment.created",
+        "environment.created"
+      ]
+    }
+  }
+}
