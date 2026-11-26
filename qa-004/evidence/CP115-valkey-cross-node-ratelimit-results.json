@@ -1,0 +1,51 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "artifact_run": "45581179274",
+  "database": "isolated PostgreSQL restored copy qa004_cp114_postshred_restore",
+  "cache": "Valkey 8.1.12 three-primary cluster on loopback ports 16379-16381",
+  "runtimes": [
+    {"role": "standalone control/data", "port": 18137, "ready_http_status": 200},
+    {"role": "data-plane", "port": 18138, "ready_http_status": 200}
+  ],
+  "fixture": "No provider connection or active deployment for the synthetic test model. Requests terminate at no-route or rate-limit handling; no provider egress or spend.",
+  "rate_limit_trial_1": {
+    "key_id": "vky_01m8b1n25me00b11rm3f7m57a3",
+    "rpm_limit": 1,
+    "create_http_status": 201,
+    "first_request": {"port": 18137, "http_status": 503, "error_code": "no_compliant_deployment_available"},
+    "second_request": {"port": 18138, "http_status": 429, "error_code": "rate_limit_exceeded", "retry_after_seconds": "60"},
+    "real_console_revocation_http_status": 200,
+    "post_revoke_metadata": {"http_status": 200, "state": "REVOKED", "version": 2, "rpm_limit": 1}
+  },
+  "rate_limit_and_revocation_replay_trial": {
+    "key_id": "vky_01m8b1sfrfe008h5cxs15freev",
+    "rpm_limit": 1,
+    "create_http_status": 201,
+    "secret_handling": "one-time response retained in process memory only; not logged, saved, or screenshotted; process variable cleared after requests",
+    "first_request": {"port": 18137, "http_status": 503, "error_code": "no_compliant_deployment_available"},
+    "second_request": {"port": 18138, "http_status": 429, "error_code": "rate_limit_exceeded", "retry_after_seconds": "60"},
+    "real_console_graceful_revoke_http_status": 200,
+    "post_revoke_api_readback": {"http_status": 200, "state": "REVOKED", "version": 2, "rpm_limit": 1},
+    "post_revoke_replay": [
+      {"port": 18137, "http_status": 401, "error_code": "invalid_virtual_key"},
+      {"port": 18138, "http_status": 401, "error_code": "invalid_virtual_key"}
+    ]
+  },
+  "visual_evidence": [
+    "CP115-vkey-list-before.png",
+    "CP115-vkey-create-form.png",
+    "CP115-vkey-rpm-after-create.png",
+    "CP115-vkey-action-menu.png",
+    "CP115-vkey-revoke-dialog.png",
+    "CP115-vkey-revoked.png",
+    "CP115-cross-node-key-revoked.png"
+  ],
+  "result": "PASS (scoped) for application-level RPM enforcement shared across two RC6 processes using Valkey, graceful revocation, and post-revocation authentication rejection across both listeners. No new defect assigned.",
+  "limits": [
+    "Only one isolated key limit and one synthetic model were tested; this does not establish failover during a Valkey outage, concurrent request fairness, TPM accounting, policy hierarchy, or sustained/load behavior.",
+    "The first captured post-create screenshot followed a page reload before its list had rendered; that transient loading image was discarded. Stable post-create metadata and post-revocation screenshots are retained.",
+    "The Console issue form does not expose the API's rpm_limit field in the inspected form; no UI defect is assigned because SCR-13 does not specify rate-limit editing in this form."
+  ],
+  "product_source_modified": false,
+  "gate_rel_07": "BLOCKED"
+}
