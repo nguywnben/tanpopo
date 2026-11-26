@@ -502,6 +502,12 @@ func (s *Server) handleApproveExtensionPermissions(w http.ResponseWriter, r *htt
 		})
 	case installer.StateUpdatingPendingReconsent:
 		rec, err = s.installer.ApproveEscalatedUpgrade(r.Context(), insID, expectedVer, sc.Actor.PrincipalID, approverOrg, reqID)
+	case installer.StateInstalledDisabled:
+		if !req.EnableImmediately {
+			writeErrorEnvelope(w, r, http.StatusConflict, "invalid_state_transition", "conflict_error", "disabled installation requires enable_immediately=true to reactivate", false, curDTO)
+			return
+		}
+		rec, err = s.installer.EnableDisabledInstallation(r.Context(), insID, expectedVer, sc.Actor.PrincipalID, approverOrg, reqID)
 	default:
 		writeErrorEnvelope(w, r, http.StatusConflict, "invalid_state_transition", "conflict_error", fmt.Sprintf("installation in state %s cannot be approved", curDBState), false, nil)
 		return
@@ -856,6 +862,106 @@ func (s *Server) handleQuarantineExtension(w http.ResponseWriter, r *http.Reques
 	}
 	w.Header().Set("ETag", FormatETag(quarantined.Version))
 	writeJSON(w, http.StatusOK, quarantined)
+}
+
+func (s *Server) handleUnquarantineExtension(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok {
+		return
+	}
+	insID := strings.TrimSpace(r.PathValue("installationId"))
+	if insID == "" {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
+		return
+	}
+	var req rollbackExtensionRequest
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	orgID, ok := s.resolveTargetOrgID(w, r, sc)
+	if !ok {
+		return
+	}
+	if !s.authorize(w, r, sc, rbac.ActionExtensionQuarantine, rbac.TargetScope{OrgID: orgID}) {
+		return
+	}
+	if !sc.IsOperator {
+		writeErrorEnvelope(w, r, http.StatusForbidden, "insufficient_role_permission", "permission_error", "global extension unquarantine requires an instance OPERATOR", false, nil)
+		return
+	}
+	if !s.ensureGlobalExtensionOperatorIfMultiTenant(w, r, sc) {
+		return
+	}
+	s.quarantineMu.Lock()
+	defer s.quarantineMu.Unlock()
+	expectedVer, ok := requireIfMatch(w, r)
+	if !ok {
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	if len([]rune(reason)) < 5 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "reason must be at least 5 characters", false, nil)
+		return
+	}
+	if s.installer == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "extension_installer_unavailable", "extension_error", "extension installer is not configured", true, nil)
+		return
+	}
+	cur, curDBState, err := s.loadExtensionInstallationDTO(r.Context(), insID)
+	if errors.Is(err, port.ErrNotFound) {
+		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "extension installation not found", false, nil)
+		return
+	}
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading extension installation", true, nil)
+		return
+	}
+	if cur.Version != expectedVer {
+		writeOptimisticConflict(w, r, cur.Version, cur)
+		return
+	}
+	if curDBState != installer.StateQuarantined {
+		writeErrorEnvelope(w, r, http.StatusConflict, "invalid_state_transition", "conflict_error", fmt.Sprintf("installation in state %s is not quarantined", curDBState), false, cur)
+		return
+	}
+
+	if err := s.installer.UnquarantineInstallationIfVersion(r.Context(), insID, expectedVer, reason, sc.Actor.PrincipalID); err != nil {
+		latest, _, _ := s.loadExtensionInstallationDTO(r.Context(), insID)
+		s.writeInstallerError(w, r, err, latest)
+		return
+	}
+
+	if s.killSwitch != nil {
+		activeSwitches, lErr := s.killSwitch.ListInstance(r.Context(), true)
+		if lErr == nil {
+			for _, sw := range activeSwitches {
+				if sw.Active && sw.Level == killswitch.LevelExtensionInstallation && sw.TargetID == insID {
+					_, _ = s.killSwitch.Clear(r.Context(), killswitch.ClearParams{
+						KillSwitchID:         sw.ID,
+						ExpectedVersion:      sw.Version,
+						ClearedByPrincipalID: sc.Actor.PrincipalID,
+						ClearReason:          "extension unquarantined: " + reason,
+						EntryPoint:           port.AuditEntryPointAdminAPI,
+						RequestID:            ptrOrNil(requestIDFromContext(r.Context())),
+					})
+				}
+			}
+		}
+	}
+
+	if s.snapshots != nil {
+		if err := s.snapshots.Refresh(r.Context()); err != nil {
+			writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "snapshot_refresh_failed", "upstream_error", "extension unquarantined cleanly, but serving snapshot refresh failed", true, nil)
+			return
+		}
+	}
+	unquarantined, _, err := s.loadExtensionInstallationDTO(r.Context(), insID)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reloading unquarantined extension", true, nil)
+		return
+	}
+	w.Header().Set("ETag", FormatETag(unquarantined.Version))
+	writeJSON(w, http.StatusOK, unquarantined)
 }
 
 func (s *Server) handleUninstallOrDiscardExtension(w http.ResponseWriter, r *http.Request) {

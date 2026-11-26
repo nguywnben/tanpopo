@@ -801,6 +801,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/extensions/{installationId}/unquarantine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Audited transition from QUARANTINED to INSTALLED_DISABLED after forensic review (DEF-058) */
+        post: operations["unquarantineExtension"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/extensions/{installationId}/rollback": {
         parameters: {
             query?: never;
@@ -4478,6 +4495,67 @@ export interface operations {
             };
             /** @description Caller lacks extension quarantine permission */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Optimistic lock conflict or invalid state transition */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
+    unquarantineExtension: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optimistic concurrency revision ETag (e.g., '"v3"'). Stale values return 409 optimistic_lock_conflict. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                installationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Extension restored to INSTALLED_DISABLED (traffic stays blocked until explicitly re-enabled) */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionInstallation"];
+                };
+            };
+            /** @description Caller lacks extension unquarantine permission */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Extension installation not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

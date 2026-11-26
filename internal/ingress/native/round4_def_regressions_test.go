@@ -282,4 +282,39 @@ adapter:
 	if !strings.Contains(chatMediaJSON, `"image_count":2`) || chatCostMicros != 10017 {
 		t.Fatalf("DEF-074 /api/chat settlement mismatch: media=%s cost=%d want image_count:2 & cost=10017", chatMediaJSON, chatCostMicros)
 	}
+
+	// 3. DEF-059: Quarantined Ollama adapter fails closed with 503 extension_quarantined (not no_compliant_deployment_available).
+	var ollamaInstID string
+	if err := h.store.RawDB().QueryRowContext(h.ctx,
+		`SELECT ei.id FROM extension_installations ei JOIN extension_packages ep ON ep.id = ei.package_id WHERE ep.canonical_name = '@acme/ollama-native' LIMIT 1`,
+	).Scan(&ollamaInstID); err != nil {
+		t.Fatalf("lookup ollama installation id: %v", err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx,
+		`UPDATE extension_installations SET state = 'QUARANTINED', version = version + 1 WHERE id = ?`,
+		ollamaInstID,
+	); err != nil {
+		t.Fatalf("quarantine ollama installation: %v", err)
+	}
+	if _, err := h.store.RawDB().ExecContext(h.ctx,
+		`INSERT INTO config_changelog (org_id, entity_kind, entity_id, mutation_type, emergency, created_at_ms) VALUES ('', 'extension_installation', ?, 'QUARANTINE', 1, ?)`,
+		ollamaInstID, nowFn(),
+	); err != nil {
+		t.Fatalf("changelog quarantine: %v", err)
+	}
+	if err := h.snapshots.Refresh(h.ctx); err != nil {
+		t.Fatalf("snapshots.Refresh after quarantine: %v", err)
+	}
+	quarReq, _ := http.NewRequest(http.MethodPost, httpSrv.URL+"/native/ollama/api/generate", bytes.NewReader([]byte(`{"model":"qwen2.5","stream":false,"prompt":"hi"}`)))
+	quarReq.Header.Set("Authorization", "Bearer "+h.vkeyRaw)
+	quarResp, err := h.client.Do(quarReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var quarBuf bytes.Buffer
+	_, _ = quarBuf.ReadFrom(quarResp.Body)
+	_ = quarResp.Body.Close()
+	if quarResp.StatusCode != http.StatusServiceUnavailable || !strings.Contains(quarBuf.String(), `"extension_quarantined"`) {
+		t.Fatalf("DEF-059 native quarantine expected 503 extension_quarantined, got status=%d body=%s", quarResp.StatusCode, quarBuf.String())
+	}
 }

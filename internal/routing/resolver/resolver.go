@@ -310,7 +310,7 @@ func (r *Resolver) evaluate(req ResolveRequest) ExplainResult {
 		adp := cand.Adapter
 
 		// Tenant, logical model & project ownership invariant.
-		if dep.OrgID != req.OrgID || cand.LogicalModel == nil || conn == nil || !conn.VisibleToProject(req.OrgID, req.ProjectID) {
+		if dep.OrgID != req.OrgID || cand.LogicalModel == nil || conn == nil || !conn.VisibleToProjectScopeOnly(req.OrgID, req.ProjectID) {
 			out.RejectedDeployments = append(out.RejectedDeployments, ExplainRejectedDeployment{
 				DeploymentID: dep.ID,
 				Stage:        "HARD_COMPLIANCE_FILTER",
@@ -342,13 +342,22 @@ func (r *Resolver) evaluate(req ResolveRequest) ExplainResult {
 			})
 			continue
 		}
-		if strings.EqualFold(adp.ExtensionState, installer.StateQuarantined) {
+		if conn.AdapterQuarantined || strings.EqualFold(adp.ExtensionState, installer.StateQuarantined) {
 			sawQuarantined = true
 			out.RejectedDeployments = append(out.RejectedDeployments, ExplainRejectedDeployment{
 				DeploymentID: dep.ID,
 				Stage:        "HARD_COMPLIANCE_FILTER",
 				RuleCode:     "EXTENSION_QUARANTINED",
 				Detail:       fmt.Sprintf("Adapter %q is quarantined.", adp.AdapterSlug),
+			})
+			continue
+		}
+		if !conn.VisibleToProject(req.OrgID, req.ProjectID) {
+			out.RejectedDeployments = append(out.RejectedDeployments, ExplainRejectedDeployment{
+				DeploymentID: dep.ID,
+				Stage:        "HARD_COMPLIANCE_FILTER",
+				RuleCode:     "SCOPE_OR_CONNECTION_UNAVAILABLE",
+				Detail:       "Backing extension is disabled or blocked by organization trust policy.",
 			})
 			continue
 		}

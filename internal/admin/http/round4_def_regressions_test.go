@@ -322,3 +322,140 @@ func TestDEF052_053_077_078_079_Round4FinOpsAndPricingRegressions(t *testing.T) 
 		t.Fatalf("DEF-079: expected valid remediation routes for alerts, got %+v", routesByCode)
 	}
 }
+
+func TestDEF058_061_062_071_073_ExtensionLifecycleAndSecurityAPI(t *testing.T) {
+	h := newPart2TestHarness(t, 20)
+	boot, ownerCookie := h.bootstrapOwner(t, "Round4 Extensions Org", "r4-ext-proj")
+
+	// 1. DEF-071: Multi-hyphen spoofed @tanpopo-qa004-spoof/canary archive without root sig -> 403 reserved_namespace_spoofing.
+	spoofURI := "https://marketplace.tanpopo.dev/spoof-qa004.tpkg"
+	spoofSHA := h.registerProviderTPKGWithSig(t, spoofURI, "@tanpopo-qa004-spoof/canary", "1.0.0", []string{"api.openai.com"}, false, true, false)
+	recSpoof := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/install", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"source_uri":      spoofURI,
+		"expected_sha256": spoofSHA,
+	})
+	if recSpoof.Code != http.StatusForbidden || !strings.Contains(recSpoof.Body.String(), "reserved_namespace_spoofing") {
+		t.Fatalf("DEF-071: expected 403 reserved_namespace_spoofing, got %d body=%s", recSpoof.Code, recSpoof.Body.String())
+	}
+
+	// 2. DEF-073: Digest mismatch returns hash_mismatch.
+	v1URI := "https://marketplace.tanpopo.dev/acme-r4-v1.tpkg"
+	v1SHA := h.registerSignedProviderTPKG(t, v1URI, "@acme/r4-lifecycle", "1.0.0", []string{"api.openai.com"}, false, true)
+	wrongSHA := strings.Repeat("0", 64)
+	recMismatch := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/install", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"source_uri":      v1URI,
+		"expected_sha256": wrongSHA,
+	})
+	if recMismatch.Code != http.StatusBadRequest || !strings.Contains(recMismatch.Body.String(), "hash_mismatch") {
+		t.Fatalf("DEF-073: expected 400 hash_mismatch, got %d body=%s", recMismatch.Code, recMismatch.Body.String())
+	}
+
+	// Stage and approve v1 -> ENABLED_ACTIVE.
+	recStage := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/install", ownerCookie, boot.CSRFToken, "", map[string]any{
+		"source_uri":      v1URI,
+		"expected_sha256": v1SHA,
+	})
+	if recStage.Code != http.StatusAccepted {
+		t.Fatalf("stage v1 code=%d body=%s", recStage.Code, recStage.Body.String())
+	}
+	var stageResp struct {
+		InstallationID string `json:"installation_id"`
+	}
+	mustDecodeJSON(t, recStage.Body.Bytes(), &stageResp)
+	recApprove := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+stageResp.InstallationID+"/approve-permissions", ownerCookie, boot.CSRFToken, `"v1"`, map[string]any{
+		"enable_immediately": true,
+		"ack_unverified":     false,
+	})
+	if recApprove.Code != http.StatusOK {
+		t.Fatalf("approve v1 code=%d body=%s", recApprove.Code, recApprove.Body.String())
+	}
+	var inst extensionInstallationDTO
+	mustDecodeJSON(t, recApprove.Body.Bytes(), &inst)
+
+	// 3. DEF-061 + DEF-062: Escalated upgrade enters UPDATING_PENDING_RECONSENT; discarding candidate returns ENABLED_ACTIVE; re-submitting same candidate returns 409 already_exists.
+	v2URI := "https://marketplace.tanpopo.dev/acme-r4-v2.tpkg"
+	v2SHA := h.registerSignedProviderTPKG(t, v2URI, "@acme/r4-lifecycle", "2.0.0", []string{"api.openai.com", "api.extra.example"}, false, true)
+	recUpg := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+inst.ID+"/upgrade", ownerCookie, boot.CSRFToken, FormatETag(inst.Version), map[string]any{
+		"source_uri":      v2URI,
+		"expected_sha256": v2SHA,
+	})
+	if recUpg.Code != http.StatusAccepted {
+		t.Fatalf("DEF-061 upgrade code=%d body=%s", recUpg.Code, recUpg.Body.String())
+	}
+	recList := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/extensions/installations", ownerCookie, "", "", nil)
+	var extList struct {
+		Data []extensionInstallationDTO `json:"data"`
+	}
+	mustDecodeJSON(t, recList.Body.Bytes(), &extList)
+	var upgInst extensionInstallationDTO
+	for _, it := range extList.Data {
+		if it.ID == inst.ID {
+			upgInst = it
+		}
+	}
+	if upgInst.State != "UPDATING_PENDING_RECONSENT" {
+		t.Fatalf("expected UPDATING_PENDING_RECONSENT, got %q", upgInst.State)
+	}
+	recDiscard := h.doAuthedCookie(t, http.MethodDelete, "/admin/v1/extensions/"+inst.ID, ownerCookie, boot.CSRFToken, FormatETag(upgInst.Version), nil)
+	if recDiscard.Code != http.StatusNoContent {
+		t.Fatalf("DEF-061 discard candidate DELETE code=%d body=%s", recDiscard.Code, recDiscard.Body.String())
+	}
+	recListAfterDiscard := h.doAuthedCookie(t, http.MethodGet, "/admin/v1/extensions/installations", ownerCookie, "", "", nil)
+	mustDecodeJSON(t, recListAfterDiscard.Body.Bytes(), &extList)
+	for _, it := range extList.Data {
+		if it.ID == inst.ID {
+			inst = it
+		}
+	}
+	if inst.State != "ENABLED_ACTIVE" {
+		t.Fatalf("DEF-061 expected ENABLED_ACTIVE after discarding candidate, got %q", inst.State)
+	}
+	recDupUpg := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+inst.ID+"/upgrade", ownerCookie, boot.CSRFToken, FormatETag(inst.Version), map[string]any{
+		"source_uri":      v2URI,
+		"expected_sha256": v2SHA,
+	})
+	if recDupUpg.Code != http.StatusConflict || !strings.Contains(recDupUpg.Body.String(), "already_exists") {
+		t.Fatalf("DEF-062 expected 409 already_exists on duplicate candidate version, got %d body=%s", recDupUpg.Code, recDupUpg.Body.String())
+	}
+
+	// 4. DEF-058: Quarantine -> Unquarantine (INSTALLED_DISABLED) -> Approve-permissions re-enable (ENABLED_ACTIVE).
+	recQuar := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+inst.ID+"/quarantine", ownerCookie, boot.CSRFToken, FormatETag(inst.Version), map[string]any{
+		"reason": "anomaly isolated",
+	})
+	if recQuar.Code != http.StatusOK {
+		t.Fatalf("quarantine code=%d body=%s", recQuar.Code, recQuar.Body.String())
+	}
+	mustDecodeJSON(t, recQuar.Body.Bytes(), &inst)
+	if inst.State != "QUARANTINED" {
+		t.Fatalf("expected QUARANTINED, got %q", inst.State)
+	}
+	// Stale ETag on unquarantine must fail with 409 optimistic_lock_conflict.
+	recStaleUnq := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+inst.ID+"/unquarantine", ownerCookie, boot.CSRFToken, `"v999"`, map[string]any{
+		"reason": "verified safe",
+	})
+	if recStaleUnq.Code != http.StatusConflict || !strings.Contains(recStaleUnq.Body.String(), "optimistic_lock_conflict") {
+		t.Fatalf("DEF-058 expected 409 optimistic_lock_conflict on stale If-Match unquarantine, got %d body=%s", recStaleUnq.Code, recStaleUnq.Body.String())
+	}
+	recUnq := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+inst.ID+"/unquarantine", ownerCookie, boot.CSRFToken, FormatETag(inst.Version), map[string]any{
+		"reason": "verified safe",
+	})
+	if recUnq.Code != http.StatusOK {
+		t.Fatalf("DEF-058 unquarantine code=%d body=%s", recUnq.Code, recUnq.Body.String())
+	}
+	mustDecodeJSON(t, recUnq.Body.Bytes(), &inst)
+	if inst.State != "INSTALLED_DISABLED" {
+		t.Fatalf("DEF-058 expected INSTALLED_DISABLED after unquarantine, got %q", inst.State)
+	}
+	recReenable := h.doAuthedCookie(t, http.MethodPost, "/admin/v1/extensions/"+inst.ID+"/approve-permissions", ownerCookie, boot.CSRFToken, FormatETag(inst.Version), map[string]any{
+		"enable_immediately": true,
+		"ack_unverified":     false,
+	})
+	if recReenable.Code != http.StatusOK {
+		t.Fatalf("DEF-058 re-enable code=%d body=%s", recReenable.Code, recReenable.Body.String())
+	}
+	mustDecodeJSON(t, recReenable.Body.Bytes(), &inst)
+	if inst.State != "ENABLED_ACTIVE" {
+		t.Fatalf("DEF-058 expected ENABLED_ACTIVE after reactivation, got %q", inst.State)
+	}
+}
+

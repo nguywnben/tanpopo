@@ -5,7 +5,11 @@ package plugin_test
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,3 +126,87 @@ func TestPluginCLITierAliasesAndJSONOutput(t *testing.T) {
 		t.Fatalf("CT-27 terminal escape stripping failed: %q", sanitized)
 	}
 }
+
+func TestPluginReleaseSignAndVerifyRoundtrip(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkcs8, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pkix, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	privFile := filepath.Join(tmp, "root.key.pem")
+	pubFile := filepath.Join(tmp, "root.pub.pem")
+	sigFile := filepath.Join(tmp, "release-signatures.json")
+	if err := os.WriteFile(privFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(pubFile, pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pkix}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Missing private key fails closed without generating or embedding a key.
+	if _, _, badCode := runPluginCLI(t, "release-sign", "--builtin", "--out", sigFile); badCode == 0 {
+		t.Fatalf("expected missing --private-key-file to fail")
+	}
+
+	out, stderr, code := runPluginCLI(t, "--output", "json", "release-sign",
+		"--private-key-file", privFile,
+		"--builtin",
+		"--out", sigFile,
+	)
+	if code != 0 {
+		t.Fatalf("release-sign --builtin failed: code=%d stderr=%s", code, stderr)
+	}
+	var signRes struct {
+		SignedCount int `json:"signed_count"`
+	}
+	if err := json.Unmarshal([]byte(out), &signRes); err != nil || signRes.SignedCount == 0 {
+		t.Fatalf("unexpected release-sign json: err=%v out=%s", err, out)
+	}
+
+	vOut, vErr, vCode := runPluginCLI(t, "--output", "json", "release-verify",
+		"--signatures", sigFile,
+		"--root-pubkey-file", pubFile,
+		"--builtin",
+	)
+	if vCode != 0 {
+		t.Fatalf("release-verify --builtin failed: code=%d stderr=%s out=%s", vCode, vErr, vOut)
+	}
+	var verRes struct {
+		Status        string `json:"status"`
+		VerifiedCount int    `json:"verified_count"`
+	}
+	if err := json.Unmarshal([]byte(vOut), &verRes); err != nil || verRes.Status != "VERIFIED" || verRes.VerifiedCount != signRes.SignedCount {
+		t.Fatalf("unexpected release-verify result: err=%v out=%s", err, vOut)
+	}
+
+	// Wrong public key must fail verification.
+	otherPub, _, _ := ed25519.GenerateKey(rand.Reader)
+	otherPKIX, _ := x509.MarshalPKIXPublicKey(otherPub)
+	wrongPubFile := filepath.Join(tmp, "wrong.pub.pem")
+	_ = os.WriteFile(wrongPubFile, pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: otherPKIX}), 0o644)
+	if _, _, badVer := runPluginCLI(t, "release-verify", "--signatures", sigFile, "--root-pubkey-file", wrongPubFile, "--builtin"); badVer == 0 {
+		t.Fatalf("expected release-verify with mismatched root pubkey to fail")
+	}
+
+	// Standalone archive signing & verification roundtrip.
+	tpkgFile := filepath.Join(tmp, "custom.tpkg")
+	if err := os.WriteFile(tpkgFile, []byte("synthetic-tpkg-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	customSig := filepath.Join(tmp, "custom-sigs.json")
+	if _, stderr, code := runPluginCLI(t, "release-sign", "--private-key-file", privFile, "--package-id", "@tanpopo/custom", "--version", "1.2.3", "--archive", tpkgFile, "--out", customSig); code != 0 {
+		t.Fatalf("standalone release-sign failed: code=%d stderr=%s", code, stderr)
+	}
+	if _, stderr, code := runPluginCLI(t, "release-verify", "--signatures", customSig, "--root-pubkey-file", pubFile, "--package-id", "@tanpopo/custom", "--version", "1.2.3", "--archive", tpkgFile); code != 0 {
+		t.Fatalf("standalone release-verify failed: code=%d stderr=%s", code, stderr)
+	}
+}
+

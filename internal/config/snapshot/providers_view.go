@@ -97,6 +97,7 @@ type ProviderConnectionView struct {
 	SharedProjectIDs              []string
 	sharedProjectSet              map[string]struct{}
 	AdapterInstallUsable          bool
+	AdapterQuarantined            bool
 	DerivedPublicTrust            string
 	DerivedEnterpriseSigned       bool
 	ChildProjectBlockedByOrgTrust bool
@@ -134,21 +135,13 @@ func (c *ProviderConnectionView) clone() *ProviderConnectionView {
 	return &cp
 }
 
-// VisibleToProject reports whether projectID inside orgID can access
-// this connection according to owner_project_id and downward shared_project_ids.
-func (c *ProviderConnectionView) VisibleToProject(orgID, projectID string) bool {
-	if c == nil || c.OrgID != orgID || !c.AdapterInstallUsable || c.DisabledByOrgPolicy || c.BlockedByOrgTrustPolicy {
-		return false
-	}
-	// TP-BR-0202: Unsigned unverified_external extensions are unavailable to child Project
-	// scopes unless explicitly enabled by ORG_OWNER via org_extension_policies (enabled=1, org_owner_opt_in=1),
-	// even when owner_project_id IS NULL and shared_project_ids is empty.
-	if projectID != "" && c.ChildProjectBlockedByOrgTrust {
+// VisibleToProjectScopeOnly reports whether projectID inside orgID satisfies tenancy
+// ownership/sharing rules (independent of extension quarantine/trust activation status).
+func (c *ProviderConnectionView) VisibleToProjectScopeOnly(orgID, projectID string) bool {
+	if c == nil || c.OrgID != orgID {
 		return false
 	}
 	if c.OwnerProjectID == nil {
-		// Org-owned connection: accessible organization-wide when shared_project_ids is empty;
-		// otherwise strictly limited to projects in shared_project_ids.
 		if len(c.sharedProjectSet) == 0 {
 			return true
 		}
@@ -166,6 +159,22 @@ func (c *ProviderConnectionView) VisibleToProject(orgID, projectID string) bool 
 	}
 	_, ok := c.sharedProjectSet[projectID]
 	return ok
+}
+
+// VisibleToProject reports whether projectID inside orgID can access
+// this connection according to owner_project_id, downward shared_project_ids,
+// extension activation, and org trust/policy checks.
+func (c *ProviderConnectionView) VisibleToProject(orgID, projectID string) bool {
+	if c == nil || c.OrgID != orgID || !c.AdapterInstallUsable || c.DisabledByOrgPolicy || c.BlockedByOrgTrustPolicy {
+		return false
+	}
+	// TP-BR-0202: Unsigned unverified_external extensions are unavailable to child Project
+	// scopes unless explicitly enabled by ORG_OWNER via org_extension_policies (enabled=1, org_owner_opt_in=1),
+	// even when owner_project_id IS NULL and shared_project_ids is empty.
+	if projectID != "" && c.ChildProjectBlockedByOrgTrust {
+		return false
+	}
+	return c.VisibleToProjectScopeOnly(orgID, projectID)
 }
 
 // LogicalModelView is an immutable O(1) snapshot record of logical_models.
@@ -850,6 +859,7 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, d port.Dialect, view *P
 			OrgOwnerOptIn:            bool(orgOwnerOptIn),
 		})
 		c.AdapterInstallUsable = trust.IsUsableExtensionState(installState)
+		c.AdapterQuarantined = strings.EqualFold(strings.TrimSpace(installState), "QUARANTINED")
 		c.DerivedPublicTrust = verdict.DerivedPublicTrust
 		c.DerivedEnterpriseSigned = verdict.DerivedEnterpriseSigned
 		c.DisabledByOrgPolicy = verdict.DisabledByOrgPolicy

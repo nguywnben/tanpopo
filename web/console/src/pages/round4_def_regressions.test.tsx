@@ -6,6 +6,7 @@ import {I18nProvider} from '../i18n/I18nProvider';
 import {RouterProvider} from '../router/RouterContext';
 import {ThemeProvider} from '../styles/theme';
 import {FinOpsPage} from './finops/FinOpsPage';
+import {ExtensionsPage} from './extensions/ExtensionsPage';
 import {ModelsPage} from './models/ModelsPage';
 import {TracesPage} from './traces/TracesPage';
 
@@ -214,6 +215,151 @@ describe('Engineering Round 4 UI regressions (Slices A & B)', () => {
     await screen.findAllByText('Legacy v1 scale (stored per 1M tokens).');
     fireEvent.click(screen.getByRole('button', {name: /add deployment/i}));
     await screen.findByText(/Effective rate per 1M tokens/i);
+    const res = await axe.run(container);
+    expect(res.violations).toHaveLength(0);
+  });
+
+  it('DEF-058 & DEF-060 & DEF-061 & DEF-062 & DEF-073: ExtensionsPage supports unquarantine, disabled rollback hint, discard candidate, and specific upgrade errors', async () => {
+    rememberCsrfToken('csrf-ext');
+    let unqCalled = false;
+    let discardCalled = false;
+    let upgradeAttempt = 0;
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const parsed = new URL(url, 'http://localhost');
+      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+      if (parsed.pathname === '/admin/v1/extensions/installations' && method === 'GET') {
+        return jsonResponse({
+          data: [
+            {
+              id: 'ins_pending',
+              package_id: '@acme/pending-upg',
+              canonical_name: '@acme/pending-upg',
+              state: 'UPDATING_PENDING_RECONSENT',
+              active_version: '1.0.0',
+              candidate_version: '2.0.0',
+              contract_version: '0.1',
+              previous_rollback_version: null,
+              origin_trust_tier: 'verified',
+              signature_verified: true,
+              enterprise_signed: false,
+              execution_tier: 'DECLARATIVE_T1',
+              version: 3,
+              updated_at: '2026-11-26T00:00:00Z',
+            },
+            {
+              id: 'ins_quar',
+              package_id: '@acme/quar-pkg',
+              canonical_name: '@acme/quar-pkg',
+              state: 'QUARANTINED',
+              active_version: '1.0.0',
+              candidate_version: null,
+              contract_version: '0.1',
+              previous_rollback_version: '0.9.0',
+              origin_trust_tier: 'unverified_external',
+              signature_verified: false,
+              enterprise_signed: false,
+              execution_tier: 'DECLARATIVE_T1',
+              version: 5,
+              updated_at: '2026-11-26T00:00:00Z',
+            },
+          ],
+          has_more: false,
+        });
+      }
+      if (parsed.pathname === '/admin/v1/marketplace/catalog') {
+        return jsonResponse({data: [], offline_cached: false, has_more: false});
+      }
+      if (parsed.pathname === '/admin/v1/extensions/ins_pending/permission-diff') {
+        return jsonResponse(
+          {
+            installation_id: 'ins_pending',
+            package_id: '@acme/pending-upg',
+            state: 'UPDATING_PENDING_RECONSENT',
+            active_version: '1.0.0',
+            candidate_version: '2.0.0',
+            origin_trust_tier: 'verified',
+            signature_verified: true,
+            enterprise_signed: false,
+            execution_tier: 'DECLARATIVE_T1',
+            has_escalation: true,
+            active_permissions: {allowed_hosts: ['api.acme.test'], secret_slots: [], hooks: [], execution_tier: 'DECLARATIVE_T1'},
+            candidate_permissions: {allowed_hosts: ['api.acme.test', 'api.extra.test'], secret_slots: [], hooks: [], execution_tier: 'DECLARATIVE_T1'},
+            permission_delta: {added_hosts: ['api.extra.test'], added_secret_slots: [], added_hooks: [], quota_increased: false, tier_escalated: false},
+            version: 3,
+          },
+          200,
+          {ETag: '"v3"'},
+        );
+      }
+      if (parsed.pathname === '/admin/v1/blast-radius') {
+        return jsonResponse({installation_id: 'ins_quar', projects: ['prj_1'], connections: ['conn_quar_1'], impacted_routes: []});
+      }
+      if (parsed.pathname === '/admin/v1/extensions/ins_quar/unquarantine' && method === 'POST') {
+        unqCalled = true;
+        return jsonResponse({id: 'ins_quar', package_id: '@acme/quar-pkg', state: 'INSTALLED_DISABLED', version: 6});
+      }
+      if (parsed.pathname === '/admin/v1/extensions/ins_pending' && method === 'DELETE') {
+        discardCalled = true;
+        return new Response(null, {status: 204});
+      }
+      if (parsed.pathname === '/admin/v1/extensions/ins_pending/upgrade' && method === 'POST') {
+        upgradeAttempt += 1;
+        if (upgradeAttempt === 1) {
+          return jsonResponse({error: {code: 'already_exists', message: 'duplicate candidate version'}}, 409);
+        }
+        return jsonResponse({error: {code: 'hash_mismatch', message: 'sha256 mismatch'}}, 400);
+      }
+      return jsonResponse({data: []});
+    });
+
+    const {container} = render(wrap(<ExtensionsPage pathname="/extensions/installed" roles={['OPERATOR']} />));
+    await screen.findAllByText('@acme/pending-upg');
+
+    // Open menu on UPDATING_PENDING_RECONSENT row (DEF-060, DEF-061).
+    fireEvent.click(screen.getAllByRole('button', {name: /Actions for @acme\/pending-upg/i})[0]!);
+    const rollbackItem = await screen.findByRole('menuitem', {name: /Rollback version/i});
+    expect(rollbackItem.getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getAllByText(/No previous pin exists/i).length).toBeGreaterThanOrEqual(1);
+
+    // Open review permissions modal -> shows "Close (keep pending)".
+    fireEvent.click(await screen.findByRole('menuitem', {name: /Review permissions/i}));
+    const keepPendingBtn = await screen.findByRole('button', {name: /Close \(keep pending\)/i});
+    fireEvent.click(keepPendingBtn);
+
+    // Discard staged candidate without requiring audit reason (DEF-061).
+    fireEvent.click(screen.getAllByRole('button', {name: /Actions for @acme\/pending-upg/i})[0]!);
+    fireEvent.click(await screen.findByRole('menuitem', {name: /Discard staged upgrade/i}));
+    fireEvent.click(await screen.findByRole('button', {name: /Discard candidate/i}));
+    await waitFor(() => expect(discardCalled).toBe(true));
+
+    // Upgrade errors show distinct DEF-062 duplicate candidate and DEF-073 hash_mismatch copy.
+    fireEvent.click(screen.getAllByRole('button', {name: /Actions for @acme\/pending-upg/i})[0]!);
+    fireEvent.click(await screen.findByRole('menuitem', {name: /Upgrade package/i}));
+    const upgForm = document.getElementById('tp-upgrade-extension-form');
+    expect(upgForm).toBeTruthy();
+    const upgInputs = upgForm!.querySelectorAll('input');
+    fireEvent.change(upgInputs[0]!, {target: {value: 'https://example.test/v2.tpkg'}});
+    fireEvent.change(upgInputs[1]!, {target: {value: 'a'.repeat(64)}});
+    fireEvent.click(screen.getByRole('button', {name: /Stage upgrade/i}));
+    await screen.findByText(/exact immutable candidate version was already registered or rejected/i);
+
+    fireEvent.change(upgInputs[0]!, {target: {value: 'https://example.test/v3.tpkg'}});
+    fireEvent.change(upgInputs[1]!, {target: {value: 'b'.repeat(64)}});
+    fireEvent.click(screen.getByRole('button', {name: /Stage upgrade/i}));
+    await screen.findByText(/archive bytes do not match the expected SHA-256 digest/i);
+    fireEvent.click(screen.getByRole('button', {name: /Cancel/i}));
+
+    // Unquarantine flow on QUARANTINED row (DEF-058).
+    fireEvent.click(screen.getAllByRole('button', {name: /Actions for @acme\/quar-pkg/i})[0]!);
+    fireEvent.click(await screen.findByRole('menuitem', {name: /Unquarantine package/i}));
+    await screen.findByText(/conn_quar_1/);
+    fireEvent.change(screen.getByLabelText(/Audit reason/i), {target: {value: 'cleared triage checks'}});
+    fireEvent.click(screen.getByRole('button', {name: /Confirm unquarantine/i}));
+    await waitFor(() => expect(unqCalled).toBe(true));
+    await screen.findByText(/moved to INSTALLED_DISABLED/i);
+
     const res = await axe.run(container);
     expect(res.violations).toHaveLength(0);
   });

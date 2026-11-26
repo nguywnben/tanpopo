@@ -535,6 +535,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/extensions/{installationId}/permission-diff", Action: rbac.ActionExtensionRead, Handler: s.handleGetExtensionPermissionDiff},
 		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/approve-permissions", Action: rbac.ActionExtensionApprove, Handler: s.handleApproveExtensionPermissions},
 		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/quarantine", Action: rbac.ActionExtensionQuarantine, Handler: s.handleQuarantineExtension},
+		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/unquarantine", Action: rbac.ActionExtensionQuarantine, Handler: s.handleUnquarantineExtension},
 		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/upgrade", Action: rbac.ActionExtensionStage, Handler: s.handleUpgradeExtension},
 		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/rollback", Action: rbac.ActionExtensionApprove, Handler: s.handleRollbackExtension},
 		{Method: http.MethodDelete, Path: "/admin/v1/extensions/{installationId}", Action: rbac.ActionExtensionApprove, Handler: s.handleUninstallOrDiscardExtension},

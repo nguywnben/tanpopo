@@ -2778,6 +2778,51 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
+  /admin/v1/extensions/{installationId}/unquarantine:
+    post:
+      tags: [ExtensionsAndMarketplace]
+      operationId: unquarantineExtension
+      summary: Audited transition from QUARANTINED to INSTALLED_DISABLED after forensic review (DEF-058)
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5 }
+      responses:
+        "200":
+          description: Extension restored to INSTALLED_DISABLED (traffic stays blocked until explicitly re-enabled)
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionInstallation" }
+        "403":
+          description: Caller lacks extension unquarantine permission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "404":
+          description: Extension installation not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: Optimistic lock conflict or invalid state transition
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
   /admin/v1/extensions/{installationId}/rollback:
     post:
       tags: [ExtensionsAndMarketplace]

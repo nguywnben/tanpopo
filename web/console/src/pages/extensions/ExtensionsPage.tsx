@@ -11,6 +11,7 @@ import {
   rollbackExtension,
   stageExtensionInstall,
   uninstallExtension,
+  unquarantineExtension,
   upgradeExtension,
 } from '../../api/catalogClient';
 import type {components} from '../../api/generated';
@@ -92,7 +93,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
   const [ackUnverified, setAckUnverified] = useState(false);
   const [ackDelta, setAckDelta] = useState(false);
 
-  const [actionTarget, setActionTarget] = useState<{row: Installation; kind: 'rollback' | 'quarantine' | 'uninstall'; impact: {projects: string[]; connections: string[]}} | null>(null);
+  const [actionTarget, setActionTarget] = useState<{row: Installation; kind: 'rollback' | 'quarantine' | 'unquarantine' | 'uninstall' | 'discardCandidate'; impact: {projects: string[]; connections: string[]}} | null>(null);
   const [actionReason, setActionReason] = useState('');
   const reloadSeqRef = useRef(0);
 
@@ -201,7 +202,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         setUpgradeSha(entry.sha256);
         return;
       }
-      await openReview(existing.id, existing.active_version ? 'upgrade' : 'install');
+      await openReview(existing.id, existing.active_version && existing.candidate_version ? 'upgrade' : 'install');
       return;
     }
     if (!entry.source_uri || !/^[a-f0-9]{64}$/.test(entry.sha256)) {
@@ -250,7 +251,7 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         setNotice(t('extensions.upgradeStaged', {state: formatOperationalState(result.data.state)}));
       }
     } catch (cause) {
-      setError(errText(cause, t));
+      setError(errText(cause, t, 'upgrade'));
     } finally {
       setBusy(false);
     }
@@ -281,11 +282,11 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
     }
   }
 
-  async function prepareLifecycleAction(row: Installation, kind: 'rollback' | 'quarantine' | 'uninstall') {
+  async function prepareLifecycleAction(row: Installation, kind: 'rollback' | 'quarantine' | 'unquarantine' | 'uninstall' | 'discardCandidate') {
     setError('');
     setActionReason('');
     let impact = {projects: [] as string[], connections: [] as string[]};
-    if (kind === 'rollback' || kind === 'quarantine') {
+    if (kind === 'rollback' || kind === 'quarantine' || kind === 'unquarantine') {
       try {
         const blast = await getExtensionBlastRadius(row.id);
         impact = {projects: blast.projects, connections: blast.connections};
@@ -298,7 +299,8 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
   }
 
   async function confirmLifecycleAction() {
-    if (!actionTarget || actionReason.trim().length < 5) return;
+    if (!actionTarget) return;
+    if (actionTarget.kind !== 'discardCandidate' && actionReason.trim().length < 5) return;
     setBusy(true);
     setError('');
     setActivatedNoticePkg(null);
@@ -306,11 +308,14 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
       const {row, kind} = actionTarget;
       if (kind === 'rollback') await rollbackExtension(row.id, `"v${row.version}"`, actionReason.trim());
       if (kind === 'quarantine') await quarantineExtension(row.id, `"v${row.version}"`, actionReason.trim());
-      if (kind === 'uninstall') await uninstallExtension(row.id, `"v${row.version}"`);
+      if (kind === 'unquarantine') await unquarantineExtension(row.id, `"v${row.version}"`, actionReason.trim());
+      if (kind === 'uninstall' || kind === 'discardCandidate') await uninstallExtension(row.id, `"v${row.version}"`);
       setActionTarget(null);
       await reload();
       if (kind === 'quarantine') setNotice(t('extensions.quarantinedNotice', {pkg: row.package_id}));
+      else if (kind === 'unquarantine') setNotice(t('extensions.unquarantinedNotice', {pkg: row.package_id}));
       else if (kind === 'rollback') setNotice(t('extensions.rollbackCompleted', {pkg: row.package_id}));
+      else if (kind === 'discardCandidate') setNotice(t('extensions.candidateDiscardedNotice', {pkg: row.package_id}));
       else setNotice(t('extensions.uninstallCompleted', {pkg: row.package_id}));
     } catch (cause) {
       setActionTarget(null);
@@ -442,16 +447,19 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                     <RowActionsMenu
                       label={t('common.actionsFor', {name: displayName})}
                       items={[
-                        {id: 'permissions', label: t('extensions.action.reviewPermissions'), onClick: () => void openReview(row.id, row.active_version ? 'upgrade' : 'install')},
+                        {id: 'permissions', label: t('extensions.action.reviewPermissions'), onClick: () => void openReview(row.id, row.active_version && row.candidate_version ? 'upgrade' : 'install')},
                         ...(operator
                           ? [
                               {id: 'upgrade', label: t('extensions.action.upgrade'), onClick: () => { setUpgradeTarget(row); setUpgradeUri(''); setUpgradeSha(''); }},
-                              ...(row.previous_rollback_version
-                                ? [{id: 'rollback', label: t('extensions.action.rollback'), onClick: () => void prepareLifecycleAction(row, 'rollback')}]
-                                : []),
+                              row.previous_rollback_version
+                                ? {id: 'rollback', label: t('extensions.action.rollback'), onClick: () => void prepareLifecycleAction(row, 'rollback')}
+                                : {id: 'rollback', label: t('extensions.action.rollback'), isDisabled: true, description: t('extensions.rollbackUnavailableHint')},
                               {type: 'divider' as const},
-                              ...(row.state !== 'QUARANTINED'
-                                ? [{id: 'quarantine', label: t('extensions.action.quarantine'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'quarantine')}]
+                              ...(row.state === 'QUARANTINED'
+                                ? [{id: 'unquarantine', label: t('extensions.action.unquarantine'), onClick: () => void prepareLifecycleAction(row, 'unquarantine')}]
+                                : [{id: 'quarantine', label: t('extensions.action.quarantine'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'quarantine')}]),
+                              ...(row.state === 'UPDATING_PENDING_RECONSENT'
+                                ? [{id: 'discardCandidate', label: t('extensions.action.discardCandidate'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'discardCandidate')}]
                                 : []),
                               ...(canUninstall
                                 ? [{id: 'uninstall', label: t('extensions.action.uninstall'), variant: 'destructive' as const, onClick: () => void prepareLifecycleAction(row, 'uninstall')}]
@@ -657,7 +665,9 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
         footer={
           approver ? (
             <>
-              <Button variant="secondary" onClick={() => setReviewDiff(null)}>{t('common.cancel')}</Button>
+              <Button variant="secondary" onClick={() => setReviewDiff(null)}>
+                {reviewMode === 'upgrade' ? t('extensions.closeKeepPending') : t('common.cancel')}
+              </Button>
               {reviewMode === 'install' ? (
                 <Button variant="secondary" disabled={busy || reviewBlocked} onClick={() => void handleApproveReview(false)}>
                   {t('extensions.approveKeepDisabled')}
@@ -724,26 +734,39 @@ export function ExtensionsPage({pathname, roles}: {pathname: string; roles: Role
                 projects: actionTarget.impact.projects.join(', ') || t('common.none'),
                 connections: actionTarget.impact.connections.join(', ') || t('common.none'),
               })
-            : actionTarget?.kind === 'rollback'
-              ? t('extensions.confirmDesc.rollback', {
-                  version: actionTarget.row.previous_rollback_version ?? '',
-                  projects: actionTarget.impact.projects.join(', ') || t('common.none'),
+            : actionTarget?.kind === 'unquarantine'
+              ? t('extensions.confirmDesc.unquarantine', {
+                  pkg: actionTarget.row.canonical_name || actionTarget.row.package_id,
+                  connections: actionTarget.impact.connections.join(', ') || t('common.none'),
                 })
-              : t('extensions.confirmDesc.uninstall')
+              : actionTarget?.kind === 'rollback'
+                ? t('extensions.confirmDesc.rollback', {
+                    version: actionTarget.row.previous_rollback_version ?? '',
+                    projects: actionTarget.impact.projects.join(', ') || t('common.none'),
+                  })
+                : actionTarget?.kind === 'discardCandidate'
+                  ? t('extensions.confirmDesc.discardCandidate', {
+                      pkg: actionTarget.row.canonical_name || actionTarget.row.package_id,
+                      candidate: actionTarget.row.candidate_version ?? '',
+                      active: actionTarget.row.active_version ?? '',
+                    })
+                  : t('extensions.confirmDesc.uninstall')
         }
         confirmLabel={actionTarget ? t(`extensions.confirmBtn.${actionTarget.kind}`) : t('common.action')}
         requireMatch={actionTarget?.kind === 'quarantine' ? (actionTarget.row.canonical_name || actionTarget.row.package_id) : undefined}
         matchLabel={t('extensions.matchPackageId')}
         busy={busy}
-        confirmDisabled={actionReason.trim().length < 5}
+        confirmDisabled={actionTarget?.kind !== 'discardCandidate' && actionReason.trim().length < 5}
         onConfirm={() => void confirmLifecycleAction()}
       >
-        <TextField
-          label={t('extensions.auditReason')}
-          required
-          value={actionReason}
-          onChange={event => setActionReason(event.target.value)}
-        />
+        {actionTarget?.kind !== 'discardCandidate' ? (
+          <TextField
+            label={t('extensions.auditReason')}
+            required
+            value={actionReason}
+            onChange={event => setActionReason(event.target.value)}
+          />
+        ) : null}
       </ConfirmDialog>
     </div>
   );
@@ -893,10 +916,17 @@ function toCatalogEntry(value: unknown): CatalogEntry | null {
   };
 }
 
-function errText(cause: unknown, t: (key: string) => string): string {
+function errText(cause: unknown, t: (key: string) => string, context?: 'upgrade'): string {
   const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : '';
+  const msg = cause instanceof Error ? cause.message : '';
+  if (code.includes('hash_mismatch')) {
+    return t('extensions.errDigestMismatch');
+  }
+  if (code.includes('already_exists') && (context === 'upgrade' || msg.toLowerCase().includes('candidate'))) {
+    return t('extensions.errDuplicateCandidate');
+  }
   if (code.includes('already_installed') || code.includes('already_exists')) {
     return t('extensions.errAlreadyInstalled');
   }
-  return cause instanceof Error ? cause.message : t('common.requestFailed');
+  return msg || t('common.requestFailed');
 }

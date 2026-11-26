@@ -635,7 +635,7 @@ func TestChatCompletionsAuthAndPolicyGuards(t *testing.T) {
 	resp, body = h.doChatReq(t, http.MethodPost, "/v1/chat/completions", reasoningBody, nil, nil)
 	assertErrorCode(t, resp, body, http.StatusBadRequest, "capability_not_supported")
 
-	// Quarantine installation -> fail closed with 503 no_compliant_deployment_available (since VisibleToProject fences quarantined)
+	// Quarantine installation -> fail closed with 503 extension_quarantined (DEF-059)
 	if err := h.installer.QuarantineInstallation(h.ctx, h.instID, "security fault", "prc_op_1"); err != nil {
 		t.Fatal(err)
 	}
@@ -643,7 +643,7 @@ func TestChatCompletionsAuthAndPolicyGuards(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, body = h.doChatReq(t, http.MethodPost, "/v1/chat/completions", validBody, nil, nil)
-	assertErrorCode(t, resp, body, http.StatusServiceUnavailable, "no_compliant_deployment_available")
+	assertErrorCode(t, resp, body, http.StatusServiceUnavailable, "extension_quarantined")
 
 	// DEC-019: Stale snapshot beyond MaxStaleness -> 503 snapshot_not_ready
 	h.clk.Advance(time.Hour)

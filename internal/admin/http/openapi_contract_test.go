@@ -439,7 +439,7 @@ func TestOpenAPIRouteAndPayloadConformancePart2(t *testing.T) {
 	ctx := context.Background()
 
 	// Verify all registered v0.2/v0.3 Control Plane routes and 100% OpenAPI conformance.
-	const expectedRoutes = 106
+	const expectedRoutes = 107
 	if got := len(h.srv.Routes()); got != expectedRoutes {
 		t.Fatalf("expected %d registered Control Plane routes, got %d", expectedRoutes, got)
 	}

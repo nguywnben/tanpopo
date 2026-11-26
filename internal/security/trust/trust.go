@@ -30,10 +30,10 @@ const (
 // Canonical organization trust denial sentinel shared with installer and catalog.
 var (
 	ErrOrgTrustPolicyDenied = errors.New("installer: org_trust_policy_denied (403)")
-	ReservedNamespaceRe     = regexp.MustCompile(`^@tanpopo(-[a-z0-9]+)?/`)
+	ReservedNamespaceRe     = regexp.MustCompile(`^(?i)@tanpopo(-[a-z0-9_-]+)?/`)
 )
 
-// IsReservedTanpopoNamespace reports whether pkgID matches ^@tanpopo(-[a-z0-9]+)?/ (CT-05).
+// IsReservedTanpopoNamespace reports whether pkgID matches ^(?i)@tanpopo(-[a-z0-9_-]+)?/ (CT-05).
 func IsReservedTanpopoNamespace(pkgID string) bool {
 	return ReservedNamespaceRe.MatchString(strings.TrimSpace(pkgID))
 }

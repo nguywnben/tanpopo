@@ -232,6 +232,10 @@ export const operationPolicy = {
     "csrf": true,
     "ifMatch": true
   },
+  "POST /admin/v1/extensions/{installationId}/unquarantine": {
+    "csrf": true,
+    "ifMatch": true
+  },
   "POST /admin/v1/extensions/{installationId}/rollback": {
     "csrf": true,
     "ifMatch": true

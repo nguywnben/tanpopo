@@ -236,6 +236,14 @@ export async function quarantineExtension(id: string, etag: string, reason: stri
   return result.data;
 }
 
+export async function unquarantineExtension(id: string, etag: string, reason: string) {
+  const result = await api.POST('/admin/v1/extensions/{installationId}/unquarantine', {
+    params: {path: {installationId: id}, header: {'If-Match': etag}}, body: {reason},
+  });
+  if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  return result.data;
+}
+
 export async function triggerExtensionKillSwitch(id: string, reason: string, confirmSlug: string) {
   const result = await api.POST('/admin/v1/kill-switches', {body: {target_level: 'EXTENSION', target_id: id, confirm_slug: confirmSlug, abort_active_streams: true, reason}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
