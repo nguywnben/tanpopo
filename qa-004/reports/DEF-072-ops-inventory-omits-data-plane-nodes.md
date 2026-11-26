@@ -1,7 +1,7 @@
 # DEF-072 — Operations cluster inventory omits split data-plane nodes
 
-**Severity:** Major  
-**Status:** FAIL — confirmed on exact RC6  
+**Severity:** Major
+**Status:** FAIL — confirmed on exact RC6
 **Affected workflow:** Operations health/epoch monitoring, split control-plane/data-plane deployment, Master KEK rotation and retirement readiness
 
 ## Summary
