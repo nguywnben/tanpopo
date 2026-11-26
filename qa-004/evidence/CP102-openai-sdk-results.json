@@ -1,0 +1,97 @@
+{
+  "sdk": "openai npm 7.64.0",
+  "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "runtime": "http://127.0.0.1:18128/v1",
+  "key": {
+    "id": "vky_01m8avc866e00ahfh0k3gcq3b3",
+    "name": "QA004 CP102 OpenAI Node SDK",
+    "allowed_routes": [
+      "/v1/chat/completions"
+    ]
+  },
+  "fixture_requests_before": 17,
+  "fixture_requests_after": 19,
+  "synchronous": {
+    "id": "chatcmpl-qa004",
+    "object": "chat.completion",
+    "model": "qa004-mock",
+    "content": "Hello from synthetic Ollama.",
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 4,
+      "prompt_tokens": 7,
+      "total_tokens": 11
+    }
+  },
+  "streaming": {
+    "content": "Hello from synthetic Ollama.",
+    "usage": null,
+    "finish_reason": null
+  },
+  "fixture": [
+    {
+      "path": "/v1/chat/completions",
+      "model": "qa004-mock",
+      "stream": false,
+      "keys": [
+        "messages",
+        "model"
+      ],
+      "auth_present": false,
+      "content_type": "application/json"
+    },
+    {
+      "path": "/v1/chat/completions",
+      "model": "qa004-mock",
+      "stream": true,
+      "keys": [
+        "messages",
+        "model",
+        "stream",
+        "stream_options"
+      ],
+      "auth_present": false,
+      "content_type": "application/json"
+    }
+  ],
+  "readback": {
+    "traces": [
+      {
+        "request_id": "trc_01m8avc8x3e00at0vykpmxv9sr",
+        "route_slug": "qa004-mock",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "request_id": "trc_01m8avc8wae009rj0ke23pefst",
+        "route_slug": "qa004-mock",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      }
+    ],
+    "chargeback": [
+      {
+        "group_key": "QA004 CP102 OpenAI Node SDK",
+        "exact_micro_usd": 2,
+        "estimated_micro_usd": 0,
+        "exact_request_count": 2,
+        "estimated_request_count": 0,
+        "unmetered_request_count": 0
+      }
+    ]
+  },
+  "postRevocationSdkReplay": {
+    "status": 401,
+    "name": "Error",
+    "message": "401 Virtual Key is invalid, expired, or revoked."
+  },
+  "fixture_requests_after_revoked_replay": 19,
+  "finalKey": {
+    "state": "REVOKED",
+    "version": 2
+  }
+}
