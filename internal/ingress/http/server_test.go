@@ -1220,6 +1220,8 @@ func TestChatCompletionsAuditConstraintHostIntersectHeartbeatAndPlaneChecks(t *t
 	}
 
 	// 3b. Streaming call with SSEHeartbeatInterval=20ms emits `: ping\n\n` while upstream pauses cleanly between chunks.
+	pingSeen := make(chan struct{})
+	var pingOnce sync.Once
 	hbUpstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
@@ -1231,7 +1233,8 @@ func TestChatCompletionsAuditConstraintHostIntersectHeartbeatAndPlaneChecks(t *t
 		select {
 		case <-r.Context().Done():
 			return
-		case <-time.After(75 * time.Millisecond):
+		case <-pingSeen:
+		case <-time.After(2 * time.Second):
 		}
 		_, _ = w.Write([]byte("data: {\"id\":\"c1\",\"model\":\"acme-upstream\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n"))
 		if fl != nil {
@@ -1255,10 +1258,24 @@ func TestChatCompletionsAuditConstraintHostIntersectHeartbeatAndPlaneChecks(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	hbBody, _ := io.ReadAll(hbResp.Body)
+	var hbBuf strings.Builder
+	readChunk := make([]byte, 4096)
+	for {
+		n, rErr := hbResp.Body.Read(readChunk)
+		if n > 0 {
+			hbBuf.Write(readChunk[:n])
+			if strings.Contains(hbBuf.String(), ": ping\n\n") {
+				pingOnce.Do(func() { close(pingSeen) })
+			}
+		}
+		if rErr != nil {
+			break
+		}
+	}
 	_ = hbResp.Body.Close()
-	if hbResp.StatusCode != http.StatusOK || !strings.Contains(string(hbBody), ": ping\n\n") || !strings.Contains(string(hbBody), "data: [DONE]\n\n") {
-		t.Fatalf("expected 200 SSE with : ping heartbeat and [DONE], status=%d body=%q", hbResp.StatusCode, string(hbBody))
+	hbBody := hbBuf.String()
+	if hbResp.StatusCode != http.StatusOK || !strings.Contains(hbBody, ": ping\n\n") || !strings.Contains(hbBody, "data: [DONE]\n\n") {
+		t.Fatalf("expected 200 SSE with : ping heartbeat and [DONE], status=%d body=%q", hbResp.StatusCode, hbBody)
 	}
 
 	// 4. Adapter allowed_hosts_json narrowing against broader approved_permissions_json must intersect & fail closed.

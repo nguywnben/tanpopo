@@ -4,14 +4,16 @@
 package builtin
 
 import (
+	"bytes"
 	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
-	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -75,10 +77,11 @@ func LoadReleaseRootPublicKeys(lookupEnv func(string) (string, bool), dataDir st
 	}
 
 	parseKeyFile := func(path string) error {
-		raw, err := os.ReadFile(path)
+		raw, err := readBoundedTrustFile(path, 64*1024)
 		if err != nil {
 			return err
 		}
+		raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 		if block, _ := pem.Decode(raw); block != nil {
 			parsed, perr := x509.ParsePKIXPublicKey(block.Bytes)
 			if perr != nil {
@@ -130,18 +133,69 @@ func LoadReleaseRootPublicKeys(lookupEnv func(string) (string, bool), dataDir st
 	return out, nil
 }
 
+func readBoundedTrustFile(path string, maxBytes int64) ([]byte, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("builtin: symlinks are prohibited: %s", path)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("builtin: expected regular file: %s", path)
+	}
+	if info.Size() > maxBytes {
+		return nil, fmt.Errorf("builtin: file %s exceeds max allowed size (%d bytes)", path, maxBytes)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > maxBytes {
+		return nil, fmt.Errorf("builtin: file %s exceeds max allowed size (%d bytes)", path, maxBytes)
+	}
+	return raw, nil
+}
+
 func parseReleaseSignaturesJSON(raw []byte) (map[string][]byte, error) {
+	cleaned := bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 	var doc releaseSignatureFile
-	if err := json.Unmarshal(raw, &doc); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(cleaned))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&doc); err != nil {
 		return nil, fmt.Errorf("builtin: decode release-signatures.json: %w", err)
 	}
+	var trailing any
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("builtin: unexpected trailing content in release-signatures.json")
+	}
 	out := make(map[string][]byte, len(doc.Signatures))
+	seenPkgVer := make(map[string]struct{}, len(doc.Signatures))
 	for _, rec := range doc.Signatures {
+		pkgID := strings.ToLower(strings.TrimSpace(rec.PackageID))
+		ver := strings.TrimSpace(rec.Version)
+		sha := strings.ToLower(strings.TrimSpace(rec.ArchiveSHA256))
+		if pkgID == "" || ver == "" || len(sha) != 64 {
+			return nil, fmt.Errorf("builtin: invalid release signature metadata for %q@%q", rec.PackageID, rec.Version)
+		}
+		if _, hexErr := hex.DecodeString(sha); hexErr != nil {
+			return nil, fmt.Errorf("builtin: invalid archive_sha256 for %s@%s", rec.PackageID, rec.Version)
+		}
+		pkgVerKey := pkgID + "@" + ver
+		if _, dup := seenPkgVer[pkgVerKey]; dup {
+			return nil, fmt.Errorf("builtin: duplicate release signature entry for %s@%s", rec.PackageID, rec.Version)
+		}
+		seenPkgVer[pkgVerKey] = struct{}{}
 		sigRaw, derr := base64.StdEncoding.DecodeString(strings.TrimSpace(rec.RootSignature))
 		if derr != nil || len(sigRaw) != ed25519.SignatureSize {
 			return nil, fmt.Errorf("builtin: invalid base64 signature for %s@%s", rec.PackageID, rec.Version)
 		}
-		key := strings.ToLower(strings.TrimSpace(rec.PackageID)) + "@" + strings.TrimSpace(rec.Version) + "#" + strings.ToLower(strings.TrimSpace(rec.ArchiveSHA256))
+		key := pkgVerKey + "#" + sha
 		out[key] = sigRaw
 	}
 	return out, nil
@@ -166,7 +220,7 @@ func (c *Catalog) LoadOperatorReleaseSignatures(lookupEnv func(string) (string, 
 		return nil
 	}
 	mergeFile := func(path string) error {
-		raw, err := os.ReadFile(path)
+		raw, err := readBoundedTrustFile(path, 1024*1024)
 		if err != nil {
 			return err
 		}
@@ -217,7 +271,7 @@ func (c *Catalog) EvaluateProvenance(pkg Package, rootKeys map[string]ed25519.Pu
 		OriginTrustTier:   lockfile.TrustTierUnverifiedExternal,
 		SignatureVerified: false,
 	}
-	if len(rootKeys) == 0 {
+	if c == nil || len(rootKeys) == 0 {
 		return out
 	}
 	sigKey := strings.ToLower(pkg.PackageID) + "@" + pkg.Version + "#" + strings.ToLower(pkg.ArchiveSHA256)

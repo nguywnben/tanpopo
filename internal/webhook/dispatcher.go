@@ -556,13 +556,23 @@ func (d *Dispatcher) lockOrganizationAdmission(ctx context.Context, tx *sql.Tx, 
 }
 
 func (d *Dispatcher) dispatchOutbox(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	d.cleanupTerminal(ctx)
+	if ctx.Err() != nil {
+		return
+	}
 	type pending struct{ id, org, project, eventType, payload string }
 	var events []pending
 	func() {
 		unlock := d.lockDatabase()
 		defer unlock()
-		rows, err := d.db.QueryContext(ctx, d.bind(`SELECT id,org_id,COALESCE(project_id,''),event_type,payload_json
+		// Keep SQLite row iteration insulated from worker shutdown cancellation
+		// (same modernc/sqlite stmt.query leak defense used in claim).
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
+		defer cancel()
+		rows, err := d.db.QueryContext(dbCtx, d.bind(`SELECT id,org_id,COALESCE(project_id,''),event_type,payload_json
 			FROM webhook_event_outbox WHERE dispatched_at_ms IS NULL ORDER BY created_at_ms,id LIMIT 64`))
 		if err != nil {
 			return
@@ -583,16 +593,27 @@ func (d *Dispatcher) dispatchOutbox(ctx context.Context) {
 		}
 	}()
 	for _, event := range events {
-		if _, err := d.Enqueue(ctx, Event{ID: event.id, OrgID: event.org, ProjectID: event.project, Type: event.eventType, Payload: json.RawMessage(event.payload)}); err != nil {
+		if ctx.Err() != nil {
+			return
+		}
+		dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
+		_, enqErr := d.Enqueue(dbCtx, Event{ID: event.id, OrgID: event.org, ProjectID: event.project, Type: event.eventType, Payload: json.RawMessage(event.payload)})
+		cancel()
+		if enqErr != nil {
 			continue
 		}
 		unlock := d.lockDatabase()
-		_, _ = d.db.ExecContext(ctx, d.bind(`UPDATE webhook_event_outbox SET dispatched_at_ms=? WHERE id=? AND dispatched_at_ms IS NULL`), d.cfg.Now().UnixMilli(), event.id)
+		ackCtx, ackCancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
+		_, _ = d.db.ExecContext(ackCtx, d.bind(`UPDATE webhook_event_outbox SET dispatched_at_ms=? WHERE id=? AND dispatched_at_ms IS NULL`), d.cfg.Now().UnixMilli(), event.id)
+		ackCancel()
 		unlock()
 	}
 }
 
 func (d *Dispatcher) cleanupTerminal(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
 	d.cleanupMu.Lock()
 	defer d.cleanupMu.Unlock()
 	unlock := d.lockDatabase()
@@ -601,16 +622,18 @@ func (d *Dispatcher) cleanupTerminal(ctx context.Context) {
 	if !d.lastCleanup.IsZero() && now.Sub(d.lastCleanup) < time.Hour {
 		return
 	}
-	tx, err := d.db.BeginTx(ctx, nil)
+	dbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
+	defer cancel()
+	tx, err := d.db.BeginTx(dbCtx, nil)
 	if err != nil {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
 	cutoff := now.Add(-d.cfg.Limits.TerminalRetention).UnixMilli()
-	if _, err := tx.ExecContext(ctx, d.bind(`DELETE FROM webhook_deliveries WHERE status IN (?,?) AND terminal_at_ms IS NOT NULL AND terminal_at_ms<?`), statusDelivered, statusDead, cutoff); err != nil {
+	if _, err := tx.ExecContext(dbCtx, d.bind(`DELETE FROM webhook_deliveries WHERE status IN (?,?) AND terminal_at_ms IS NOT NULL AND terminal_at_ms<?`), statusDelivered, statusDead, cutoff); err != nil {
 		return
 	}
-	if _, err := tx.ExecContext(ctx, d.bind(`DELETE FROM webhook_event_outbox WHERE dispatched_at_ms IS NOT NULL AND dispatched_at_ms<?`), cutoff); err != nil {
+	if _, err := tx.ExecContext(dbCtx, d.bind(`DELETE FROM webhook_event_outbox WHERE dispatched_at_ms IS NOT NULL AND dispatched_at_ms<?`), cutoff); err != nil {
 		return
 	}
 	if err := tx.Commit(); err == nil {
@@ -753,14 +776,12 @@ func (d *Dispatcher) claim(ctx context.Context) (*delivery, error) {
 		if ctx.Err() != nil {
 			return nil, nil
 		}
-		committed, commitErr := d.commitClaim(ctx, tx)
-		if commitErr != nil {
+		if fErr := d.failInTx(claimCtx, tx, item, "subscription unavailable", 0); fErr != nil {
+			return nil, fErr
+		}
+		if _, commitErr := d.commitClaim(ctx, tx); commitErr != nil {
 			return nil, commitErr
 		}
-		if !committed {
-			return nil, nil
-		}
-		d.fail(ctx, item, "subscription unavailable", 0)
 		return nil, nil
 	}
 	committed, err := d.commitClaim(ctx, tx)
@@ -873,20 +894,35 @@ func (d *Dispatcher) deliver(parent context.Context, item delivery) {
 		return
 	}
 	terminalAt := d.cfg.Now().UnixMilli()
+	dbCtx, dbCancel := context.WithTimeout(context.WithoutCancel(parent), d.cfg.Limits.RequestTimeout)
+	defer dbCancel()
 	unlock := d.lockDatabase()
-	_, _ = d.db.ExecContext(parent, d.bind(`UPDATE webhook_deliveries SET status = ?, last_http_status = ?, last_error = NULL, delivered_at_ms = ?, terminal_at_ms = ? WHERE org_id = ? AND id = ?`), statusDelivered, resp.StatusCode, terminalAt, terminalAt, item.orgID, item.id)
+	_, _ = d.db.ExecContext(dbCtx, d.bind(`UPDATE webhook_deliveries SET status = ?, last_http_status = ?, last_error = NULL, delivered_at_ms = ?, terminal_at_ms = ? WHERE org_id = ? AND id = ?`), statusDelivered, resp.StatusCode, terminalAt, terminalAt, item.orgID, item.id)
 	unlock()
 }
 
 func (d *Dispatcher) fail(ctx context.Context, item delivery, safeError string, status int) {
+	q, args := d.buildFailUpdate(item, safeError, status)
+	dbCtx, dbCancel := context.WithTimeout(context.WithoutCancel(ctx), d.cfg.Limits.RequestTimeout)
+	defer dbCancel()
+	unlock := d.lockDatabase()
+	_, _ = d.db.ExecContext(dbCtx, q, args...)
+	unlock()
+}
+
+func (d *Dispatcher) failInTx(ctx context.Context, tx *sql.Tx, item delivery, safeError string, status int) error {
+	q, args := d.buildFailUpdate(item, safeError, status)
+	_, err := tx.ExecContext(ctx, q, args...)
+	return err
+}
+
+func (d *Dispatcher) buildFailUpdate(item delivery, safeError string, status int) (string, []any) {
 	if status < 0 || status > 999 {
 		status = 0
 	}
 	if item.attempt >= d.cfg.Limits.MaxAttempts {
-		unlock := d.lockDatabase()
-		_, _ = d.db.ExecContext(ctx, d.bind(`UPDATE webhook_deliveries SET status = ?, last_http_status = ?, last_error = ?, terminal_at_ms = ? WHERE org_id = ? AND id = ?`), statusDead, nullableInt(status), safeError, d.cfg.Now().UnixMilli(), item.orgID, item.id)
-		unlock()
-		return
+		return d.bind(`UPDATE webhook_deliveries SET status = ?, last_http_status = ?, last_error = ?, terminal_at_ms = ? WHERE org_id = ? AND id = ?`),
+			[]any{statusDead, nullableInt(status), safeError, d.cfg.Now().UnixMilli(), item.orgID, item.id}
 	}
 	delay := d.cfg.Limits.BaseBackoff
 	for n := 1; n < item.attempt && delay < d.cfg.Limits.MaxBackoff; n++ {
@@ -899,9 +935,8 @@ func (d *Dispatcher) fail(ctx context.Context, item delivery, safeError string, 
 	if delay > d.cfg.Limits.MaxBackoff {
 		delay = d.cfg.Limits.MaxBackoff
 	}
-	unlock := d.lockDatabase()
-	_, _ = d.db.ExecContext(ctx, d.bind(`UPDATE webhook_deliveries SET status = ?, next_attempt_at_ms = ?, last_http_status = ?, last_error = ? WHERE org_id = ? AND id = ?`), statusRetry, d.cfg.Now().Add(delay).UnixMilli(), nullableInt(status), safeError, item.orgID, item.id)
-	unlock()
+	return d.bind(`UPDATE webhook_deliveries SET status = ?, next_attempt_at_ms = ?, last_http_status = ?, last_error = ? WHERE org_id = ? AND id = ?`),
+		[]any{statusRetry, d.cfg.Now().Add(delay).UnixMilli(), nullableInt(status), safeError, item.orgID, item.id}
 }
 
 func (d *Dispatcher) bind(query string) string {

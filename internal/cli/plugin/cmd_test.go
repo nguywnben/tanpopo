@@ -208,5 +208,50 @@ func TestPluginReleaseSignAndVerifyRoundtrip(t *testing.T) {
 	if _, stderr, code := runPluginCLI(t, "release-verify", "--signatures", customSig, "--root-pubkey-file", pubFile, "--package-id", "@tanpopo/custom", "--version", "1.2.3", "--archive", tpkgFile); code != 0 {
 		t.Fatalf("standalone release-verify failed: code=%d stderr=%s", code, stderr)
 	}
+
+	// Duplicate/stale record in built-in release manifest must fail release-verify --builtin.
+	staleSigFile := filepath.Join(tmp, "stale-sigs.json")
+	rawSigs, err := os.ReadFile(sigFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var parsedManifest struct {
+		Signatures []map[string]any `json:"signatures"`
+	}
+	if err := json.Unmarshal(rawSigs, &parsedManifest); err != nil {
+		t.Fatal(err)
+	}
+	parsedManifest.Signatures = append(parsedManifest.Signatures, map[string]any{
+		"package_id":            "@tanpopo/stale",
+		"version":               "0.0.1",
+		"archive_sha256":        strings.Repeat("b", 64),
+		"root_signature_base64": parsedManifest.Signatures[0]["root_signature_base64"],
+	})
+	staleRaw, _ := json.Marshal(parsedManifest)
+	if err := os.WriteFile(staleSigFile, staleRaw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, badStale := runPluginCLI(t, "release-verify", "--signatures", staleSigFile, "--root-pubkey-file", pubFile, "--builtin"); badStale == 0 {
+		t.Fatalf("expected release-verify --builtin to reject stale/orphan signature record")
+	}
+
+	// Re-signing --builtin over an existing manifest with stale entries replaces authoritatively.
+	if _, stderr, code := runPluginCLI(t, "release-sign", "--private-key-file", privFile, "--builtin", "--out", staleSigFile); code != 0 {
+		t.Fatalf("re-sign --builtin failed: code=%d stderr=%s", code, stderr)
+	}
+	if _, stderr, code := runPluginCLI(t, "release-verify", "--signatures", staleSigFile, "--root-pubkey-file", pubFile, "--builtin"); code != 0 {
+		t.Fatalf("release-verify after authoritative --builtin re-sign failed: code=%d stderr=%s", code, stderr)
+	}
+
+	// Re-signing an updated --archive with same package_id@version replaces prior digest cleanly.
+	if err := os.WriteFile(tpkgFile, []byte("updated-tpkg-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, stderr, code := runPluginCLI(t, "release-sign", "--private-key-file", privFile, "--package-id", "@tanpopo/custom", "--version", "1.2.3", "--archive", tpkgFile, "--out", customSig); code != 0 {
+		t.Fatalf("re-sign --archive failed: code=%d stderr=%s", code, stderr)
+	}
+	if _, stderr, code := runPluginCLI(t, "release-verify", "--signatures", customSig, "--root-pubkey-file", pubFile, "--package-id", "@tanpopo/custom", "--version", "1.2.3", "--archive", tpkgFile); code != 0 {
+		t.Fatalf("release-verify after archive re-sign failed: code=%d stderr=%s", code, stderr)
+	}
 }
 
