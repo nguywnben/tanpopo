@@ -1,0 +1,97 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "exact RC6 SQLite 18128",
+  "status": "PASS (scoped): duplicate project/environment slugs rejected without additional success audit events",
+  "before": {
+    "projects": {
+      "status": 200,
+      "total": 2,
+      "matches": [
+        {
+          "id": "prj_01m895k8pee008b440xk2ef12p",
+          "slug": "default"
+        }
+      ]
+    },
+    "projectCreated": {
+      "status": 200,
+      "count": 2,
+      "has_more": false,
+      "seqs": [
+        134,
+        2
+      ]
+    },
+    "environments": {
+      "status": 200,
+      "total": 1,
+      "matches": [
+        {
+          "id": "env_01m895k8pee008b5ah423mhysr",
+          "slug": "dev"
+        }
+      ]
+    },
+    "environmentCreated": {
+      "status": 200,
+      "count": 3,
+      "has_more": false,
+      "seqs": [
+        148,
+        147,
+        3
+      ]
+    }
+  },
+  "duplicateProject": {
+    "http": 409,
+    "error_code": "resource_already_exists",
+    "ui": "New project\nCreate a workspace project with isolated environments, routes, and virtual keys.\nproject slug already exists in organization\nProject name\n∙ Required\nProject slug\n∙ Required\nCancel\nCreate project"
+  },
+  "duplicateEnvironment": {
+    "http": 409,
+    "error_code": "resource_already_exists",
+    "ui": "New environment\nAdd an isolated environment (such as prod or staging) inside default.\nenvironment slug already exists in project\nEnvironment name\n∙ Required\nEnvironment slug\n∙ Required\nCancel\nCreate environment"
+  },
+  "after": {
+    "projects": {
+      "status": 200,
+      "total": 2,
+      "matches": [
+        {
+          "id": "prj_01m895k8pee008b440xk2ef12p",
+          "slug": "default"
+        }
+      ]
+    },
+    "projectCreated": {
+      "status": 200,
+      "count": 2,
+      "has_more": false,
+      "seqs": [
+        134,
+        2
+      ]
+    },
+    "environments": {
+      "status": 200,
+      "total": 1,
+      "matches": [
+        {
+          "id": "env_01m895k8pee008b5ah423mhysr",
+          "slug": "dev"
+        }
+      ]
+    },
+    "environmentCreated": {
+      "status": 200,
+      "count": 3,
+      "has_more": false,
+      "seqs": [
+        148,
+        147,
+        3
+      ]
+    }
+  }
+}
