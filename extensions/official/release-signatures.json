@@ -1,3 +1,52 @@
 {
-  "signatures": []
+  "signatures": [
+    {
+      "package_id": "@tanpopo/anthropic",
+      "version": "0.1.0",
+      "archive_sha256": "9a46c091038867bb99b1e0a765fe6b9533b2b8eb00cf21294b6d2751e50fad98",
+      "root_signature_base64": "kBPoGXrqfKB/USHkHVmHAHrwXr81l4HnEvND2hFSzx1vLCuHH+ycUl2a/ziUF8abX+tAPwkAh2vECsOFqJQrCA=="
+    },
+    {
+      "package_id": "@tanpopo/aws-bedrock",
+      "version": "0.1.0",
+      "archive_sha256": "65b30f2044c80696349a8c38a836e4d845fccea5b6b3fdb6ba55d69917131ec2",
+      "root_signature_base64": "TvnBzif88qRAbOrvVfEKXJmvY187sK66bHvZC86b3QcSxH8OC4VG3HmE4sOYcT44ij0ZAWIMEKy/IcED3K5HDA=="
+    },
+    {
+      "package_id": "@tanpopo/azure-openai",
+      "version": "0.1.0",
+      "archive_sha256": "d2778fb387d9f20ff9c12a0ba25c158ebd22c1a646ad37520ee4858f40598eee",
+      "root_signature_base64": "pSe8+DIn/5AXcYE37GuygiyIyhzapSTjYNSbj4Hey6K3kBf6IOkYiAPm0tZYtQy0d/Xg6Yx3JGv77JE+i5GTAA=="
+    },
+    {
+      "package_id": "@tanpopo/cohere-rerank",
+      "version": "0.1.0",
+      "archive_sha256": "d475953c601b9945f4241ce5eca2bd7a99ebfe50eea822b50548f88fea43e512",
+      "root_signature_base64": "F81dpUYzRxkEnbPXC8r6iELoBmmMg+knBq5aiOVv3rTfSwPw+YYKa0a+M2s6r4rsN2fqkOtPD0ygCr9U5H0tDw=="
+    },
+    {
+      "package_id": "@tanpopo/gemini",
+      "version": "0.1.0",
+      "archive_sha256": "282a9c933a1639f397b68c751dda815fd2939fbf08d61b439f50899c433f53cb",
+      "root_signature_base64": "GthVXHutGg+LA249F2B4dyk2QU3ZPVJwK9TNPAeVdrCIDrmXGWHF1WhZV+uE/D4ESY0ApibQ+o9tYQ1O8AP0CQ=="
+    },
+    {
+      "package_id": "@tanpopo/ollama",
+      "version": "0.1.0",
+      "archive_sha256": "dcc299ce7ca32ac6ee76cfd8179d283c9b77cfe1842363bee7d00e39f0270d63",
+      "root_signature_base64": "sQDobI9uUJrhhty3F2EODPvczB/K8YGNkIkFIpgfoo+lf0esK/KO3YszVtF8SQjaUs6A4CGZFRsOX7kqDg0LBA=="
+    },
+    {
+      "package_id": "@tanpopo/openai",
+      "version": "0.1.0",
+      "archive_sha256": "7717a1de40d04f20f530e4c0319da3d35d054a608b6d8cb33ef1c82c850948da",
+      "root_signature_base64": "B6x7PPaFVOg5uaOzIRBmonEQO5DCIkUopoutTF1HFvg7PTbBxNL4TLB3JRRnW1WbnfvZCGZkfJUJg/Hkh/7iCg=="
+    },
+    {
+      "package_id": "@tanpopo/openai-compatible",
+      "version": "0.1.0",
+      "archive_sha256": "3122fc7840c9009a46b3988e08696f9c1907850dcd9f17ac76ed0020ba94ad7b",
+      "root_signature_base64": "Du1wiN46idvvknpvFa2vR0xCsdpQV0hMNFODqZBX5Q/NdykaZB8haDPBmjJSM+BxbNQXjqq2K50soPq+OhYNDg=="
+    }
+  ]
 }

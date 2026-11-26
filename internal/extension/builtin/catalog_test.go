@@ -121,3 +121,14 @@ func TestBuiltinCatalog_RejectsInvalidURIAndDigest(t *testing.T) {
 		t.Fatalf("expected ErrDigestMismatch for wrong sha256, got %v", err)
 	}
 }
+
+func TestDiagBuiltinDigests(t *testing.T) {
+	cat, err := NewCatalog()
+	if err != nil {
+		t.Fatalf("NewCatalog: %v", err)
+	}
+	for _, pkg := range cat.Packages() {
+		t.Logf("DIAG_PKG %s %s %s %d", pkg.PackageID, pkg.Version, pkg.ArchiveSHA256, len(cat.byURI[pkg.SourceURI].ArchiveBytes))
+	}
+}
+
