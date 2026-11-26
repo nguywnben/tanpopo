@@ -19,6 +19,7 @@ This is a scoped negative-input/error settlement PASS for one malformed image on
 
 See [`sanitized results`](../evidence/CP126-malformed-generate-image-results.json) and the visually inspected screenshots:
 
+- `../evidence/CP126-malformed-generate-budget-increased.png`
 - `../evidence/CP126-malformed-generate-key-form.png`
 - `../evidence/CP126-malformed-generate-traces.png`
 - `../evidence/CP126-malformed-generate-chargeback.png`

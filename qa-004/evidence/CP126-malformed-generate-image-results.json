@@ -61,6 +61,7 @@
     "temporary_budget_limit_not_left_in_place": true
   },
   "visual_inspection": [
+    "CP126-malformed-generate-budget-increased.png",
     "CP126-malformed-generate-key-form.png",
     "CP126-malformed-generate-traces.png",
     "CP126-malformed-generate-chargeback.png",
