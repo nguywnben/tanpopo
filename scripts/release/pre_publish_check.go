@@ -12,10 +12,14 @@ package main
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"flag"
 	"fmt"
@@ -29,21 +33,33 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nguywnben/tanpopo/internal/extension/builtin"
+	"github.com/nguywnben/tanpopo/internal/extension/installer"
+	"github.com/nguywnben/tanpopo/internal/security/trust"
 )
 
 const (
-	// ModePublish enforces full GATE-REL-01..07 verification including human PO sign-off.
+	// ModePublish enforces full GATE-REL-01..07 verification including human PO sign-off and release signing.
 	ModePublish = "publish"
 	// ModeDryRun verifies GATE-REL-01..06 and generates checksums while keeping GATE-REL-07 blocked.
 	ModeDryRun = "dry-run"
+	// ModeSignApproval creates an offline Ed25519-signed GATE-REL-07 PO approval record using a caller-supplied private key file.
+	ModeSignApproval = "sign-approval"
 
 	exitCodeApprovalRequired = 4
 	approvalDomainPrefix     = "tanpopo:gate-rel-07:v1\x00"
 	defaultTargetVersion     = "v1.0.0"
 	maxApprovalFileBytes     = 64 * 1024
+	maxSignaturesFileBytes   = 1024 * 1024
+	maxPubKeyFileBytes       = 16 * 1024
 	minGoMajor               = 1
 	minGoMinor               = 26
 	minGoPatch               = 11
+
+	releaseSigningVerified        = "SIGNED_VERIFIED"
+	releaseSigningUnsignedRC      = "UNSIGNED_INTERNAL_RC"
+	releaseSigningInvalidOrMissing = "INVALID_OR_MISSING"
 )
 
 var commitSHA40Pattern = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
@@ -89,31 +105,38 @@ type HumanApprovalRecord struct {
 
 // PrePublishConfig configures RunPrePublishCheck.
 type PrePublishConfig struct {
-	RootDir           string
-	Mode              string // "publish" or "dry-run"
-	TargetVersion     string
-	ExpectedCommitSHA string
-	ToolchainVersion  string // defaults to runtime.Version()
-	ApprovalJSON      []byte
-	TrustedPublicKey  ed25519.PublicKey
-	IsCI              bool
-	ManifestOutPath   string
+	RootDir                    string
+	Mode                       string // "publish" or "dry-run"
+	TargetVersion              string
+	ExpectedCommitSHA          string
+	ToolchainVersion           string // defaults to runtime.Version()
+	ApprovalJSON               []byte
+	TrustedPublicKey           ed25519.PublicKey
+	ReleaseSignaturesJSON      []byte
+	ReleaseRootPublicKeys      []ed25519.PublicKey
+	EmbeddedReleaseRootPubKeys []ed25519.PublicKey
+	IsCI                       bool
+	ManifestOutPath            string
 }
 
 // PrePublishReport captures the full GATE-REL-01..07 output and manifest.
 type PrePublishReport struct {
-	TargetVersion    string             `json:"target_version"`
-	Mode             string             `json:"mode"`
-	IsCI             bool               `json:"is_ci"`
-	ToolchainVersion string             `json:"toolchain_version"`
-	Gates            []GateResult       `json:"gates"`
-	GateREL07Status  string             `json:"gate_rel_07_status"`
-	ApprovalError    *ApprovalError     `json:"approval_error,omitempty"`
-	ApprovedBy       string             `json:"approved_by,omitempty"`
-	ApprovedAt       string             `json:"approved_at,omitempty"`
-	Decision         string             `json:"decision,omitempty"`
-	Conditions       []string           `json:"conditions,omitempty"`
-	Manifest         []ArtifactChecksum `json:"manifest"`
+	TargetVersion              string             `json:"target_version"`
+	Mode                       string             `json:"mode"`
+	IsCI                       bool               `json:"is_ci"`
+	ToolchainVersion           string             `json:"toolchain_version"`
+	ReleaseSigningStatus       string             `json:"release_signing_status"`
+	SignedOfficialPackages     int                `json:"signed_official_packages"`
+	TotalOfficialPackages      int                `json:"total_official_packages"`
+	ReleaseRootKeyFingerprints []string           `json:"release_root_key_fingerprints,omitempty"`
+	Gates                      []GateResult       `json:"gates"`
+	GateREL07Status            string             `json:"gate_rel_07_status"`
+	ApprovalError              *ApprovalError     `json:"approval_error,omitempty"`
+	ApprovedBy                 string             `json:"approved_by,omitempty"`
+	ApprovedAt                 string             `json:"approved_at,omitempty"`
+	Decision                   string             `json:"decision,omitempty"`
+	Conditions                 []string           `json:"conditions,omitempty"`
+	Manifest                   []ArtifactChecksum `json:"manifest"`
 }
 
 func main() {
@@ -202,16 +225,35 @@ func emitCLIResult(stdout, stderr io.Writer, outputFmt string, report *PrePublis
 	return 0
 }
 
+type stringListFlag []string
+
+func (s *stringListFlag) String() string { return strings.Join(*s, ",") }
+func (s *stringListFlag) Set(v string) error {
+	*s = append(*s, v)
+	return nil
+}
+
 func runPrePublishCLI(args []string, stdout, stderr io.Writer, getenv func(string) string) int {
 	fsFlags := flag.NewFlagSet("pre_publish_check", flag.ContinueOnError)
 	fsFlags.SetOutput(stderr)
 
 	rootFlag := fsFlags.String("root", ".", "Repository root directory")
-	modeFlag := fsFlags.String("mode", ModePublish, "Execution mode: publish (default, fail-closed GATE-REL-07) or dry-run")
+	modeFlag := fsFlags.String("mode", ModePublish, "Execution mode: publish (default, fail-closed GATE-REL-07), dry-run, or sign-approval")
 	versionFlag := fsFlags.String("target-version", defaultTargetVersion, "Target release version (e.g., v1.0.0)")
-	commitFlag := fsFlags.String("commit-sha", "", "40-hex target commit SHA (required in publish mode)")
+	commitFlag := fsFlags.String("commit-sha", "", "40-hex target commit SHA (required in publish and sign-approval modes)")
 	approvalFile := fsFlags.String("approval-file", "", "Path to Ed25519-signed GATE-REL-07 PO approval JSON")
 	pubKeyHexFlag := fsFlags.String("public-key-hex", "", "Hex-encoded Ed25519 public key for verifying PO sign-off")
+	releaseSigsFile := fsFlags.String("release-signatures", "", "Optional path to release-signatures.json (defaults to extensions/official/release-signatures.json under --root)")
+	releaseRootHexFlag := fsFlags.String("release-root-pubkey-hex", "", "Comma-separated 64-hex Ed25519 release root public key(s) for verifying official packages")
+	releaseRootFileFlag := fsFlags.String("release-root-pubkey-file", "", "Path to Ed25519 release root public key file (PKIX PEM, 64-hex, or base64)")
+	privKeyFile := fsFlags.String("private-key-file", "", "Offline Ed25519 private key file (PKCS8 PEM, hex, or base64) for --mode sign-approval only")
+	approvedByFlag := fsFlags.String("approved-by", "", "Product Owner identifier for --mode sign-approval")
+	decisionFlag := fsFlags.String("decision", "GO_WITH_CONDITIONS", "Approval decision (GO or GO_WITH_CONDITIONS) for --mode sign-approval")
+	approvedAtFlag := fsFlags.String("approved-at", "", "Optional RFC3339 approval timestamp for --mode sign-approval (defaults to current UTC time)")
+	nonceFlag := fsFlags.String("nonce", "", "Unique approval nonce for --mode sign-approval (generated cryptographically if omitted)")
+	var conditionFlags stringListFlag
+	fsFlags.Var(&conditionFlags, "condition", "Release condition entry for --mode sign-approval GO_WITH_CONDITIONS (repeatable)")
+	signOutFlag := fsFlags.String("out", "gate-rel-07-approval.json", "Output JSON path for --mode sign-approval")
 	manifestOut := fsFlags.String("write-manifest", "", "Optional output path for SHA256SUMS manifest")
 	outputFmt := fsFlags.String("output", "text", "Output format: text or json")
 
@@ -249,9 +291,31 @@ func runPrePublishCLI(args []string, stdout, stderr io.Writer, getenv func(strin
 		return emitCLIResult(stdout, stderr, *outputFmt, rep, appErr)
 	}
 
+	if mode == ModeSignApproval {
+		if isCI {
+			return makeCLIApprovalError("automated CI environments are permanently blocked from signing GATE-REL-07 approval records")
+		}
+		if err := runSignApprovalCLI(
+			targetVer,
+			strings.TrimSpace(*commitFlag),
+			strings.TrimSpace(*decisionFlag),
+			strings.TrimSpace(*approvedByFlag),
+			strings.TrimSpace(*approvedAtFlag),
+			conditionFlags,
+			strings.TrimSpace(*nonceFlag),
+			strings.TrimSpace(*privKeyFile),
+			strings.TrimSpace(*signOutFlag),
+			stdout,
+		); err != nil {
+			fmt.Fprintf(stderr, "FAIL: pre_publish_check sign-approval: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+
 	var approvalJSON []byte
 	approvalPath := strings.TrimSpace(*approvalFile)
-	if approvalPath == "" {
+	if approvalPath == "" && getenv != nil {
 		approvalPath = strings.TrimSpace(getenv("TANPOPO_PO_RELEASE_APPROVAL_FILE"))
 	}
 	if approvalPath != "" {
@@ -260,16 +324,18 @@ func runPrePublishCLI(args []string, stdout, stderr io.Writer, getenv func(strin
 			return makeCLIApprovalError(fmt.Sprintf("read approval file %s: %v", approvalPath, readErr))
 		}
 		approvalJSON = raw
-	} else if inline := strings.TrimSpace(getenv("TANPOPO_PO_RELEASE_APPROVAL_JSON")); inline != "" {
-		if len(inline) > maxApprovalFileBytes {
-			return makeCLIApprovalError("inline approval JSON exceeds maximum allowed size")
+	} else if getenv != nil {
+		if inline := strings.TrimSpace(getenv("TANPOPO_PO_RELEASE_APPROVAL_JSON")); inline != "" {
+			if len(inline) > maxApprovalFileBytes {
+				return makeCLIApprovalError("inline approval JSON exceeds maximum allowed size")
+			}
+			approvalJSON = []byte(inline)
 		}
-		approvalJSON = []byte(inline)
 	}
 
 	var pubKey ed25519.PublicKey
 	pubHex := strings.TrimSpace(*pubKeyHexFlag)
-	if pubHex == "" {
+	if pubHex == "" && getenv != nil {
 		pubHex = strings.TrimSpace(getenv("TANPOPO_PO_APPROVAL_PUBKEY_HEX"))
 	}
 	if pubHex != "" {
@@ -280,16 +346,70 @@ func runPrePublishCLI(args []string, stdout, stderr io.Writer, getenv func(strin
 		pubKey = ed25519.PublicKey(rawPub)
 	}
 
+	var releaseSigsJSON []byte
+	sigsPath := strings.TrimSpace(*releaseSigsFile)
+	if sigsPath == "" && getenv != nil {
+		sigsPath = strings.TrimSpace(getenv("TANPOPO_RELEASE_SIGNATURES_PATH"))
+	}
+	if sigsPath != "" {
+		raw, readErr := readBoundedRegularFile(sigsPath, maxSignaturesFileBytes)
+		if readErr != nil {
+			fmt.Fprintf(stderr, "FAIL: pre_publish_check: read release signatures %s: %v\n", sigsPath, readErr)
+			return 1
+		}
+		releaseSigsJSON = raw
+	}
+
+	var releaseRootKeys []ed25519.PublicKey
+	rootHex := strings.TrimSpace(*releaseRootHexFlag)
+	if rootHex == "" && getenv != nil {
+		rootHex = strings.TrimSpace(getenv("TANPOPO_RELEASE_ROOT_PUBKEYS"))
+	}
+	if rootHex != "" {
+		parsed, pErr := parseEd25519PublicKeysHex(rootHex)
+		if pErr != nil {
+			fmt.Fprintf(stderr, "FAIL: pre_publish_check: invalid release root public key hex: %v\n", pErr)
+			return 1
+		}
+		releaseRootKeys = append(releaseRootKeys, parsed...)
+	}
+
+	rootFile := strings.TrimSpace(*releaseRootFileFlag)
+	if rootFile == "" && getenv != nil {
+		rootFile = strings.TrimSpace(getenv("TANPOPO_TRUST_ROOT_PUB"))
+	}
+	if rootFile != "" {
+		parsed, pErr := loadEd25519PublicKeyFile(rootFile)
+		if pErr != nil {
+			fmt.Fprintf(stderr, "FAIL: pre_publish_check: load release root public key %s: %v\n", rootFile, pErr)
+			return 1
+		}
+		releaseRootKeys = append(releaseRootKeys, parsed)
+	}
+
+	var embeddedRootKeys []ed25519.PublicKey
+	if strings.TrimSpace(builtin.ReleaseRootPublicKeysHex) != "" {
+		parsed, pErr := parseEd25519PublicKeysHex(builtin.ReleaseRootPublicKeysHex)
+		if pErr != nil {
+			fmt.Fprintf(stderr, "FAIL: pre_publish_check: invalid embedded ReleaseRootPublicKeysHex: %v\n", pErr)
+			return 1
+		}
+		embeddedRootKeys = append(embeddedRootKeys, parsed...)
+	}
+
 	report, runErr := RunPrePublishCheck(PrePublishConfig{
-		RootDir:           absRoot,
-		Mode:              mode,
-		TargetVersion:     targetVer,
-		ExpectedCommitSHA: strings.TrimSpace(*commitFlag),
-		ToolchainVersion:  runtime.Version(),
-		ApprovalJSON:      approvalJSON,
-		TrustedPublicKey:  pubKey,
-		IsCI:              isCI,
-		ManifestOutPath:   strings.TrimSpace(*manifestOut),
+		RootDir:                    absRoot,
+		Mode:                       mode,
+		TargetVersion:              targetVer,
+		ExpectedCommitSHA:          strings.TrimSpace(*commitFlag),
+		ToolchainVersion:           runtime.Version(),
+		ApprovalJSON:               approvalJSON,
+		TrustedPublicKey:           pubKey,
+		ReleaseSignaturesJSON:      releaseSigsJSON,
+		ReleaseRootPublicKeys:      releaseRootKeys,
+		EmbeddedReleaseRootPubKeys: embeddedRootKeys,
+		IsCI:                       isCI,
+		ManifestOutPath:            strings.TrimSpace(*manifestOut),
 	})
 	return emitCLIResult(stdout, stderr, *outputFmt, report, runErr)
 }
@@ -301,6 +421,9 @@ func printTextReport(w io.Writer, r *PrePublishReport) {
 		for _, d := range g.Details {
 			fmt.Fprintf(w, "      - %s\n", d)
 		}
+	}
+	if r.ReleaseSigningStatus != "" {
+		fmt.Fprintf(w, "  Release Signing Status: %s (%d/%d official packages)\n", r.ReleaseSigningStatus, r.SignedOfficialPackages, r.TotalOfficialPackages)
 	}
 	fmt.Fprintf(w, "  GATE-REL-07 Status: %s\n", r.GateREL07Status)
 	if r.ApprovalError != nil {
@@ -414,6 +537,31 @@ func RunPrePublishCheck(cfg PrePublishConfig) (*PrePublishReport, error) {
 		return report, gateErr
 	}
 
+	relSummary, relErr := evaluateReleaseSigning(cfg, rootFS)
+	report.ReleaseSigningStatus = relSummary.status
+	report.SignedOfficialPackages = relSummary.signedCount
+	report.TotalOfficialPackages = relSummary.totalCount
+	report.ReleaseRootKeyFingerprints = relSummary.rootFingerprints
+
+	if cfg.Mode == ModeDryRun {
+		if relErr != nil {
+			report.GateREL07Status = "BLOCKED_RELEASE_SIGNING_INVALID"
+			report.Gates = append(report.Gates, GateResult{
+				GateID:  "GATE-REL-04-SIGNING",
+				Name:    "Official Release Signing & Trust Root Parity",
+				Status:  "FAIL",
+				Details: []string{relErr.Error()},
+			})
+			return report, relErr
+		}
+		report.Gates = append(report.Gates, GateResult{
+			GateID:  "GATE-REL-04-SIGNING",
+			Name:    "Official Release Signing & Trust Root Parity",
+			Status:  "PASS",
+			Details: relSummary.details,
+		})
+	}
+
 	approvalRec, appErr := VerifyHumanApproval(cfg)
 	if cfg.Mode == ModeDryRun {
 		// In dry-run mode, GATE-REL-07 must NEVER report Status="PASS".
@@ -463,6 +611,23 @@ func RunPrePublishCheck(cfg PrePublishConfig) (*PrePublishReport, error) {
 		report.GateREL07Status = "BLOCKED_INSECURE_TOOLCHAIN"
 		return report, tcErr
 	}
+
+	if relErr != nil {
+		report.GateREL07Status = "BLOCKED_RELEASE_SIGNING_INVALID"
+		report.Gates = append(report.Gates, GateResult{
+			GateID:  "GATE-REL-04-SIGNING",
+			Name:    "Official Release Signing & Trust Root Parity",
+			Status:  "FAIL",
+			Details: []string{relErr.Error()},
+		})
+		return report, relErr
+	}
+	report.Gates = append(report.Gates, GateResult{
+		GateID:  "GATE-REL-04-SIGNING",
+		Name:    "Official Release Signing & Trust Root Parity",
+		Status:  "PASS",
+		Details: relSummary.details,
+	})
 
 	report.GateREL07Status = "APPROVED_BY_PRODUCT_OWNER"
 	report.ApprovedBy = approvalRec.ApprovedBy
@@ -532,7 +697,8 @@ func VerifyHumanApproval(cfg PrePublishConfig) (*HumanApprovalRecord, *ApprovalE
 	if cfg.Mode != ModeDryRun && !commitSHA40Pattern.MatchString(strings.TrimSpace(cfg.ExpectedCommitSHA)) {
 		return nil, deny("publish mode requires a valid 40-hex --commit-sha matching the approved commit")
 	}
-	if len(bytes.TrimSpace(cfg.ApprovalJSON)) == 0 {
+	cleanedApproval := bytes.TrimPrefix(cfg.ApprovalJSON, []byte{0xEF, 0xBB, 0xBF})
+	if len(bytes.TrimSpace(cleanedApproval)) == 0 {
 		return nil, deny("missing Product Owner signed GATE-REL-07 approval record")
 	}
 	if len(cfg.TrustedPublicKey) != ed25519.PublicKeySize {
@@ -540,7 +706,7 @@ func VerifyHumanApproval(cfg PrePublishConfig) (*HumanApprovalRecord, *ApprovalE
 	}
 
 	var rec HumanApprovalRecord
-	dec := json.NewDecoder(bytes.NewReader(cfg.ApprovalJSON))
+	dec := json.NewDecoder(bytes.NewReader(cleanedApproval))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&rec); err != nil {
 		return nil, deny(fmt.Sprintf("invalid approval JSON: %v", err))
@@ -760,6 +926,14 @@ func evaluateGates01To06(rootFS *os.Root, toolchainVer string) ([]GateResult, er
 				if !strings.Contains(string(rawRel), "scripts/release/verify-artifacts.sh") {
 					return nil, fmt.Errorf(".github/workflows/release-dry-run.yml must invoke scripts/release/verify-artifacts.sh")
 				}
+				rawGoreleaser, err := readRootFile(rootFS, ".goreleaser.yaml")
+				if err != nil {
+					return nil, err
+				}
+				if !strings.Contains(string(rawGoreleaser), "builtin.ReleaseRootPublicKeysHex") ||
+					!strings.Contains(string(rawGoreleaser), "TANPOPO_RELEASE_ROOT_PUBKEYS") {
+					return nil, fmt.Errorf(".goreleaser.yaml must wire TANPOPO_RELEASE_ROOT_PUBKEYS into builtin.ReleaseRootPublicKeysHex")
+				}
 				rawVerify, err := readRootFile(rootFS, "scripts/release/verify-artifacts.sh")
 				if err != nil {
 					return nil, err
@@ -767,7 +941,7 @@ func evaluateGates01To06(rootFS *os.Root, toolchainVer string) ([]GateResult, er
 				if !strings.Contains(string(rawVerify), "--skip=publish") {
 					return nil, fmt.Errorf("scripts/release/verify-artifacts.sh must preserve --skip=publish")
 				}
-				return []string{"verified Apache-2.0 LICENSE + web/console/package.json, SBOM checker & --skip=publish dry run"}, nil
+				return []string{"verified Apache-2.0 LICENSE + web/console/package.json, SBOM checker, GoReleaser root-key wiring & --skip=publish dry run"}, nil
 			},
 		},
 		{
@@ -923,4 +1097,331 @@ func buildArtifactManifest(rootFS *os.Root) ([]ArtifactChecksum, error) {
 		})
 	}
 	return out, nil
+}
+
+type releaseSigningSummary struct {
+	status           string
+	signedCount      int
+	totalCount       int
+	rootFingerprints []string
+	details          []string
+}
+
+type releaseSignaturesManifestDoc struct {
+	Signatures []builtin.ReleaseSignatureRecord `json:"signatures"`
+}
+
+func evaluateReleaseSigning(cfg PrePublishConfig, rootFS *os.Root) (releaseSigningSummary, error) {
+	cat, err := builtin.NewCatalog()
+	if err != nil {
+		return releaseSigningSummary{status: releaseSigningInvalidOrMissing}, fmt.Errorf("release signing: load built-in official catalog: %w", err)
+	}
+	pkgs := cat.Packages()
+	if len(pkgs) == 0 {
+		return releaseSigningSummary{status: releaseSigningInvalidOrMissing}, errors.New("release signing: embedded official catalog is empty")
+	}
+	summary := releaseSigningSummary{
+		status:     releaseSigningInvalidOrMissing,
+		totalCount: len(pkgs),
+	}
+
+	rawSigs := cfg.ReleaseSignaturesJSON
+	if rawSigs == nil {
+		rawSigs, err = readRootFile(rootFS, "extensions/official/release-signatures.json")
+		if err != nil {
+			return summary, fmt.Errorf("release signing: read extensions/official/release-signatures.json: %w", err)
+		}
+	}
+	cleanedSigs := bytes.TrimPrefix(rawSigs, []byte{0xEF, 0xBB, 0xBF})
+	var doc releaseSignaturesManifestDoc
+	dec := json.NewDecoder(bytes.NewReader(cleanedSigs))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&doc); err != nil {
+		return summary, fmt.Errorf("release signing: decode release-signatures.json: %w", err)
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return summary, errors.New("release signing: unexpected trailing content in release-signatures.json")
+	}
+
+	embeddedRoots := make(map[string]ed25519.PublicKey, len(cfg.EmbeddedReleaseRootPubKeys))
+	for _, pub := range cfg.EmbeddedReleaseRootPubKeys {
+		if len(pub) != ed25519.PublicKeySize {
+			return summary, errors.New("release signing: invalid embedded release root Ed25519 public key length")
+		}
+		embeddedRoots[trust.PublicKeyFingerprint(pub)] = pub
+	}
+	configuredRoots := make(map[string]ed25519.PublicKey, len(cfg.ReleaseRootPublicKeys))
+	for _, pub := range cfg.ReleaseRootPublicKeys {
+		if len(pub) != ed25519.PublicKeySize {
+			return summary, errors.New("release signing: invalid release root Ed25519 public key length")
+		}
+		configuredRoots[trust.PublicKeyFingerprint(pub)] = pub
+	}
+
+	if len(embeddedRoots) > 0 && len(configuredRoots) > 0 {
+		if len(embeddedRoots) != len(configuredRoots) {
+			return summary, fmt.Errorf("release signing: inconsistent release root key sets (embedded=%d configured=%d)", len(embeddedRoots), len(configuredRoots))
+		}
+		for fp := range embeddedRoots {
+			if _, ok := configuredRoots[fp]; !ok {
+				return summary, fmt.Errorf("release signing: embedded release root key %s missing from configured release root keys", fp)
+			}
+		}
+	}
+
+	trustedRoots := make(map[string]ed25519.PublicKey, len(embeddedRoots)+len(configuredRoots))
+	for fp, pub := range embeddedRoots {
+		trustedRoots[fp] = pub
+	}
+	for fp, pub := range configuredRoots {
+		trustedRoots[fp] = pub
+	}
+
+	expectedByPkgVer := make(map[string]builtin.Package, len(pkgs))
+	for _, pkg := range pkgs {
+		expectedByPkgVer[strings.ToLower(pkg.PackageID)+"@"+pkg.Version] = pkg
+	}
+
+	sigsByKey := make(map[string][]byte, len(doc.Signatures))
+	seenPkgVer := make(map[string]struct{}, len(doc.Signatures))
+	for _, rec := range doc.Signatures {
+		pkgID := strings.ToLower(strings.TrimSpace(rec.PackageID))
+		ver := strings.TrimSpace(rec.Version)
+		sha := strings.ToLower(strings.TrimSpace(rec.ArchiveSHA256))
+		if pkgID == "" || ver == "" || len(sha) != 64 {
+			return summary, fmt.Errorf("release signing: incomplete record metadata for %q@%q", rec.PackageID, rec.Version)
+		}
+		if _, hexErr := hex.DecodeString(sha); hexErr != nil {
+			return summary, fmt.Errorf("release signing: invalid archive_sha256 for %s@%s", rec.PackageID, rec.Version)
+		}
+		pkgVer := pkgID + "@" + ver
+		if _, dup := seenPkgVer[pkgVer]; dup {
+			return summary, fmt.Errorf("release signing: duplicate signature record for %s@%s", rec.PackageID, rec.Version)
+		}
+		seenPkgVer[pkgVer] = struct{}{}
+
+		pkg, known := expectedByPkgVer[pkgVer]
+		if !known {
+			return summary, fmt.Errorf("release signing: inconsistent orphan signature record for unknown package %s@%s", rec.PackageID, rec.Version)
+		}
+		if sha != strings.ToLower(pkg.ArchiveSHA256) {
+			return summary, fmt.Errorf("release signing: inconsistent archive digest for %s@%s (manifest=%s expected=%s)", rec.PackageID, rec.Version, sha, pkg.ArchiveSHA256)
+		}
+
+		sigRaw, derr := base64.StdEncoding.DecodeString(strings.TrimSpace(rec.RootSignature))
+		if derr != nil || len(sigRaw) != ed25519.SignatureSize {
+			return summary, fmt.Errorf("release signing: malformed Ed25519 signature for %s@%s", rec.PackageID, rec.Version)
+		}
+		sigsByKey[pkgVer+"#"+sha] = sigRaw
+	}
+
+	if cfg.Mode == ModeDryRun && len(doc.Signatures) == 0 && len(trustedRoots) == 0 {
+		summary.status = releaseSigningUnsignedRC
+		summary.details = []string{
+			fmt.Sprintf("Unsigned internal RC build (0/%d signed official packages, 0 trusted release root keys); official extensions surface unverified_external with signature_verified=false", len(pkgs)),
+			"Publish mode requires offline signatures covering all official packages and matching trusted release root public keys.",
+		}
+		return summary, nil
+	}
+
+	if len(trustedRoots) == 0 {
+		return summary, errors.New("release signing: missing trusted Ed25519 release root public key (--release-root-pubkey-hex, --release-root-pubkey-file, TANPOPO_RELEASE_ROOT_PUBKEYS, or embedded ReleaseRootPublicKeysHex)")
+	}
+	if len(doc.Signatures) == 0 {
+		return summary, fmt.Errorf("release signing: missing official package signatures (0/%d signed)", len(pkgs))
+	}
+	if len(doc.Signatures) != len(pkgs) {
+		return summary, fmt.Errorf("release signing: incomplete official package signature manifest (%d/%d signed)", len(doc.Signatures), len(pkgs))
+	}
+
+	matchedRoots := make(map[string]struct{}, len(trustedRoots))
+	for _, pkg := range pkgs {
+		sigKey := strings.ToLower(pkg.PackageID) + "@" + pkg.Version + "#" + strings.ToLower(pkg.ArchiveSHA256)
+		sigRaw, ok := sigsByKey[sigKey]
+		if !ok {
+			return summary, fmt.Errorf("release signing: missing official package signature for %s@%s", pkg.PackageID, pkg.Version)
+		}
+		payload := installer.SignatureSigningPayload(pkg.PackageID, pkg.Version, pkg.ArchiveSHA256)
+		verified := false
+		for fp, pub := range trustedRoots {
+			if ed25519.Verify(pub, payload, sigRaw) {
+				verified = true
+				matchedRoots[fp] = struct{}{}
+			}
+		}
+		if !verified {
+			return summary, fmt.Errorf("release signing: Ed25519 signature verification failed for %s@%s#%s", pkg.PackageID, pkg.Version, pkg.ArchiveSHA256)
+		}
+		summary.signedCount++
+	}
+
+	fps := make([]string, 0, len(matchedRoots))
+	for fp := range matchedRoots {
+		fps = append(fps, fp)
+	}
+	sort.Strings(fps)
+	summary.status = releaseSigningVerified
+	summary.rootFingerprints = fps
+	summary.details = []string{
+		fmt.Sprintf("verified %d/%d official extension signatures against trusted Ed25519 release root(s): %s", summary.signedCount, summary.totalCount, strings.Join(fps, ", ")),
+	}
+	return summary, nil
+}
+
+func parseEd25519PublicKeysHex(raw string) ([]ed25519.PublicKey, error) {
+	var out []ed25519.PublicKey
+	for _, tok := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';' || r == ' ' || r == '\t' || r == '\n' || r == '\r'
+	}) {
+		trimmed := strings.TrimSpace(tok)
+		if trimmed == "" {
+			continue
+		}
+		dec, err := hex.DecodeString(trimmed)
+		if err != nil || len(dec) != ed25519.PublicKeySize {
+			return nil, fmt.Errorf("expected 64-hex Ed25519 public key")
+		}
+		out = append(out, ed25519.PublicKey(dec))
+	}
+	if len(out) == 0 {
+		return nil, errors.New("empty public key list")
+	}
+	return out, nil
+}
+
+func loadEd25519PublicKeyFile(path string) (ed25519.PublicKey, error) {
+	raw, err := readBoundedRegularFile(path, maxPubKeyFileBytes)
+	if err != nil {
+		return nil, err
+	}
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+	if block, _ := pem.Decode(raw); block != nil {
+		parsed, perr := x509.ParsePKIXPublicKey(block.Bytes)
+		if perr != nil {
+			return nil, fmt.Errorf("parse PKIX public key %q: %w", path, perr)
+		}
+		edPub, ok := parsed.(ed25519.PublicKey)
+		if !ok {
+			return nil, fmt.Errorf("public key %q is not Ed25519", path)
+		}
+		return edPub, nil
+	}
+	trimmed := strings.TrimSpace(string(raw))
+	if dec, derr := hex.DecodeString(trimmed); derr == nil && len(dec) == ed25519.PublicKeySize {
+		return ed25519.PublicKey(dec), nil
+	}
+	if dec, derr := base64.StdEncoding.DecodeString(trimmed); derr == nil && len(dec) == ed25519.PublicKeySize {
+		return ed25519.PublicKey(dec), nil
+	}
+	return nil, fmt.Errorf("unsupported Ed25519 public key format in %q", path)
+}
+
+func loadEd25519PrivateKeyFile(path string) (ed25519.PrivateKey, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, errors.New("--private-key-file is required (keys are never generated or embedded)")
+	}
+	raw, err := readBoundedRegularFile(path, maxPubKeyFileBytes)
+	if err != nil {
+		return nil, err
+	}
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+	if block, _ := pem.Decode(raw); block != nil {
+		parsed, perr := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if perr != nil {
+			return nil, fmt.Errorf("parse PKCS8 private key %q: %w", path, perr)
+		}
+		edPriv, ok := parsed.(ed25519.PrivateKey)
+		if !ok {
+			return nil, fmt.Errorf("private key %q is not Ed25519", path)
+		}
+		return edPriv, nil
+	}
+	trimmed := strings.TrimSpace(string(raw))
+	if dec, derr := hex.DecodeString(trimmed); derr == nil {
+		switch len(dec) {
+		case ed25519.PrivateKeySize:
+			return ed25519.PrivateKey(dec), nil
+		case ed25519.SeedSize:
+			return ed25519.NewKeyFromSeed(dec), nil
+		}
+	}
+	if dec, derr := base64.StdEncoding.DecodeString(trimmed); derr == nil {
+		switch len(dec) {
+		case ed25519.PrivateKeySize:
+			return ed25519.PrivateKey(dec), nil
+		case ed25519.SeedSize:
+			return ed25519.NewKeyFromSeed(dec), nil
+		}
+	}
+	return nil, fmt.Errorf("unsupported Ed25519 private key format in %q", path)
+}
+
+func runSignApprovalCLI(targetVer, commitSHA, decision, approvedBy, approvedAt string, conditions []string, nonce, privKeyPath, outPath string, stdout io.Writer) error {
+	if strings.TrimSpace(targetVer) == "" || containsControlBytes(targetVer) {
+		return fmt.Errorf("--target-version must be non-empty and free of control bytes")
+	}
+	if !commitSHA40Pattern.MatchString(commitSHA) {
+		return fmt.Errorf("--commit-sha must be a 40-character hexadecimal SHA, got %q", commitSHA)
+	}
+	if strings.TrimSpace(approvedBy) == "" || containsControlBytes(approvedBy) {
+		return errors.New("--approved-by must be non-empty and free of control bytes")
+	}
+	if decision != "GO" && decision != "GO_WITH_CONDITIONS" {
+		return fmt.Errorf("--decision must be GO or GO_WITH_CONDITIONS, got %q", decision)
+	}
+	if decision == "GO_WITH_CONDITIONS" && len(conditions) == 0 {
+		return errors.New("GO_WITH_CONDITIONS requires at least one --condition entry")
+	}
+	for _, cond := range conditions {
+		if strings.TrimSpace(cond) == "" || containsControlBytes(cond) {
+			return errors.New("--condition entries must be non-empty and free of control bytes")
+		}
+	}
+	if strings.TrimSpace(approvedAt) == "" {
+		approvedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	if _, err := time.Parse(time.RFC3339, approvedAt); err != nil {
+		return fmt.Errorf("invalid --approved-at RFC3339 timestamp: %w", err)
+	}
+	if strings.TrimSpace(nonce) == "" {
+		var rnd [16]byte
+		if _, err := rand.Read(rnd[:]); err != nil {
+			return fmt.Errorf("generate nonce: %w", err)
+		}
+		nonce = "po-" + hex.EncodeToString(rnd[:])
+	} else if containsControlBytes(nonce) {
+		return errors.New("--nonce cannot contain control bytes")
+	}
+	priv, err := loadEd25519PrivateKeyFile(privKeyPath)
+	if err != nil {
+		return err
+	}
+	rec := HumanApprovalRecord{
+		Version:    targetVer,
+		CommitSHA:  strings.ToLower(commitSHA),
+		Decision:   decision,
+		ApprovedBy: strings.TrimSpace(approvedBy),
+		ApprovedAt: approvedAt,
+		TicketRef:  "GATE-REL-07",
+		Conditions: append([]string(nil), conditions...),
+		Nonce:      strings.TrimSpace(nonce),
+	}
+	sig := ed25519.Sign(priv, CanonicalApprovalPayload(rec))
+	rec.SignatureHex = hex.EncodeToString(sig)
+
+	raw, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return err
+	}
+	raw = append(raw, '\n')
+	if outPath == "" {
+		outPath = "gate-rel-07-approval.json"
+	}
+	if err := writeManifestFileSafely(outPath, raw); err != nil {
+		return err
+	}
+	pub := priv.Public().(ed25519.PublicKey)
+	fmt.Fprintf(stdout, "Wrote GATE-REL-07 signed approval: %s\nPublic Key Hex: %s\nFingerprint: %s\n", outPath, hex.EncodeToString(pub), trust.PublicKeyFingerprint(pub))
+	return nil
 }

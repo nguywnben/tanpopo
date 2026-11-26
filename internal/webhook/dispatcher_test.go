@@ -53,9 +53,11 @@ func openWebhookDBWithJournal(t *testing.T, journal string, busyTimeoutMs int) *
 			t.Errorf("webhook test left %d SQLite connection(s) in use at cleanup", stats.InUse)
 		}
 		if journal == "WAL" {
+			db.SetMaxIdleConns(0)
 			_, _ = db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
 			_, _ = db.Exec(`PRAGMA journal_mode=DELETE`)
 		}
+		db.SetMaxIdleConns(0)
 		if err := db.Close(); err != nil {
 			t.Errorf("close webhook test database: %v", err)
 		}
@@ -746,4 +748,68 @@ func waitDelivery(t *testing.T, db *sql.DB, status string) {
 	var got string
 	err := db.QueryRow(`SELECT status FROM webhook_deliveries LIMIT 1`).Scan(&got)
 	t.Fatalf("delivery status did not reach %s: got=%s err=%v", status, got, err)
+}
+
+func TestWorkerShutdownRapidOutboxCancelClosesDBCleanly(t *testing.T) {
+	for i := 0; i < 20; i++ {
+		db := openWebhookDB(t)
+		d, err := New(Config{
+			DB:       db,
+			Unseal:   func(context.Context, string, string) ([]byte, func(), error) { return []byte("k"), func() {}, nil },
+			Resolver: resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) { return nil, nil }),
+			Limits:   Limits{Workers: 2, PollInterval: time.Millisecond, RequestTimeout: time.Second, BaseBackoff: time.Millisecond, MaxBackoff: time.Millisecond},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() { done <- d.Run(ctx) }()
+		time.Sleep(3 * time.Millisecond)
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestPinnedDispatcherClaimSubscriptionUnavailableDoesNotDeadlock(t *testing.T) {
+	db := openWebhookDB(t)
+	insertSubscription(t, db, "https://hooks.example.test/path", false, `[]`)
+	d := testDispatcher(t, db, resolverFunc(func(context.Context, string, string) ([]netip.Addr, error) {
+		return nil, nil
+	}), 3)
+	d.pinned = true
+
+	if _, err := d.Enqueue(t.Context(), Event{ID: "pinned-unavail", OrgID: "org_test", Type: "budget.threshold", Payload: json.RawMessage(`{"ok":true}`)}); err != nil {
+		t.Fatal(err)
+	}
+	// Introduce project_id mismatch so UPDATE ... RETURNING matches s.enabled=1
+	// while the credential join SELECT returns ErrNoRows ("subscription unavailable").
+	if _, err := db.Exec(`UPDATE secret_credentials SET owner_project_id = 'prj_other' WHERE id = 'sec_test'`); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := d.claim(t.Context())
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("claim returned unexpected error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("pinned claim deadlocked when recording subscription unavailable")
+	}
+
+	var attempts int
+	var status, lastErr string
+	if err := db.QueryRow(`SELECT attempt_count, status, last_error FROM webhook_deliveries WHERE event_id='pinned-unavail'`).Scan(&attempts, &status, &lastErr); err != nil {
+		t.Fatal(err)
+	}
+	if attempts != 1 || status != statusRetry || lastErr != "subscription unavailable" {
+		t.Fatalf("unexpected delivery state after failInTx: attempts=%d status=%s last_error=%q", attempts, status, lastErr)
+	}
 }

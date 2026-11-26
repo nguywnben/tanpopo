@@ -4,6 +4,7 @@
 package plugin
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"crypto/x509"
@@ -86,15 +87,19 @@ func newReleaseSignCmd(opts Options) *cobra.Command {
 			if outFile == "" {
 				outFile = "release-signatures.json"
 			}
-			existing, err := readReleaseSignatureManifest(outFile)
-			if err != nil {
-				return err
-			}
-
-			byKey := make(map[string]builtin.ReleaseSignatureRecord, len(existing.Signatures)+len(targets))
-			for _, rec := range existing.Signatures {
-				k := releaseSigKey(rec.PackageID, rec.Version, rec.ArchiveSHA256)
-				byKey[k] = rec
+			var byKey map[string]builtin.ReleaseSignatureRecord
+			if signBuiltin {
+				byKey = make(map[string]builtin.ReleaseSignatureRecord, len(targets))
+			} else {
+				existing, err := readReleaseSignatureManifest(outFile)
+				if err != nil {
+					return err
+				}
+				byKey = make(map[string]builtin.ReleaseSignatureRecord, len(existing.Signatures)+len(targets))
+				for _, rec := range existing.Signatures {
+					k := strings.ToLower(strings.TrimSpace(rec.PackageID)) + "@" + strings.TrimSpace(rec.Version)
+					byKey[k] = rec
+				}
 			}
 			for _, target := range targets {
 				payload := installer.SignatureSigningPayload(target.packageID, target.version, target.sha256)
@@ -105,7 +110,8 @@ func newReleaseSignCmd(opts Options) *cobra.Command {
 					ArchiveSHA256: target.sha256,
 					RootSignature: base64.StdEncoding.EncodeToString(sig),
 				}
-				byKey[releaseSigKey(rec.PackageID, rec.Version, rec.ArchiveSHA256)] = rec
+				k := strings.ToLower(strings.TrimSpace(rec.PackageID)) + "@" + strings.TrimSpace(rec.Version)
+				byKey[k] = rec
 			}
 
 			merged := make([]builtin.ReleaseSignatureRecord, 0, len(byKey))
@@ -196,7 +202,31 @@ func newReleaseVerifyCmd(opts Options) *cobra.Command {
 			}
 
 			sigIndex := make(map[string][]byte, len(manifest.Signatures))
+			seenPkgVer := make(map[string]struct{}, len(manifest.Signatures))
 			for _, rec := range manifest.Signatures {
+				pkg := strings.ToLower(strings.TrimSpace(rec.PackageID))
+				ver := strings.TrimSpace(rec.Version)
+				sha := strings.ToLower(strings.TrimSpace(rec.ArchiveSHA256))
+				if pkg == "" || ver == "" || len(sha) != 64 {
+					return &testharness.ExitError{
+						Code:    testharness.ExitValidation,
+						Message: fmt.Sprintf("invalid metadata for release signature %q@%q", rec.PackageID, rec.Version),
+					}
+				}
+				if _, hexErr := hex.DecodeString(sha); hexErr != nil {
+					return &testharness.ExitError{
+						Code:    testharness.ExitValidation,
+						Message: fmt.Sprintf("invalid archive_sha256 for %s@%s", rec.PackageID, rec.Version),
+					}
+				}
+				pkgVer := pkg + "@" + ver
+				if _, dup := seenPkgVer[pkgVer]; dup {
+					return &testharness.ExitError{
+						Code:    testharness.ExitValidation,
+						Message: fmt.Sprintf("duplicate release signature entry for %s@%s", rec.PackageID, rec.Version),
+					}
+				}
+				seenPkgVer[pkgVer] = struct{}{}
 				rawSig, derr := base64.StdEncoding.DecodeString(strings.TrimSpace(rec.RootSignature))
 				if derr != nil || len(rawSig) != ed25519.SignatureSize {
 					return &testharness.ExitError{
@@ -204,7 +234,7 @@ func newReleaseVerifyCmd(opts Options) *cobra.Command {
 						Message: fmt.Sprintf("invalid base64 Ed25519 signature for %s@%s", rec.PackageID, rec.Version),
 					}
 				}
-				sigIndex[releaseSigKey(rec.PackageID, rec.Version, rec.ArchiveSHA256)] = rawSig
+				sigIndex[releaseSigKey(pkg, ver, sha)] = rawSig
 			}
 
 			var targets []releaseSignTarget
@@ -212,6 +242,20 @@ func newReleaseVerifyCmd(opts Options) *cobra.Command {
 				targets, err = collectReleaseSignTargets(verifyBuiltin, packageID, version, archivePath)
 				if err != nil {
 					return &testharness.ExitError{Code: testharness.ExitValidation, Message: err.Error()}
+				}
+				if verifyBuiltin {
+					targetKeys := make(map[string]struct{}, len(targets))
+					for _, target := range targets {
+						targetKeys[releaseSigKey(target.packageID, target.version, target.sha256)] = struct{}{}
+					}
+					for sigKey := range sigIndex {
+						if _, expected := targetKeys[sigKey]; !expected {
+							return &testharness.ExitError{
+								Code:    testharness.ExitValidation,
+								Message: fmt.Sprintf("inconsistent or stale release signature record %q does not match any embedded official package", sigKey),
+							}
+						}
+					}
 				}
 			} else {
 				if len(manifest.Signatures) == 0 {
@@ -349,14 +393,11 @@ func readReleaseSignatureManifest(path string) (releaseSignatureManifest, error)
 		}
 		return releaseSignatureManifest{}, err
 	}
-	var doc releaseSignatureManifest
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 	if len(strings.TrimSpace(string(raw))) == 0 {
-		return doc, nil
+		return releaseSignatureManifest{}, nil
 	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return releaseSignatureManifest{}, fmt.Errorf("decode %s: %w", path, err)
-	}
-	return doc, nil
+	return decodeReleaseSignatureManifestStrict(raw, path)
 }
 
 func readReleaseSignatureManifestRequired(path string) (releaseSignatureManifest, error) {
@@ -364,9 +405,20 @@ func readReleaseSignatureManifestRequired(path string) (releaseSignatureManifest
 	if err != nil {
 		return releaseSignatureManifest{}, err
 	}
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
+	return decodeReleaseSignatureManifestStrict(raw, path)
+}
+
+func decodeReleaseSignatureManifestStrict(raw []byte, path string) (releaseSignatureManifest, error) {
 	var doc releaseSignatureManifest
-	if err := json.Unmarshal(raw, &doc); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&doc); err != nil {
 		return releaseSignatureManifest{}, fmt.Errorf("decode %s: %w", path, err)
+	}
+	var trailing any
+	if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return releaseSignatureManifest{}, fmt.Errorf("decode %s: unexpected trailing content", path)
 	}
 	return doc, nil
 }
@@ -380,6 +432,7 @@ func loadEd25519PrivateKeyFile(path string) (ed25519.PrivateKey, error) {
 	if err != nil {
 		return nil, err
 	}
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 	if block, _ := pem.Decode(raw); block != nil {
 		parsed, perr := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if perr != nil {
@@ -420,6 +473,7 @@ func loadEd25519PublicKeyFile(path string) (ed25519.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
+	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 	if block, _ := pem.Decode(raw); block != nil {
 		parsed, perr := x509.ParsePKIXPublicKey(block.Bytes)
 		if perr != nil {

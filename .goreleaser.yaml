@@ -23,7 +23,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .Date }}
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .Date }}{{- with index .Env "TANPOPO_RELEASE_ROOT_PUBKEYS" }} -X github.com/nguywnben/tanpopo/internal/extension/builtin.ReleaseRootPublicKeysHex={{ . }}{{- end }}
     mod_timestamp: '{{ .CommitTimestamp }}'
 
 archives:
