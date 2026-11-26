@@ -1942,7 +1942,12 @@ func scanModelDeployment(row interface{ Scan(dest ...any) error }, deploymentID 
 }
 
 func hasNegativePricingRates(p snapshot.PricingNanoUSD) bool {
-	return p.InputPer1MNanoUSD < 0 ||
+	return p.InputTokenNanoUSD < 0 ||
+		p.OutputTokenNanoUSD < 0 ||
+		p.CacheReadTokenNanoUSD < 0 ||
+		p.CacheWriteTokenNanoUSD < 0 ||
+		p.ReasoningTokenNanoUSD < 0 ||
+		p.InputPer1MNanoUSD < 0 ||
 		p.OutputPer1MNanoUSD < 0 ||
 		p.CacheReadPer1MNanoUSD < 0 ||
 		p.CacheWritePer1MNanoUSD < 0 ||

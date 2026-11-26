@@ -56,20 +56,41 @@ var (
 )
 
 // RateCard represents a deployment's deterministic integer nano-USD pricing schedule.
+// Canonical schema v2 encodes token rates as nano-USD per token; legacy v1 schedules retain
+// per-1M rates until explicitly migrated.
 type RateCard struct {
-	InputPer1MNanoUSD        int64 `json:"input_per_1m_nano_usd"`
-	OutputPer1MNanoUSD       int64 `json:"output_per_1m_nano_usd"`
-	CacheReadPer1MNanoUSD    int64 `json:"cache_read_per_1m_nano_usd,omitempty"`
-	CacheWritePer1MNanoUSD   int64 `json:"cache_write_per_1m_nano_usd,omitempty"`
-	ReasoningPer1MNanoUSD    int64 `json:"reasoning_per_1m_nano_usd,omitempty"`
-	ImagePerUnitNanoUSD      int64 `json:"image_per_unit_nano_usd,omitempty"`
-	ImagePer1MPixelsNanoUSD  int64 `json:"image_per_1m_pixels_nano_usd,omitempty"`
-	AudioInputPerSecNanoUSD  int64 `json:"audio_input_per_sec_nano_usd,omitempty"`
-	AudioOutputPerSecNanoUSD int64 `json:"audio_output_per_sec_nano_usd,omitempty"`
-	DocumentPageNanoUSD      int64 `json:"document_page_nano_usd,omitempty"`
-	RerankUnitNanoUSD        int64 `json:"rerank_unit_nano_usd,omitempty"`
-	SelfHostedZeroRate       bool  `json:"self_hosted_zero_rate,omitempty"`
+	PricingSchemaVersion     int    `json:"pricing_schema_version,omitempty"`
+	TokenRateUnit            string `json:"token_rate_unit,omitempty"`
+	InputTokenNanoUSD        int64  `json:"input_token_nano_usd,omitempty"`
+	OutputTokenNanoUSD       int64  `json:"output_token_nano_usd,omitempty"`
+	CacheReadTokenNanoUSD    int64  `json:"cache_read_token_nano_usd,omitempty"`
+	CacheWriteTokenNanoUSD   int64  `json:"cache_write_token_nano_usd,omitempty"`
+	ReasoningTokenNanoUSD    int64  `json:"reasoning_token_nano_usd,omitempty"`
+	InputPer1MNanoUSD        int64  `json:"input_per_1m_nano_usd,omitempty"`
+	OutputPer1MNanoUSD       int64  `json:"output_per_1m_nano_usd,omitempty"`
+	CacheReadPer1MNanoUSD    int64  `json:"cache_read_per_1m_nano_usd,omitempty"`
+	CacheWritePer1MNanoUSD   int64  `json:"cache_write_per_1m_nano_usd,omitempty"`
+	ReasoningPer1MNanoUSD    int64  `json:"reasoning_per_1m_nano_usd,omitempty"`
+	ImagePerUnitNanoUSD      int64  `json:"image_per_unit_nano_usd,omitempty"`
+	ImagePer1MPixelsNanoUSD  int64  `json:"image_per_1m_pixels_nano_usd,omitempty"`
+	AudioInputPerSecNanoUSD  int64  `json:"audio_input_per_sec_nano_usd,omitempty"`
+	AudioOutputPerSecNanoUSD int64  `json:"audio_output_per_sec_nano_usd,omitempty"`
+	DocumentPageNanoUSD      int64  `json:"document_page_nano_usd,omitempty"`
+	RerankUnitNanoUSD        int64  `json:"rerank_unit_nano_usd,omitempty"`
+	SelfHostedZeroRate       bool   `json:"self_hosted_zero_rate,omitempty"`
 	BillingMode              string `json:"billing_mode,omitempty"`
+}
+
+// IsCanonicalPerToken reports whether token rates are expressed canonically per token (nano-USD/token).
+func (r RateCard) IsCanonicalPerToken() bool {
+	if r.PricingSchemaVersion >= 2 || strings.EqualFold(strings.TrimSpace(r.TokenRateUnit), "nano_usd_per_token") {
+		return true
+	}
+	hasPer1M := r.InputPer1MNanoUSD > 0 || r.OutputPer1MNanoUSD > 0 ||
+		r.CacheReadPer1MNanoUSD > 0 || r.CacheWritePer1MNanoUSD > 0 || r.ReasoningPer1MNanoUSD > 0
+	hasPerTok := r.InputTokenNanoUSD > 0 || r.OutputTokenNanoUSD > 0 ||
+		r.CacheReadTokenNanoUSD > 0 || r.CacheWriteTokenNanoUSD > 0 || r.ReasoningTokenNanoUSD > 0
+	return hasPerTok && !hasPer1M
 }
 
 // RateCardFromSnapshot converts a snapshot PricingNanoUSD and billing mode into a RateCard.
@@ -79,6 +100,13 @@ func RateCardFromSnapshot(p snapshot.PricingNanoUSD, billingMode string) RateCar
 		mode = BillingModeCommercialAPI
 	}
 	return RateCard{
+		PricingSchemaVersion:     p.PricingSchemaVersion,
+		TokenRateUnit:            p.TokenRateUnit,
+		InputTokenNanoUSD:        p.InputTokenNanoUSD,
+		OutputTokenNanoUSD:       p.OutputTokenNanoUSD,
+		CacheReadTokenNanoUSD:    p.CacheReadTokenNanoUSD,
+		CacheWriteTokenNanoUSD:   p.CacheWriteTokenNanoUSD,
+		ReasoningTokenNanoUSD:    p.ReasoningTokenNanoUSD,
 		InputPer1MNanoUSD:        p.InputPer1MNanoUSD,
 		OutputPer1MNanoUSD:       p.OutputPer1MNanoUSD,
 		CacheReadPer1MNanoUSD:    p.CacheReadPer1MNanoUSD,
@@ -97,7 +125,12 @@ func RateCardFromSnapshot(p snapshot.PricingNanoUSD, billingMode string) RateCar
 
 // HasNumericRates reports whether at least one positive unit rate is configured.
 func (r RateCard) HasNumericRates() bool {
-	return r.InputPer1MNanoUSD > 0 ||
+	return r.InputTokenNanoUSD > 0 ||
+		r.OutputTokenNanoUSD > 0 ||
+		r.CacheReadTokenNanoUSD > 0 ||
+		r.CacheWriteTokenNanoUSD > 0 ||
+		r.ReasoningTokenNanoUSD > 0 ||
+		r.InputPer1MNanoUSD > 0 ||
 		r.OutputPer1MNanoUSD > 0 ||
 		r.CacheReadPer1MNanoUSD > 0 ||
 		r.CacheWritePer1MNanoUSD > 0 ||
@@ -121,7 +154,12 @@ func (r RateCard) HasConfiguredRates() bool {
 
 // Validate checks that no pricing rate field is negative.
 func (r RateCard) Validate() error {
-	if r.InputPer1MNanoUSD < 0 ||
+	if r.InputTokenNanoUSD < 0 ||
+		r.OutputTokenNanoUSD < 0 ||
+		r.CacheReadTokenNanoUSD < 0 ||
+		r.CacheWriteTokenNanoUSD < 0 ||
+		r.ReasoningTokenNanoUSD < 0 ||
+		r.InputPer1MNanoUSD < 0 ||
 		r.OutputPer1MNanoUSD < 0 ||
 		r.CacheReadPer1MNanoUSD < 0 ||
 		r.CacheWritePer1MNanoUSD < 0 ||
@@ -474,7 +512,15 @@ func Calculate(rate RateCard, usage UsageInput) (CostBreakdown, error) {
 		}, nil
 	}
 
-	per1MNano, err := computePerMillionCeiling(rate, effective)
+	var (
+		tokenNano int64
+		err       error
+	)
+	if rate.IsCanonicalPerToken() {
+		tokenNano, err = computeCanonicalTokenNanoAndPixelCeiling(rate, effective)
+	} else {
+		tokenNano, err = computePerMillionCeiling(rate, effective)
+	}
 	if err != nil {
 		return CostBreakdown{}, err
 	}
@@ -482,10 +528,10 @@ func Calculate(rate RateCard, usage UsageInput) (CostBreakdown, error) {
 	if err != nil {
 		return CostBreakdown{}, err
 	}
-	if per1MNano > math.MaxInt64-mediaNano {
+	if tokenNano > math.MaxInt64-mediaNano {
 		return CostBreakdown{}, ErrArithmeticOverflow
 	}
-	totalNano := per1MNano + mediaNano
+	totalNano := tokenNano + mediaNano
 	totalMicros, err := CeilDivInt64(totalNano, NanoPerMicro)
 	if err != nil {
 		return CostBreakdown{}, err
@@ -494,7 +540,7 @@ func Calculate(rate RateCard, usage UsageInput) (CostBreakdown, error) {
 	return CostBreakdown{
 		TotalNanoUSD:     totalNano,
 		TotalMicroUSD:    totalMicros,
-		PerMillionNano:   per1MNano,
+		PerMillionNano:   tokenNano,
 		MediaNanoUSD:     mediaNano,
 		EffectiveUsage:   effective,
 		Accuracy:         accuracy,
@@ -614,6 +660,42 @@ func ceilDivU128ByUint64(val u128, den uint64) (int64, error) {
 		return 0, ErrArithmeticOverflow
 	}
 	return int64(q), nil
+}
+
+func computeCanonicalTokenNanoAndPixelCeiling(rate RateCard, u UsageInput) (int64, error) {
+	var tokAcc u128
+	var err error
+	if tokAcc, err = addMulU128(tokAcc, u.InputTokens, rate.InputTokenNanoUSD); err != nil {
+		return 0, err
+	}
+	if tokAcc, err = addMulU128(tokAcc, u.OutputTokens, rate.OutputTokenNanoUSD); err != nil {
+		return 0, err
+	}
+	if tokAcc, err = addMulU128(tokAcc, u.CacheReadTokens, rate.CacheReadTokenNanoUSD); err != nil {
+		return 0, err
+	}
+	if tokAcc, err = addMulU128(tokAcc, u.CacheWriteTokens, rate.CacheWriteTokenNanoUSD); err != nil {
+		return 0, err
+	}
+	if tokAcc, err = addMulU128(tokAcc, u.ReasoningTokens, rate.ReasoningTokenNanoUSD); err != nil {
+		return 0, err
+	}
+	if tokAcc.hi != 0 || tokAcc.lo > uint64(math.MaxInt64) {
+		return 0, ErrArithmeticOverflow
+	}
+	var pxAcc u128
+	if pxAcc, err = addMulU128(pxAcc, u.Media.ImagePixels, rate.ImagePer1MPixelsNanoUSD); err != nil {
+		return 0, err
+	}
+	pxNano, err := ceilDivU128ByUint64(pxAcc, uint64(UnitsPerMillion))
+	if err != nil {
+		return 0, err
+	}
+	tokNano := int64(tokAcc.lo)
+	if tokNano > math.MaxInt64-pxNano {
+		return 0, ErrArithmeticOverflow
+	}
+	return tokNano + pxNano, nil
 }
 
 func computePerMillionCeiling(rate RateCard, u UsageInput) (int64, error) {

@@ -106,6 +106,14 @@ func nativeTelemetryFromContext(ctx context.Context) *nativeRequestTelemetry {
 	return rt
 }
 
+func nativeTraceRecordIDFromContext(ctx context.Context) string {
+	rt := nativeTelemetryFromContext(ctx)
+	if rt == nil {
+		return ""
+	}
+	return strings.TrimSpace(rt.traceRecordID)
+}
+
 func (rt *nativeRequestTelemetry) recordAuth(match snapshot.KeyMatchResult) {
 	if rt == nil || match.Key == nil {
 		return

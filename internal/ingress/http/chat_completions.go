@@ -251,7 +251,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	budgetSess := s.newRequestBudgetSession(match.Key, meta.RequestID, modelSlug, rawBody, preAdm, reqEnvelope.Messages)
+	budgetSess := s.newRequestBudgetSession(r.Context(), match.Key, meta.RequestID, modelSlug, rawBody, preAdm, reqEnvelope.Messages)
 	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
 		return
 	}

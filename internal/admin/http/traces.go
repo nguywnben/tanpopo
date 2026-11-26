@@ -431,7 +431,7 @@ func scanTraceSummaryRowWithProject(rows *sql.Rows) (traceSummaryDTO, int64, str
 		ttftPtr = &v
 	}
 
-	usageAcc := "EXACT"
+	usageAcc := "UNSETTLED"
 	if accuracy.Valid && accuracy.String != "" {
 		usageAcc = accuracy.String
 	}

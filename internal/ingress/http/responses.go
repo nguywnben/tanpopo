@@ -172,7 +172,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	budgetSess := s.newRequestBudgetSession(match.Key, meta.RequestID, modelSlug, rawBody, preAdm, inputItems)
+	budgetSess := s.newRequestBudgetSession(r.Context(), match.Key, meta.RequestID, modelSlug, rawBody, preAdm, inputItems)
 	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
 		return
 	}

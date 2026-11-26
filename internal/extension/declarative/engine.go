@@ -22,11 +22,11 @@ import (
 var _ port.ProviderRuntime = (*Engine)(nil)
 
 type compiledUsagePaths struct {
-	inputTokens       parsedPath
-	outputTokens      parsedPath
-	cacheReadTokens   parsedPath
-	cacheWriteTokens  parsedPath
-	reasoningTokens   parsedPath
+	inputTokens       []parsedPath
+	outputTokens      []parsedPath
+	cacheReadTokens   []parsedPath
+	cacheWriteTokens  []parsedPath
+	reasoningTokens   []parsedPath
 	rerankSearchUnits parsedPath
 }
 
@@ -369,21 +369,41 @@ func compileUsagePaths(spec UsagePathSpec, fallback UsagePathSpec) (compiledUsag
 		}
 		return fb
 	}
+	parseAlternatives := func(raw string) ([]parsedPath, error) {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return nil, nil
+		}
+		parts := strings.Split(trimmed, "||")
+		out := make([]parsedPath, 0, len(parts))
+		for _, part := range parts {
+			cand := strings.TrimPrefix(strings.TrimSpace(part), "$.")
+			if cand == "" {
+				return nil, fmt.Errorf("%w: empty alternative usage path in %q", ErrInvalidDeclarativeSpec, raw)
+			}
+			p, err := parseDotPath(cand)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, p)
+		}
+		return out, nil
+	}
 	var out compiledUsagePaths
 	var err error
-	if out.inputTokens, err = parseDotPath(pick(spec.InputTokens, fallback.InputTokens)); err != nil {
+	if out.inputTokens, err = parseAlternatives(pick(spec.InputTokens, fallback.InputTokens)); err != nil {
 		return out, err
 	}
-	if out.outputTokens, err = parseDotPath(pick(spec.OutputTokens, fallback.OutputTokens)); err != nil {
+	if out.outputTokens, err = parseAlternatives(pick(spec.OutputTokens, fallback.OutputTokens)); err != nil {
 		return out, err
 	}
-	if out.cacheReadTokens, err = parseDotPath(pick(spec.CacheReadTokens, fallback.CacheReadTokens)); err != nil {
+	if out.cacheReadTokens, err = parseAlternatives(pick(spec.CacheReadTokens, fallback.CacheReadTokens)); err != nil {
 		return out, err
 	}
-	if out.cacheWriteTokens, err = parseDotPath(pick(spec.CacheWriteTokens, fallback.CacheWriteTokens)); err != nil {
+	if out.cacheWriteTokens, err = parseAlternatives(pick(spec.CacheWriteTokens, fallback.CacheWriteTokens)); err != nil {
 		return out, err
 	}
-	if out.reasoningTokens, err = parseDotPath(pick(spec.ReasoningTokens, fallback.ReasoningTokens)); err != nil {
+	if out.reasoningTokens, err = parseAlternatives(pick(spec.ReasoningTokens, fallback.ReasoningTokens)); err != nil {
 		return out, err
 	}
 	if out.rerankSearchUnits, err = parseDotPath(pick(spec.RerankSearchUnits, fallback.RerankSearchUnits)); err != nil {
@@ -1316,42 +1336,78 @@ func (e *Engine) extractStringPath(root any, p parsedPath, budget *stepBudget) s
 	return s
 }
 
+var errUsageCounterInvalid = errors.New("declarative: malformed, overflow, or conflicting usage counter")
+
+func readStrictUsageIntValue(v any) (int64, bool) {
+	switch x := v.(type) {
+	case json.Number:
+		n, err := x.Int64()
+		if err != nil || n < 0 {
+			return 0, false
+		}
+		return n, true
+	case int64:
+		if x < 0 {
+			return 0, false
+		}
+		return x, true
+	case int:
+		if x < 0 {
+			return 0, false
+		}
+		return int64(x), true
+	default:
+		return 0, false
+	}
+}
+
 func extractUsageFromMap(root any, paths compiledUsagePaths, budget *stepBudget) (*port.NormalizedUsage, error) {
-	readOptInt := func(p parsedPath) (int64, bool, error) {
-		if len(p.tokens) == 0 {
-			return 0, false, nil
+	readOptSlot := func(candidates []parsedPath) (int64, bool, error) {
+		var (
+			hasVal bool
+			val    int64
+		)
+		for _, p := range candidates {
+			if len(p.tokens) == 0 {
+				continue
+			}
+			v, found, err := getByPath(root, p, budget)
+			if err != nil {
+				return 0, false, err
+			}
+			if !found || v == nil {
+				continue
+			}
+			n, ok := readStrictUsageIntValue(v)
+			if !ok {
+				return 0, false, errUsageCounterInvalid
+			}
+			if hasVal && n != val {
+				return 0, false, errUsageCounterInvalid
+			}
+			val = n
+			hasVal = true
 		}
-		v, found, err := getByPath(root, p, budget)
-		if err != nil {
-			return 0, false, err
-		}
-		if !found {
-			return 0, false, nil
-		}
-		n, ok := extractInt64(v)
-		if !ok || n < 0 {
-			return 0, false, nil
-		}
-		return n, true, nil
+		return val, hasVal, nil
 	}
 
-	inTok, hasIn, err := readOptInt(paths.inputTokens)
+	inTok, hasIn, err := readOptSlot(paths.inputTokens)
 	if err != nil {
 		return nil, err
 	}
-	outTok, hasOut, err := readOptInt(paths.outputTokens)
+	outTok, hasOut, err := readOptSlot(paths.outputTokens)
 	if err != nil {
 		return nil, err
 	}
-	cacheRead, hasCR, err := readOptInt(paths.cacheReadTokens)
+	cacheRead, hasCR, err := readOptSlot(paths.cacheReadTokens)
 	if err != nil {
 		return nil, err
 	}
-	cacheWrite, hasCW, err := readOptInt(paths.cacheWriteTokens)
+	cacheWrite, hasCW, err := readOptSlot(paths.cacheWriteTokens)
 	if err != nil {
 		return nil, err
 	}
-	reasoning, hasReas, err := readOptInt(paths.reasoningTokens)
+	reasoning, hasReas, err := readOptSlot(paths.reasoningTokens)
 	if err != nil {
 		return nil, err
 	}
@@ -1794,6 +1850,7 @@ func (e *Engine) ExtractUsage(ctx context.Context, in port.ExtractUsageInput) (p
 		bytes.HasPrefix(rawTrimmed, []byte("retry:"))
 	if isSSE {
 		var merged port.NormalizedUsage
+		invalidSeen := false
 		remaining := rawTrimmed
 		for len(remaining) > 0 {
 			var line []byte
@@ -1814,21 +1871,58 @@ func (e *Engine) ExtractUsage(ctx context.Context, in port.ExtractUsageInput) (p
 			}
 			frameUsage, err := e.extractSinglePayloadUsage(payload, true)
 			if err != nil {
+				if errors.Is(err, errUsageCounterInvalid) {
+					invalidSeen = true
+					break
+				}
 				return port.NormalizedUsage{}, err
 			}
 			if frameUsage != nil && frameUsage.Accuracy == port.UsageAccuracyExact {
 				mergeExactUsage(&merged, *frameUsage)
 			}
 		}
-		if merged.Accuracy == port.UsageAccuracyExact {
+		if !invalidSeen && merged.Accuracy == port.UsageAccuracyExact {
+			return merged, nil
+		}
+	} else if len(rawTrimmed) > 0 && bytes.HasPrefix(rawTrimmed, []byte("{")) && bytes.Contains(rawTrimmed, []byte("\n")) {
+		var merged port.NormalizedUsage
+		invalidSeen := false
+		remaining := rawTrimmed
+		for len(remaining) > 0 {
+			var line []byte
+			if nl := bytes.IndexByte(remaining, '\n'); nl >= 0 {
+				line = remaining[:nl]
+				remaining = remaining[nl+1:]
+			} else {
+				line = remaining
+				remaining = nil
+			}
+			tl := bytes.TrimSpace(line)
+			if len(tl) == 0 || tl[0] != '{' {
+				continue
+			}
+			frameUsage, err := e.extractSinglePayloadUsage(tl, true)
+			if err != nil {
+				if errors.Is(err, errUsageCounterInvalid) {
+					invalidSeen = true
+					break
+				}
+				return port.NormalizedUsage{}, err
+			}
+			if frameUsage != nil && frameUsage.Accuracy == port.UsageAccuracyExact {
+				mergeExactUsage(&merged, *frameUsage)
+			}
+		}
+		if !invalidSeen && merged.Accuracy == port.UsageAccuracyExact {
 			return merged, nil
 		}
 	} else if len(rawTrimmed) > 0 && !bytes.Equal(rawTrimmed, []byte(e.streamDoneSentinel)) {
 		singleUsage, err := e.extractSinglePayloadUsage(rawTrimmed, false)
 		if err != nil {
-			return port.NormalizedUsage{}, err
-		}
-		if singleUsage != nil && singleUsage.Accuracy == port.UsageAccuracyExact {
+			if !errors.Is(err, errUsageCounterInvalid) {
+				return port.NormalizedUsage{}, err
+			}
+		} else if singleUsage != nil && singleUsage.Accuracy == port.UsageAccuracyExact {
 			return *singleUsage, nil
 		}
 	}
@@ -1882,7 +1976,11 @@ func (e *Engine) extractSinglePayloadUsage(payload []byte, isSSE bool) (*port.No
 		if nestedResp, ok := m["response"].(map[string]any); ok {
 			targetMap = nestedResp
 		}
-		if rUsage, rerr := extractResponsesUsageFromMap(targetMap, paths, budget); rerr == nil && rUsage != nil && rUsage.Accuracy == port.UsageAccuracyExact {
+		if rUsage, rerr := extractResponsesUsageFromMap(targetMap, paths, budget); rerr != nil {
+			if errors.Is(rerr, errUsageCounterInvalid) {
+				return nil, rerr
+			}
+		} else if rUsage != nil && rUsage.Accuracy == port.UsageAccuracyExact {
 			return rUsage, nil
 		}
 	}

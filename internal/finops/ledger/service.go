@@ -375,13 +375,24 @@ func (s *Service) UpsertLedger(ctx context.Context, params UpsertLedgerParams) (
 			if existingID == "" {
 				existingID = idgen.MustNew(idgen.PrefixBudget)
 			}
+			settledExact, settledEst, sumErr := sumSettledForScopePeriodTx(ctx, tx, params.OrgID, params.ScopeType, params.ScopeID, params.PeriodStartMs, params.PeriodEndMs)
+			if sumErr != nil {
+				return sumErr
+			}
+			totalSettled, ok := addInt64Checked(settledExact, settledEst)
+			if !ok {
+				return ErrOverflow
+			}
+			carryover := computeCarryover(totalSettled, params.HardLimitMicros)
 			if _, iErr := tx.ExecContext(ctx, `
 				INSERT INTO budget_ledgers (
 					id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms,
-					hard_limit_micros, soft_alert_thresholds_pct_json, created_at_ms, updated_at_ms
-				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					hard_limit_micros, settled_exact_micros, settled_estimated_micros, negative_carryover_micros,
+					soft_alert_thresholds_pct_json, created_at_ms, updated_at_ms
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				existingID, params.OrgID, params.ScopeType, params.ScopeID, params.PeriodKind,
-				params.PeriodStartMs, params.PeriodEndMs, params.HardLimitMicros, threshJSON, now, now,
+				params.PeriodStartMs, params.PeriodEndMs, params.HardLimitMicros,
+				settledExact, settledEst, carryover, threshJSON, now, now,
 			); iErr != nil {
 				return iErr
 			}
@@ -1550,6 +1561,39 @@ func findSettlementByRequestIDTx(ctx context.Context, tx *dialectTx, orgID, requ
 	res.ReservationID = resID.String
 	res.UnmeteredFlagged = res.Accuracy == pricing.AccuracyUnmeteredFlagged
 	return &res, nil
+}
+
+func sumSettledForScopePeriodTx(
+	ctx context.Context,
+	tx *dialectTx,
+	orgID, scopeType, scopeID string,
+	periodStartMs, periodEndMs int64,
+) (exactMicros, estMicros int64, err error) {
+	var scopeCol string
+	switch scopeType {
+	case ScopeOrg:
+		scopeCol = "org_id"
+	case ScopeProject:
+		scopeCol = "project_id"
+	case ScopeEnv:
+		scopeCol = "env_id"
+	case ScopeVirtualKey:
+		scopeCol = "virtual_key_id"
+	default:
+		return 0, 0, ErrInvalidInput
+	}
+	query := fmt.Sprintf(`
+		SELECT COALESCE(SUM(CASE WHEN usage_accuracy = 'EXACT' THEN total_cost_micros ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN usage_accuracy = 'ESTIMATED' THEN total_cost_micros ELSE 0 END), 0)
+		FROM usage_settlements
+		WHERE org_id = ?
+		  AND %s = ?
+		  AND settled_at_ms >= ?
+		  AND settled_at_ms < ?`, scopeCol)
+	if qErr := tx.QueryRowContext(ctx, query, orgID, scopeID, periodStartMs, periodEndMs).Scan(&exactMicros, &estMicros); qErr != nil {
+		return 0, 0, qErr
+	}
+	return exactMicros, estMicros, nil
 }
 
 func addInt64Checked(a, b int64) (int64, bool) {

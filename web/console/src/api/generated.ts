@@ -1923,23 +1923,49 @@ export interface components {
             assurance_tier: "DECLARED" | "TESTED" | "VERIFIED";
             capabilities: components["schemas"]["CapabilityProfile"];
         };
+        /** @description Integer nano-USD rate card. Token rates are strictly per single token (10^-9 USD / token, e.g., $1.00 / 1M tokens = 1,000 nano-USD / token; $0.015 / 1M tokens = 15 nano-USD / token). */
         RateCardNanoUsd: {
+            /** @description Nano-USD per input token (1,000 = $1.00 / 1M tokens). */
             input_token_nano_usd: number;
+            /** @description Nano-USD per output token (1,000 = $1.00 / 1M tokens). */
             output_token_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per cached input token.
+             * @default 0
+             */
             cache_read_token_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per cache-write input token.
+             * @default 0
+             */
             cache_write_token_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per reasoning output token.
+             * @default 0
+             */
             reasoning_token_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per image unit (1,000,000 = $0.001 / image).
+             * @default 0
+             */
             image_unit_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per second of audio.
+             * @default 0
+             */
             audio_sec_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per document page.
+             * @default 0
+             */
             document_page_nano_usd: number;
             /** @default false */
             self_hosted_zero_rate: boolean;
+            /**
+             * @description Canonical unit marker. New/updated deployments are always NANO_USD_PER_TOKEN.
+             * @enum {string}
+             */
+            token_rate_unit?: "NANO_USD_PER_TOKEN" | "LEGACY_NANO_USD_PER_1M";
         };
         ModelDeployment: {
             id: string;
@@ -2222,7 +2248,7 @@ export interface components {
             status_code: number;
             error_code: string | null;
             /** @enum {string} */
-            usage_accuracy: "EXACT" | "ESTIMATED" | "UNMETERED_FLAGGED";
+            usage_accuracy: "EXACT" | "ESTIMATED" | "UNMETERED_FLAGGED" | "UNSETTLED";
             total_cost_micros: number;
             ttft_ms?: number | null;
             duration_ms: number;
@@ -2242,6 +2268,10 @@ export interface components {
             scope_id: string;
             /** @enum {string} */
             period: "DAILY" | "MONTHLY" | "TOTAL_LIFETIME";
+            /** Format: date-time */
+            period_start?: string;
+            /** Format: date-time */
+            period_end?: string;
             hard_limit_micros: number;
             soft_warning_percents?: number[];
             settled_exact_micros: number;
@@ -2252,7 +2282,11 @@ export interface components {
             version: number;
         };
         UsageChargebackRow: {
+            /** @description Stable non-secret identifier for the group (e.g., virtual_key_id, project_id, env_id, or logical_model). */
+            group_id?: string;
             group_key: string;
+            /** @description Non-secret masked Virtual Key identifier prefix and last four characters when grouped by key. */
+            key_prefix?: string;
             exact_micro_usd: number;
             estimated_micro_usd: number;
             exact_request_count: number;

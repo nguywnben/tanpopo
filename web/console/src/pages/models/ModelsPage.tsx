@@ -483,9 +483,14 @@ export function ModelsPage({
                 header: t('models.col.rates'),
                 width: '17%',
                 render: row => (
-                  <span className="mono">
-                    {formatNumber(row.rate_card.input_token_nano_usd)} / {formatNumber(row.rate_card.output_token_nano_usd)}
-                  </span>
+                  <div className="tp-stack-sm">
+                    <span className="mono">
+                      {formatNumber(row.rate_card.input_token_nano_usd)} / {formatNumber(row.rate_card.output_token_nano_usd)}
+                    </span>
+                    {row.rate_card.token_rate_unit === 'LEGACY_NANO_USD_PER_1M' ? (
+                      <span className="tp-muted">{t('models.legacyRateUnitNote')}</span>
+                    ) : null}
+                  </div>
                 ),
               },
               {
@@ -698,6 +703,15 @@ export function ModelsPage({
               />
             ))}
           </div>
+          <p className="tp-muted">
+            {t('models.rateExample', {
+              inPer1M: `$${((Number(rates.input_token_nano_usd) || 0) / 1000).toFixed(3)}`,
+              outPer1M: `$${((Number(rates.output_token_nano_usd) || 0) / 1000).toFixed(3)}`,
+              sampleMicros: formatNumber(
+                Math.ceil(((Number(rates.input_token_nano_usd) || 0) * 1000 + (Number(rates.output_token_nano_usd) || 0) * 500 + (Number(rates.image_unit_nano_usd) || 0)) / 1000),
+              ),
+            })}
+          </p>
           <CheckboxField
             label={t('models.selfHostedZero')}
             description={t('models.selfHostedZeroDesc')}

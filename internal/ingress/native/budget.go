@@ -49,6 +49,7 @@ type nativeBudgetSession struct {
 }
 
 func (h *Handler) newNativeBudgetSession(
+	ctx context.Context,
 	key *snapshot.VirtualKeyView,
 	reqID string,
 	rawBody []byte,
@@ -78,6 +79,10 @@ func (h *Handler) newNativeBudgetSession(
 	if renewEvery <= 0 {
 		renewEvery = time.Millisecond
 	}
+	ledgerReqID := nativeTraceRecordIDFromContext(ctx)
+	if ledgerReqID == "" {
+		ledgerReqID = idgen.MustNew(idgen.PrefixTrace)
+	}
 	return &nativeBudgetSession{
 		svc:             h.budgetLedger,
 		defaultHoldOut:  defaultHold,
@@ -87,7 +92,7 @@ func (h *Handler) newNativeBudgetSession(
 		envID:           key.EnvID,
 		vkeyID:          key.ID,
 		reqID:           reqID,
-		ledgerReqID:     idgen.MustNew(idgen.PrefixTrace),
+		ledgerReqID:     ledgerReqID,
 		inputTextBytes:  textBytes,
 		maxOutputTokens: estMaxOut,
 		media:           countNativeMediaUnits(rawBody),
@@ -95,6 +100,30 @@ func (h *Handler) newNativeBudgetSession(
 }
 
 const maxEstimatedNativeAudioMillis int64 = 1_000_000_000
+
+func countNativeImageArrayItems(items []any) int64 {
+	var total int64
+	for _, elem := range items {
+		switch item := elem.(type) {
+		case string:
+			if strings.TrimSpace(item) != "" {
+				total++
+			}
+		case map[string]any:
+			if item != nil {
+				var sub pricing.MediaUsage
+				before := sub.ImageCount
+				_ = classifyNativeMediaPart(item, &sub)
+				if sub.ImageCount > before {
+					total += sub.ImageCount - before
+				} else if hasAnyNativeStringField(item, "data", "url", "b64_json", "image_base64", "image", "image_url") {
+					total++
+				}
+			}
+		}
+	}
+	return total
+}
 
 func countNativeMediaUnits(rawBody []byte) pricing.MediaUsage {
 	var m pricing.MediaUsage
@@ -127,8 +156,13 @@ func countNativeMediaUnits(rawBody []byte) pricing.MediaUsage {
 					lk := strings.ToLower(strings.TrimSpace(k))
 					skipChild := false
 					if consumed[lk] {
-						if _, isMap := child.(map[string]any); isMap {
+						switch child.(type) {
+						case map[string]any:
 							skipChild = true
+						case []any:
+							if lk == "images" {
+								continue
+							}
 						}
 					}
 					walk(child, depth+1, skipChild)
@@ -141,6 +175,9 @@ func countNativeMediaUnits(rawBody []byte) pricing.MediaUsage {
 		if items, ok := root[arrKey]; ok && items != nil {
 			walk(items, 0, false)
 		}
+	}
+	if topImages, ok := root["images"].([]any); ok {
+		m.ImageCount += countNativeImageArrayItems(topImages)
 	}
 	return m
 }
@@ -215,6 +252,13 @@ func classifyNativeMediaPart(part map[string]any, m *pricing.MediaUsage) map[str
 		for _, k := range inlineConsumed {
 			consumed[k] = true
 		}
+	}
+
+	if rawImages, ok := part["images"].([]any); ok {
+		if cnt := countNativeImageArrayItems(rawImages); cnt > 0 {
+			m.ImageCount += cnt
+		}
+		consumed["images"] = true
 	}
 
 	if ptype == "image_url" || ptype == "input_image" || ptype == "image" || hasImageField || inlineImage {

@@ -79,8 +79,8 @@ adapter:
       headerName: "Authorization"
       valuePrefix: "Bearer "
   usageExtraction:
-    inputTokensPath: "$.usage.prompt_tokens"
-    outputTokensPath: "$.usage.completion_tokens"
+    inputTokensPath: "$.usage.prompt_tokens || $.prompt_eval_count"
+    outputTokensPath: "$.usage.completion_tokens || $.eval_count"
   errorMapping:
     reauthStatuses:
       - 401

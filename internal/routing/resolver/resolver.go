@@ -864,10 +864,25 @@ func targetMatchesNativeDialect(target *snapshot.ResolvedTarget, dialect string)
 }
 
 func estimateCostNano(p snapshot.PricingNanoUSD, estInTokens, estOutTokens int64) int64 {
-	// price_per_1m * tokens / 1_000_000 in strict integer arithmetic (0 floats).
+	if p.IsCanonicalPerToken() {
+		inCost := mulCapInt64(max(int64(0), estInTokens), max(int64(0), p.InputTokenNanoUSD))
+		outCost := mulCapInt64(max(int64(0), estOutTokens), max(int64(0), p.OutputTokenNanoUSD))
+		return safeAddInt64(inCost, outCost)
+	}
+	// Legacy v1 compatibility: price_per_1m * tokens / 1_000_000 in strict integer arithmetic (0 floats).
 	inCost := mulDivSat(estInTokens, p.InputPer1MNanoUSD, 1_000_000)
 	outCost := mulDivSat(estOutTokens, p.OutputPer1MNanoUSD, 1_000_000)
 	return safeAddInt64(inCost, outCost)
+}
+
+func mulCapInt64(a, b int64) int64 {
+	if a <= 0 || b <= 0 {
+		return 0
+	}
+	if a > math.MaxInt64/b {
+		return math.MaxInt64
+	}
+	return a * b
 }
 
 func mulDivSat(a, b, div int64) int64 {

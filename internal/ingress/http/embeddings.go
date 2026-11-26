@@ -159,7 +159,7 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	budgetSess := s.newRequestBudgetSession(match.Key, meta.RequestID, modelSlug, rawBody, preAdm, nil)
+	budgetSess := s.newRequestBudgetSession(r.Context(), match.Key, meta.RequestID, modelSlug, rawBody, preAdm, nil)
 	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
 		return
 	}

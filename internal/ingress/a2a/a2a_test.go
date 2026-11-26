@@ -1077,3 +1077,160 @@ func TestDEF005_A2ADispatchBlocksUpstreamRedirect(t *testing.T) {
 	}
 }
 
+type stubWorkingCancelTransport struct {
+	mode       int // 0 = return working, 1 = block until ctx canceled
+	startedCh  chan string
+	canceledCh chan struct{}
+}
+
+func (s *stubWorkingCancelTransport) DispatchTask(ctx context.Context, _ *a2a.AgentEndpoint, task a2a.TaskView, _ []map[string]any) (a2a.UpstreamTaskResponse, error) {
+	if s.mode == 0 {
+		return a2a.UpstreamTaskResponse{
+			State:     a2a.StateWorking,
+			Artifacts: []map[string]any{{"progress": "step-1"}},
+		}, nil
+	}
+	if s.startedCh != nil {
+		s.startedCh <- task.TaskID
+	}
+	<-ctx.Done()
+	if s.canceledCh != nil {
+		close(s.canceledCh)
+	}
+	return a2a.UpstreamTaskResponse{}, ctx.Err()
+}
+
+func TestDEF067_069_WorkingResponseAndActiveCancel(t *testing.T) {
+	h := newA2AHarness(t, true)
+	tr := &stubWorkingCancelTransport{mode: 0}
+	coord, err := a2a.NewTaskCoordinator(a2a.CoordinatorConfig{
+		Enabled:   true,
+		DB:        h.db,
+		Registry:  h.reg,
+		Snapshots: h.snapshots,
+		Ledger:    h.ledgerSvc,
+		Transport: tr,
+		Now:       h.clk.Now,
+	})
+	if err != nil {
+		t.Fatalf("NewTaskCoordinator: %v", err)
+	}
+	srv := httptest.NewServer(coord.Handler())
+	defer srv.Close()
+
+	agent, err := h.reg.RegisterAgent(h.ctx, a2a.RegisterAgentParams{
+		OrgID: h.orgID, ProjectID: h.projID, AgentSlug: "working-cancel-agent",
+		Name: "Working Cancel Agent", EndpointURL: "https://worker.example.test/a2a",
+		DataRegion: "EU", MaxDelegationHops: 4,
+	})
+	if err != nil {
+		t.Fatalf("RegisterAgent: %v", err)
+	}
+
+	doCustom := func(method, path string, body any) *http.Response {
+		var buf bytes.Buffer
+		if body != nil {
+			_ = json.NewEncoder(&buf).Encode(body)
+		}
+		req, _ := http.NewRequestWithContext(h.ctx, method, srv.URL+path, &buf)
+		req.Header.Set("Authorization", "Bearer "+h.vkRaw)
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, derr := srv.Client().Do(req)
+		if derr != nil {
+			t.Fatalf("%s %s: %v", method, path, derr)
+		}
+		return resp
+	}
+
+	// 1. DEF-067: Downstream returning state="working" MUST succeed with 201 and remain StateWorking.
+	workResp := doCustom(http.MethodPost, "/a2a/tasks", a2a.TaskCreateRequest{
+		TargetAgentID:       agent.ID,
+		SubBudgetHoldMicros: 50_000,
+		InputParts:          []map[string]any{{"text": "long step"}},
+	})
+	if workResp.StatusCode != http.StatusCreated {
+		t.Fatalf("DEF-067: expected 201 Created for working response, got %d", workResp.StatusCode)
+	}
+	var workingTask a2a.TaskView
+	_ = json.NewDecoder(workResp.Body).Decode(&workingTask)
+	_ = workResp.Body.Close()
+	if workingTask.State != a2a.StateWorking || len(workingTask.Artifacts) != 1 {
+		t.Fatalf("DEF-067: expected StateWorking with progress artifact, got %+v", workingTask)
+	}
+
+	// 2. DEF-069: Blocking active dispatch MUST cancel immediately when Task is canceled.
+	startedCh := make(chan string, 1)
+	canceledCh := make(chan struct{})
+	trBlock := &stubWorkingCancelTransport{mode: 1, startedCh: startedCh, canceledCh: canceledCh}
+	coordBlock, err := a2a.NewTaskCoordinator(a2a.CoordinatorConfig{
+		Enabled:   true,
+		DB:        h.db,
+		Registry:  h.reg,
+		Snapshots: h.snapshots,
+		Ledger:    h.ledgerSvc,
+		Transport: trBlock,
+		Now:       h.clk.Now,
+	})
+	if err != nil {
+		t.Fatalf("NewTaskCoordinator block: %v", err)
+	}
+	srvBlock := httptest.NewServer(coordBlock.Handler())
+	defer srvBlock.Close()
+
+	createDone := make(chan *http.Response, 1)
+	go func() {
+		var buf bytes.Buffer
+		_ = json.NewEncoder(&buf).Encode(a2a.TaskCreateRequest{
+			TargetAgentID:       agent.ID,
+			SubBudgetHoldMicros: 40_000,
+			InputParts:          []map[string]any{{"text": "blocking dispatch"}},
+		})
+		req, _ := http.NewRequestWithContext(h.ctx, http.MethodPost, srvBlock.URL+"/a2a/tasks", &buf)
+		req.Header.Set("Authorization", "Bearer "+h.vkRaw)
+		req.Header.Set("Content-Type", "application/json")
+		resp, _ := srvBlock.Client().Do(req)
+		createDone <- resp
+	}()
+
+	var activeTaskID string
+	select {
+	case activeTaskID = <-startedCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for downstream dispatch to start")
+	}
+
+	canceledView, err := coordBlock.CancelTask(h.ctx, h.orgID, h.projID, activeTaskID, "")
+	if err != nil || canceledView.State != a2a.StateCanceled {
+		t.Fatalf("CancelTask active blocking task: view=%+v err=%v", canceledView, err)
+	}
+
+	select {
+	case <-canceledCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("DEF-069: downstream DispatchTask ctx was not canceled upon task cancel")
+	}
+
+	select {
+	case createResp := <-createDone:
+		if createResp == nil || createResp.StatusCode != http.StatusOK {
+			code := 0
+			if createResp != nil {
+				code = createResp.StatusCode
+				_ = createResp.Body.Close()
+			}
+			t.Fatalf("DEF-069: expected canceled create HTTP 200 OK, got %d", code)
+		}
+		var cv a2a.TaskView
+		_ = json.NewDecoder(createResp.Body).Decode(&cv)
+		_ = createResp.Body.Close()
+		if cv.State != a2a.StateCanceled {
+			t.Fatalf("DEF-069: expected canceled TaskView from blocked create, got %+v", cv)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for canceled POST /a2a/tasks response")
+	}
+}
+
+

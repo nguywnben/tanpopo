@@ -57,21 +57,24 @@ type createLogicalModelRequest struct {
 }
 
 type rateCardNanoUSDDTO struct {
-	InputTokenNanoUSD      int64 `json:"input_token_nano_usd"`
-	OutputTokenNanoUSD     int64 `json:"output_token_nano_usd"`
-	CacheReadTokenNanoUSD  int64 `json:"cache_read_token_nano_usd"`
-	CacheWriteTokenNanoUSD int64 `json:"cache_write_token_nano_usd"`
-	ReasoningTokenNanoUSD  int64 `json:"reasoning_token_nano_usd"`
-	ImageUnitNanoUSD       int64 `json:"image_unit_nano_usd"`
-	AudioSecNanoUSD        int64 `json:"audio_sec_nano_usd"`
-	DocumentPageNanoUSD    int64 `json:"document_page_nano_usd"`
-	SelfHostedZeroRate     bool  `json:"self_hosted_zero_rate"`
+	InputTokenNanoUSD      int64  `json:"input_token_nano_usd"`
+	OutputTokenNanoUSD     int64  `json:"output_token_nano_usd"`
+	CacheReadTokenNanoUSD  int64  `json:"cache_read_token_nano_usd"`
+	CacheWriteTokenNanoUSD int64  `json:"cache_write_token_nano_usd"`
+	ReasoningTokenNanoUSD  int64  `json:"reasoning_token_nano_usd"`
+	ImageUnitNanoUSD       int64  `json:"image_unit_nano_usd"`
+	AudioSecNanoUSD        int64  `json:"audio_sec_nano_usd"`
+	DocumentPageNanoUSD    int64  `json:"document_page_nano_usd"`
+	SelfHostedZeroRate     bool   `json:"self_hosted_zero_rate"`
+	TokenRateUnit          string `json:"token_rate_unit,omitempty"`
 }
 
 type storedPricingDocument struct {
+	PricingSchemaVersion     int    `json:"pricing_schema_version,omitempty"`
+	TokenRateUnit            string `json:"token_rate_unit,omitempty"`
 	EnvID                    string `json:"env_id,omitempty"`
-	InputPer1MNanoUSD        int64  `json:"input_per_1m_nano_usd"`
-	OutputPer1MNanoUSD       int64  `json:"output_per_1m_nano_usd"`
+	InputPer1MNanoUSD        int64  `json:"input_per_1m_nano_usd,omitempty"`
+	OutputPer1MNanoUSD       int64  `json:"output_per_1m_nano_usd,omitempty"`
 	CacheReadPer1MNanoUSD    int64  `json:"cache_read_per_1m_nano_usd,omitempty"`
 	CacheWritePer1MNanoUSD   int64  `json:"cache_write_per_1m_nano_usd,omitempty"`
 	ReasoningPer1MNanoUSD    int64  `json:"reasoning_per_1m_nano_usd,omitempty"`
@@ -735,7 +738,15 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	pricingDoc := encodeStoredPricingDocument(envID, *req.RateCard)
+	rawUnit := strings.TrimSpace(req.RateCard.TokenRateUnit)
+	if rawUnit != "" && !strings.EqualFold(rawUnit, "NANO_USD_PER_TOKEN") && !strings.EqualFold(rawUnit, "nano_usd_per_token") {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "new deployments must use canonical token_rate_unit NANO_USD_PER_TOKEN", false, nil)
+		return
+	}
+	canonicalCard := *req.RateCard
+	canonicalCard.TokenRateUnit = "NANO_USD_PER_TOKEN"
+
+	pricingDoc := encodeStoredPricingDocument(envID, canonicalCard)
 	pricingBytes, err := json.Marshal(pricingDoc)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding rate card", true, nil)
@@ -816,7 +827,7 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 		State:              state,
 		IdleChunkTimeoutMs: idleTO,
 		FirstByteTimeoutMs: fbTO,
-		RateCard:           *req.RateCard,
+		RateCard:           canonicalCard,
 		Version:            1,
 	})
 }
@@ -904,7 +915,13 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "rate_card nano-USD values cannot be negative", false, nil)
 			return
 		}
+		rawUnit := strings.TrimSpace(req.RateCard.TokenRateUnit)
+		if rawUnit != "" && !strings.EqualFold(rawUnit, "NANO_USD_PER_TOKEN") && !strings.EqualFold(rawUnit, "nano_usd_per_token") {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "updated rate_card must use canonical token_rate_unit NANO_USD_PER_TOKEN", false, nil)
+			return
+		}
 		nextCard = *req.RateCard
+		nextCard.TokenRateUnit = "NANO_USD_PER_TOKEN"
 	}
 
 	pricingDoc := encodeStoredPricingDocument(cur.EnvID, nextCard)
@@ -1343,13 +1360,26 @@ func validateRateCardNonNegative(rc rateCardNanoUSDDTO) bool {
 }
 
 func encodeStoredPricingDocument(envID string, rc rateCardNanoUSDDTO) storedPricingDocument {
+	if strings.EqualFold(strings.TrimSpace(rc.TokenRateUnit), "LEGACY_NANO_USD_PER_1M") {
+		return storedPricingDocument{
+			PricingSchemaVersion:    1,
+			TokenRateUnit:           "legacy_nano_usd_per_1m",
+			EnvID:                   envID,
+			InputPer1MNanoUSD:       rc.InputTokenNanoUSD,
+			OutputPer1MNanoUSD:      rc.OutputTokenNanoUSD,
+			CacheReadPer1MNanoUSD:   rc.CacheReadTokenNanoUSD,
+			CacheWritePer1MNanoUSD:  rc.CacheWriteTokenNanoUSD,
+			ReasoningPer1MNanoUSD:   rc.ReasoningTokenNanoUSD,
+			ImagePerUnitNanoUSD:     rc.ImageUnitNanoUSD,
+			AudioInputPerSecNanoUSD: rc.AudioSecNanoUSD,
+			DocumentPageNanoUSD:     rc.DocumentPageNanoUSD,
+			SelfHostedZeroRate:      rc.SelfHostedZeroRate,
+		}
+	}
 	return storedPricingDocument{
+		PricingSchemaVersion:     2,
+		TokenRateUnit:            "nano_usd_per_token",
 		EnvID:                    envID,
-		InputPer1MNanoUSD:        rc.InputTokenNanoUSD,
-		OutputPer1MNanoUSD:       rc.OutputTokenNanoUSD,
-		CacheReadPer1MNanoUSD:    rc.CacheReadTokenNanoUSD,
-		CacheWritePer1MNanoUSD:   rc.CacheWriteTokenNanoUSD,
-		ReasoningPer1MNanoUSD:    rc.ReasoningTokenNanoUSD,
 		ImagePerUnitNanoUSD:      rc.ImageUnitNanoUSD,
 		AudioInputPerSecNanoUSD:  rc.AudioSecNanoUSD,
 		DocumentPageNanoUSD:      rc.DocumentPageNanoUSD,
@@ -1368,16 +1398,43 @@ func encodeStoredPricingDocument(envID string, rc rateCardNanoUSDDTO) storedPric
 func decodeStoredPricingDocument(raw string) (string, rateCardNanoUSDDTO) {
 	var doc storedPricingDocument
 	_ = json.Unmarshal([]byte(raw), &doc)
+	hasLegacyPer1M := doc.InputPer1MNanoUSD > 0 ||
+		doc.OutputPer1MNanoUSD > 0 ||
+		doc.CacheReadPer1MNanoUSD > 0 ||
+		doc.CacheWritePer1MNanoUSD > 0 ||
+		doc.ReasoningPer1MNanoUSD > 0
+	isCanonical := doc.PricingSchemaVersion >= 2 ||
+		strings.EqualFold(strings.TrimSpace(doc.TokenRateUnit), "nano_usd_per_token") ||
+		!hasLegacyPer1M
+	unit := "NANO_USD_PER_TOKEN"
+	if !isCanonical {
+		unit = "LEGACY_NANO_USD_PER_1M"
+	}
+	var inTok, outTok, crTok, cwTok, reasTok int64
+	if isCanonical {
+		inTok = doc.InputTokenNanoUSD
+		outTok = doc.OutputTokenNanoUSD
+		crTok = doc.CacheReadTokenNanoUSD
+		cwTok = doc.CacheWriteTokenNanoUSD
+		reasTok = doc.ReasoningTokenNanoUSD
+	} else {
+		inTok = coalescePositiveInt64(doc.InputPer1MNanoUSD, doc.InputTokenNanoUSD)
+		outTok = coalescePositiveInt64(doc.OutputPer1MNanoUSD, doc.OutputTokenNanoUSD)
+		crTok = coalescePositiveInt64(doc.CacheReadPer1MNanoUSD, doc.CacheReadTokenNanoUSD)
+		cwTok = coalescePositiveInt64(doc.CacheWritePer1MNanoUSD, doc.CacheWriteTokenNanoUSD)
+		reasTok = coalescePositiveInt64(doc.ReasoningPer1MNanoUSD, doc.ReasoningTokenNanoUSD)
+	}
 	rc := rateCardNanoUSDDTO{
-		InputTokenNanoUSD:      coalescePositiveInt64(doc.InputTokenNanoUSD, doc.InputPer1MNanoUSD),
-		OutputTokenNanoUSD:     coalescePositiveInt64(doc.OutputTokenNanoUSD, doc.OutputPer1MNanoUSD),
-		CacheReadTokenNanoUSD:  coalescePositiveInt64(doc.CacheReadTokenNanoUSD, doc.CacheReadPer1MNanoUSD),
-		CacheWriteTokenNanoUSD: coalescePositiveInt64(doc.CacheWriteTokenNanoUSD, doc.CacheWritePer1MNanoUSD),
-		ReasoningTokenNanoUSD:  coalescePositiveInt64(doc.ReasoningTokenNanoUSD, doc.ReasoningPer1MNanoUSD),
+		InputTokenNanoUSD:      inTok,
+		OutputTokenNanoUSD:     outTok,
+		CacheReadTokenNanoUSD:  crTok,
+		CacheWriteTokenNanoUSD: cwTok,
+		ReasoningTokenNanoUSD:  reasTok,
 		ImageUnitNanoUSD:       coalescePositiveInt64(doc.ImageUnitNanoUSD, doc.ImagePerUnitNanoUSD),
 		AudioSecNanoUSD:        coalescePositiveInt64(doc.AudioSecNanoUSD, doc.AudioInputPerSecNanoUSD),
 		DocumentPageNanoUSD:    coalescePositiveInt64(doc.DocumentPageTokenNanoUSD, doc.DocumentPageNanoUSD),
 		SelfHostedZeroRate:     doc.SelfHostedZeroRate,
+		TokenRateUnit:          unit,
 	}
 	return strings.TrimSpace(doc.EnvID), rc
 }

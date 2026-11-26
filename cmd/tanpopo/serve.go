@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -374,6 +375,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
 	watcherDone := make(chan struct{})
 	var webhookDone chan struct{}
+	var vkeyReaperDone chan struct{}
 	var closeWebhookDispatcher func() error
 	var webhookDispatcher *webhook.Dispatcher
 	var approvalMaintenanceDone chan struct{}
@@ -459,6 +461,9 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 			}
 			if approvalMaintenanceDone != nil {
 				<-approvalMaintenanceDone
+			}
+			if vkeyReaperDone != nil {
+				<-vkeyReaperDone
 			}
 			if budgetLoopDone != nil {
 				<-budgetLoopDone
@@ -825,6 +830,28 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 			cleanup()
 			return nil, nil, fmt.Errorf("initialize virtual keys: %w", err)
 		}
+		vkeyReapInterval := 2 * time.Second
+		if rawInterval := strings.TrimSpace(os.Getenv("TANPOPO_VKEY_ROTATION_REAP_INTERVAL")); rawInterval != "" {
+			if parsedInterval, pErr := time.ParseDuration(rawInterval); pErr == nil && parsedInterval > 0 {
+				vkeyReapInterval = parsedInterval
+			}
+		}
+		vkeyReaperDone = make(chan struct{})
+		go func() {
+			defer close(vkeyReaperDone)
+			ticker := time.NewTicker(vkeyReapInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runtimeCtx.Done():
+					return
+				case <-ticker.C:
+					if _, rErr := vkeys.FinalizeExpiredRotations(runtimeCtx); rErr != nil && !errors.Is(rErr, context.Canceled) {
+						slog.Warn("virtual key expired rotation sweep failed", "error", rErr)
+					}
+				}
+			}
+		}()
 		var providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 		if dataServer != nil {
 			providerRuntimeFactory = dataServer.AcquireProviderRuntime
