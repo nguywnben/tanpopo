@@ -114,6 +114,9 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP129 consecutive Virtual Key rotation](checkpoints/CP129-consecutive-virtual-key-rotation.md)
 - [CP130 stale-ETag rotation conflict](checkpoints/CP130-stale-rotation-optimistic-conflict.md)
 - [CP131 Virtual Key scope change during rotation](checkpoints/CP131-virtual-key-scope-change-during-rotation.md)
+- [CP132 Virtual Key grace expiry](checkpoints/CP132-virtual-key-rotation-expiry.md)
+- [DEF-075 expired rotation lifecycle report](reports/DEF-075-rotation-expiry-state-never-finalized.md)
+- [DEF-076 expired-key error contract report](reports/DEF-076-expired-key-error-contract-conflict.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -325,3 +328,6 @@ CP130 replayed the original v1 rotation request after the real UI had advanced t
 
 
 CP131 changed the route grant while a key was dual-valid after rotation. The real Console saved `/v1/chat/completions`; both old and new credentials then received 403 on `/v1/models`, with persistent version increment and a same-target `virtual_key.updated` audit event. Graceful revoke denied both credentials. All UI screenshots were visually inspected, and the key is revoked. No defect was assigned. Broader plane/model/scope combinations and concurrent grant writes remain open; historical and new-defect totals are unchanged. QA continues; **GATE-REL-07 remains BLOCKED.** Evidence: [CP131](checkpoints/CP131-virtual-key-scope-change-during-rotation.md) and [sanitized results](evidence/CP131-rotation-scope-edit-results.json).
+
+
+CP132 tested the minimum documented API grace of 60 seconds through the real UI action with a test-only request override. At 62.317 seconds the previous credential returned 401 while the current credential remained usable, but authenticated API readback and the real Access & Keys screenshot still showed `ROTATING_DUAL_VALID` version 2, with no `virtual_key.rotation_finalized` event before manual revoke. This is DEF-075 (Moderate, FAIL); source inspection found the finalizer method but no production Go call site. The expiry code also differs across frozen docs (`virtual_key_expired` / `key_expired`) and runtime (`invalid_virtual_key`); DEF-076 is PARTIAL pending a security-owned contract decision, preserving uniform auth failures unless specifically approved. The test key and earlier harness key were revoked; screenshots were visually inspected. New findings now include 25 FAIL (DEF-051–075) and one PARTIAL (DEF-076). Historical status remains 24 scoped PASS, 6 PARTIAL, one FAIL (DEF-025) and 19 UNVERIFIED. QA remains ongoing; **GATE-REL-07 remains BLOCKED.** Evidence: [CP132](checkpoints/CP132-virtual-key-rotation-expiry.md), [DEF-075](reports/DEF-075-rotation-expiry-state-never-finalized.md), and [DEF-076](reports/DEF-076-expired-key-error-contract-conflict.md).
