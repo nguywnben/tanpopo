@@ -51,3 +51,8 @@ The Ollama manifest's usage extraction may only map OpenAI-style `usage.prompt_t
 
 
 CP96 repeated the meter reconciliation with two synchronous native idempotency VKEYs. Each actual first dispatch returned Estimated and generated one Estimated usage request in FinOps (1 micro-USD). Same-key replay added no second settlement. The trace rows for successful first dispatches, replays, and the 422 payload mismatch were all labeled Exact; trace cost stayed $0. This adds a business-workflow context to DEF-051 and confirms the settlement-side estimate is retained once per upstream dispatch. See CP94/CP96 and `evidence/CP96-idempotency-usage-reconciliation.json`.
+
+
+### Native multimodal image retest (CP119)
+
+A real Chromium-created vision model, active zero-rate deployment, single-target route and PROVIDER-plane VKEY completed one cookie-free `POST /native/ollama/api/chat` with a synthetic 1×1 PNG. The local Ollama-compatible fixture confirmed one forwarded image and returned `prompt_eval_count: 8` / `eval_count: 7`; the request returned HTTP 200. Virtual-Key Chargeback classified the request as one Estimated and zero Exact request despite the provider counters. This extends DEF-051 to a native image-bearing request. The zero-rate test does not establish nonzero bill correctness or image comprehension. See [CP119](../checkpoints/CP119-ollama-native-multimodal-image.md) and its sanitized evidence.

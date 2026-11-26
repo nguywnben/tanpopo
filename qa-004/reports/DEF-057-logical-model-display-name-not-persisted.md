@@ -58,3 +58,8 @@ Model catalogs become harder to scan and distinguish when names are technical id
 4. Existing models with no stored display name receive an explicit compatible fallback without changing their canonical slugs or capabilities.
 5. Add API and real-browser regression coverage for distinct labels, refresh persistence, pagination, and legacy rows.
 
+
+
+### Native vision setup retest (CP119)
+
+The real Models form accepted the human label `QA004 CP119 Ollama Vision Canary` with slug `qa004-cp119-vision-canary`. After create/readback, the actual catalog showed the slug as the display text. This independently repeats the display-name loss while creating a native multimodal model. The model was then successfully used by the isolated image request. See [CP119](../checkpoints/CP119-ollama-native-multimodal-image.md) and its model registration screenshot.
