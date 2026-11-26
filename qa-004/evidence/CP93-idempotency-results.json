@@ -1,0 +1,69 @@
+{
+  "upstream_request_count_before": 10,
+  "upstream_request_count_after_same_key_replay_and_mismatch": 10,
+  "upstream_request_count_after_same_idempotency_key_on_second_virtual_key": 10,
+  "first": {
+    "status": 503,
+    "request_id": "req_01m8apd6sme008p566h0cz2bkk",
+    "error": "no_compliant_deployment_available",
+    "usage_accuracy": null,
+    "body_sha256": "3b0a7539cf1b285186c88b77bfebc20d05ea775963019af65ef1a4b09aef7727",
+    "assistant_content": null
+  },
+  "replay": {
+    "status": 503,
+    "request_id": "req_01m8apd6sve00ab4mb1n3kp86g",
+    "error": "no_compliant_deployment_available",
+    "usage_accuracy": null,
+    "body_sha256": "6c11a733f8fbf0b759afed64248fbf59a5c9f4b3837c7738b6160c77221d755d",
+    "assistant_content": null
+  },
+  "mismatch": {
+    "status": 503,
+    "request_id": "req_01m8apd6t1e008r9aerkqdvggx",
+    "error": "no_compliant_deployment_available",
+    "usage_accuracy": null,
+    "body_sha256": "b1a582865ea2d92c4247bd4eb1646a6b75fbdef28b99835f25535cff9ed45bbc",
+    "assistant_content": null
+  },
+  "cross_key": {
+    "status": 503,
+    "request_id": "req_01m8apd6t5e009whqswmqccn4g",
+    "error": "no_compliant_deployment_available",
+    "usage_accuracy": null,
+    "body_sha256": "19256d1f6b28e4feeec58a5bc2ea8165e1262015d4a904727d0a860d93b2595c",
+    "assistant_content": null
+  },
+  "pre_revoke_repeat": {
+    "status": 503,
+    "request_id": "req_01m8apd6t9e009g0mayqenrznw",
+    "error": "no_compliant_deployment_available",
+    "usage_accuracy": null,
+    "body_sha256": "f5ba423acffb1ce1f1649bf3d191211e191b27a874d0032dfc4facbfa61b76e7",
+    "assistant_content": null
+  },
+  "post_revoke": {
+    "status": 401,
+    "request_id": "req_01m8apd6v4e0086ksym90ps78h",
+    "error": "invalid_virtual_key",
+    "usage_accuracy": null,
+    "body_sha256": "1b7c6d4b59a924ff4b723ab76bbde4f75e33eeb2862d3487baa87b853673f010",
+    "assistant_content": null
+  },
+  "key_cleanup": {
+    "a": {
+      "status": 200,
+      "state": "REVOKED",
+      "version": 2
+    },
+    "b": {
+      "status": 200,
+      "state": "REVOKED",
+      "version": 2
+    }
+  },
+  "scope_region": "ON_PREM",
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "scope": "QA004 Test Root Org / QA-004 Isolated Canary / qa004-scope-canary-env",
+  "classification": "BLOCKED setup attempt: canary scope has no provider route; these 503 responses do not test idempotency and made no fixture calls. Corrected default/dev journey is documented in CP94."
+}

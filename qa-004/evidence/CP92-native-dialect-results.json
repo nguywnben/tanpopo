@@ -5,8 +5,12 @@
     "name": "QA004 CP92 Anthropic dialect guard",
     "id": "vky_01m8anszx8e00bnhsyhjgbwphg",
     "initial_grants": {
-      "planes": ["PROVIDER"],
-      "routes": ["/native/anthropic/*"]
+      "planes": [
+        "PROVIDER"
+      ],
+      "routes": [
+        "/native/anthropic/*"
+      ]
     },
     "final_state": "REVOKED",
     "final_version": 2
@@ -17,7 +21,7 @@
       "status": 503,
       "error": "no_compliant_deployment_available",
       "request_id": "req_01m8ant0aee0083ddz0th1xan0",
-      "interpretation": "Anthropic dispatch blocked: the isolated environment has no configured Anthropic deployment. Does not verify Anthropic interoperability or the 400 dialect_mismatch contract."
+      "interpretation": "The key was bound to QA-004 Isolated Canary, which has no provider route. This is a no-route workspace-scope result, not evidence of provider failure, Anthropic availability, or dialect mismatch behavior. See CP95 for the correctly scoped default/dev mismatch retest."
     },
     {
       "path": "/native/ollama/api/chat",
@@ -37,8 +41,8 @@
   "classification": {
     "native_route_grant_boundary": "PASS (scoped)",
     "encoded_native_path_traversal": "PASS (scoped)",
-    "anthropic_native_dispatch": "BLOCKED",
-    "dialect_mismatch_contract": "UNVERIFIED",
+    "anthropic_native_dispatch": "UNVERIFIED (no positive Anthropic deployment configured)",
+    "dialect_mismatch_contract": "UNVERIFIED in CP92; PASS (scoped) in CP95",
     "new_product_defect": false
   }
 }

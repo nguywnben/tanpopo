@@ -1,0 +1,74 @@
+{
+  "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "route_inventory": [
+    {
+      "slug": "qa004-loopback",
+      "env_id": "env_01m895k8pee008b5ah423mhysr",
+      "target_count": 1
+    }
+  ],
+  "upstream_request_count_before": 10,
+  "upstream_request_count_after_same_key_replay_and_mismatch": 11,
+  "upstream_request_count_after_same_idempotency_key_on_second_virtual_key": 12,
+  "first": {
+    "status": 200,
+    "request_id": "req_01m8apj9xwe00bb05ge2fgh080",
+    "error": null,
+    "usage_accuracy": "ESTIMATED",
+    "body_sha256": "fe72d046cdfd16bba53bb9dd4fdddb217c0e7d2dd098dab6fbb42b677ba295fd",
+    "assistant_content": "Native synthetic response."
+  },
+  "replay": {
+    "status": 200,
+    "request_id": "req_01m8apj9yde00ap3yawsph9xjq",
+    "error": null,
+    "usage_accuracy": "ESTIMATED",
+    "body_sha256": "fe72d046cdfd16bba53bb9dd4fdddb217c0e7d2dd098dab6fbb42b677ba295fd",
+    "assistant_content": "Native synthetic response."
+  },
+  "mismatch": {
+    "status": 422,
+    "request_id": "req_01m8apj9yje00b1c8bdwvcgjpr",
+    "error": "idempotency_key_reused_mismatch",
+    "usage_accuracy": null,
+    "body_sha256": "aaf767ea54ecbd9ad774b00821e8074e48b98c84b7a5a7e03d8d1d88b6333b6b",
+    "assistant_content": null
+  },
+  "cross_key": {
+    "status": 200,
+    "request_id": "req_01m8apj9ype00awtz42y2pg12b",
+    "error": null,
+    "usage_accuracy": "ESTIMATED",
+    "body_sha256": "fe72d046cdfd16bba53bb9dd4fdddb217c0e7d2dd098dab6fbb42b677ba295fd",
+    "assistant_content": "Native synthetic response."
+  },
+  "pre_revoke_repeat": {
+    "status": 200,
+    "request_id": "req_01m8apj9z4e009thyr6re41mex",
+    "error": null,
+    "usage_accuracy": "ESTIMATED",
+    "body_sha256": "fe72d046cdfd16bba53bb9dd4fdddb217c0e7d2dd098dab6fbb42b677ba295fd",
+    "assistant_content": "Native synthetic response."
+  },
+  "post_revoke": {
+    "status": 401,
+    "request_id": "req_01m8apj9zxe009qdtr7dzfhcpe",
+    "error": "invalid_virtual_key",
+    "usage_accuracy": null,
+    "body_sha256": "4adad3ffdb046dabceb555fd7cb6dc6d0f731783380b9bcbe2449e606649c8d5",
+    "assistant_content": null
+  },
+  "key_cleanup": {
+    "a": {
+      "status": 200,
+      "state": "REVOKED",
+      "version": 2
+    },
+    "b": {
+      "status": 200,
+      "state": "REVOKED",
+      "version": 2
+    }
+  },
+  "scope_region": "ON_PREM"
+}
