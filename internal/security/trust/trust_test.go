@@ -141,3 +141,26 @@ func TestEvaluateOrgExtensionTrustEnterpriseKeyWithdrawalAndInstallStates(t *tes
 		}
 	}
 }
+
+func TestDEF071_ReservedNamespaceSpoofVariations(t *testing.T) {
+	t.Parallel()
+	for _, reserved := range []string{
+		"@tanpopo/canary",
+		"@tanpopo-qa004-spoof/canary",
+		"@TANPOPO-QA004_SPOOF/canary",
+		"@tanpopo-official-v2/adapter",
+	} {
+		if !trust.IsReservedTanpopoNamespace(reserved) {
+			t.Fatalf("expected %q to match reserved @tanpopo namespace", reserved)
+		}
+	}
+	for _, allowed := range []string{
+		"@acme/adapter",
+		"@tanpopoext/adapter",
+	} {
+		if trust.IsReservedTanpopoNamespace(allowed) {
+			t.Fatalf("expected %q NOT to match reserved @tanpopo namespace", allowed)
+		}
+	}
+}
+

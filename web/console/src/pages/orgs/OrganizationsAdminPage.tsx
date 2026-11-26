@@ -37,12 +37,16 @@ export function OrganizationsAdminPage({
   multiOrgEnabled,
   onSelectOrg,
   onOrganizationsChanged,
+  receipt: controlledReceipt,
+  onReceiptChange,
 }: {
   roles: Role[];
   activeOrgId: string;
   multiOrgEnabled: boolean;
   onSelectOrg: (orgId: string) => void;
   onOrganizationsChanged: () => void | Promise<void>;
+  receipt?: ShredReceipt | null;
+  onReceiptChange?: (receipt: ShredReceipt | null) => void;
 }) {
   const {navigate} = useRouter();
   const {t, formatDateTime} = useI18n();
@@ -53,7 +57,15 @@ export function OrganizationsAdminPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [receipt, setReceipt] = useState<ShredReceipt | null>(null);
+  const [localReceipt, setLocalReceipt] = useState<ShredReceipt | null>(null);
+  const receipt = controlledReceipt !== undefined ? controlledReceipt : localReceipt;
+  const updateReceipt = useCallback(
+    (next: ShredReceipt | null) => {
+      setLocalReceipt(next);
+      onReceiptChange?.(next);
+    },
+    [onReceiptChange],
+  );
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -63,9 +75,9 @@ export function OrganizationsAdminPage({
   const [deleteTarget, setDeleteTarget] = useState<Organization | null>(null);
   const [shredReason, setShredReason] = useState('');
 
-  const refresh = useCallback(async (): Promise<Organization[]> => {
+  const refresh = useCallback(async (clearError = true): Promise<Organization[]> => {
     setLoading(true);
-    setError('');
+    if (clearError) setError('');
     try {
       const items = await listOrganizations();
       setOrgs(items);
@@ -120,21 +132,24 @@ export function OrganizationsAdminPage({
       const removedId = deleteTarget.id;
       setDeleteTarget(null);
       setShredReason('');
-      if ('destroyed_dek_id' in res) {
-        setReceipt(res);
+      const hasImmediateReceipt = 'destroyed_dek_id' in res && typeof res.destroyed_dek_id === 'string' && res.destroyed_dek_id.length > 0;
+      if (hasImmediateReceipt) {
+        updateReceipt(res);
       } else {
-        setReceipt(null);
+        updateReceipt(null);
         setNotice(t('state.PENDING_APPROVAL'));
       }
       const remaining = await refresh();
       await onOrganizationsChanged();
       const nextHealthy = remaining.find(item => item.status !== 'DELETING' && item.status !== 'PENDING_ERASURE') ?? remaining[0];
-      if ('destroyed_dek_id' in res && removedId === activeOrgId && nextHealthy) {
+      if (hasImmediateReceipt && removedId === activeOrgId && nextHealthy) {
         onSelectOrg(nextHealthy.id);
       }
     } catch (cause) {
+      setDeleteTarget(null);
+      updateReceipt(null);
       setError(cause instanceof Error ? cause.message : t('common.requestFailed'));
-      await refresh();
+      await refresh(false);
     } finally {
       setBusy(false);
     }
@@ -147,16 +162,18 @@ export function OrganizationsAdminPage({
     setNotice('');
     try {
       const res = await finalizeOrganizationErasure(org.id);
-      setReceipt(res);
+      const hasImmediateReceipt = 'destroyed_dek_id' in res && typeof res.destroyed_dek_id === 'string' && res.destroyed_dek_id.length > 0;
+      updateReceipt(hasImmediateReceipt ? res : null);
       const remaining = await refresh();
       await onOrganizationsChanged();
       const nextHealthy = remaining.find(item => item.status !== 'DELETING' && item.status !== 'PENDING_ERASURE') ?? remaining[0];
-      if (org.id === activeOrgId && nextHealthy) {
+      if (hasImmediateReceipt && org.id === activeOrgId && nextHealthy) {
         onSelectOrg(nextHealthy.id);
       }
     } catch (cause) {
+      updateReceipt(null);
       setError(cause instanceof Error ? cause.message : t('common.requestFailed'));
-      await refresh();
+      await refresh(false);
     } finally {
       setBusy(false);
     }

@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	migrationspostgres "github.com/nguywnben/tanpopo/db/migrations/postgres"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/postgres"
@@ -468,8 +470,12 @@ func TestPostgresClusterConcurrentMigrationsFMEA06(t *testing.T) {
 	if err := st.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM schema_migrations WHERE dirty = FALSE`).Scan(&migCount); err != nil {
 		t.Fatalf("count schema_migrations: %v", err)
 	}
-	if migCount != 3 {
-		t.Fatalf("schema_migrations count = %d, want 3", migCount)
+	expectedMigrations, err := fs.Glob(migrationspostgres.FS, "*.sql")
+	if err != nil {
+		t.Fatalf("glob embedded postgres migrations: %v", err)
+	}
+	if migCount != len(expectedMigrations) {
+		t.Fatalf("schema_migrations count = %d, want %d", migCount, len(expectedMigrations))
 	}
 }
 

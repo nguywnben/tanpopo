@@ -286,10 +286,12 @@ export function OperationsPage({pathname, projectId, roles}: {pathname: string; 
               rowKey={row => row.id ?? 'unknown-node'}
               emptyTitle={t('operations.emptyNodesTitle')}
               columns={[
-                {id: 'id', header: t('operations.col.nodeId'), primary: true, width: '32%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.id ?? t('common.unknown')}</span>},
-                {id: 'epoch', header: t('operations.kpi.configEpoch'), width: '20%', render: row => <span className="mono">{row.config_epoch ?? '—'}</span>},
-                {id: 'age', header: t('operations.kpi.snapshotAge'), width: '24%', render: row => <span className="num">{t('common.ms', {value: formatNumber(row.snapshot_age_ms ?? 0)})}</span>},
-                {id: 'health', header: t('operations.col.health'), width: '24%', render: row => <StatusPill tone={stateTone(row.health ?? 'unknown')} label={formatOperationalState(row.health ?? 'unknown')} />},
+                {id: 'id', header: t('operations.col.nodeId'), primary: true, width: '24%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.id ?? t('common.unknown')}</span>},
+                {id: 'role', header: t('operations.col.role'), width: '14%', render: row => <span className="mono">{row.role ?? t('common.unknown')}</span>},
+                {id: 'epoch', header: t('operations.kpi.configEpoch'), width: '12%', render: row => <span className="num mono">{row.config_epoch ?? '—'}</span>},
+                {id: 'age', header: t('operations.kpi.snapshotAge'), width: '16%', render: row => <span className="num">{t('common.ms', {value: formatNumber(row.snapshot_age_ms ?? 0)})}</span>},
+                {id: 'heartbeat', header: t('operations.col.lastHeartbeat'), width: '18%', render: row => <span className="num tp-muted">{row.last_heartbeat_ms ? formatDateTime(row.last_heartbeat_ms) : '—'}</span>},
+                {id: 'health', header: t('operations.col.health'), width: '16%', render: row => <StatusPill tone={stateTone(row.health ?? 'unknown')} label={formatOperationalState(row.health ?? 'unknown')} />},
               ]}
             />
           </section>

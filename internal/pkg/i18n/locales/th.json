@@ -298,5 +298,8 @@
   "cli.bundle.flag.mirror_to": "ไดเรกทอรีภายใน, URI แบบ file:// หรือปลายทาง OCI mirror ภายใน (ไม่บังคับ)",
   "cli.bundle.export.summary": "ส่งออกแพ็กเกจ {{path}} แล้ว ({{count}} ส่วนขยาย, sha256={{sha256}})",
   "cli.bundle.verify.summary": "ตรวจสอบแพ็กเกจ {{path}} แล้ว ({{entries}} รายการ, key={{key}})",
-  "cli.bundle.import.summary": "นำเข้า {{count}} รายการไปยัง {{dest}} แล้ว"
+  "cli.bundle.import.summary": "นำเข้า {{count}} รายการไปยัง {{dest}} แล้ว",
+  "cli.serve.flag.metrics_listen": "ที่อยู่รับฟัง HTTP ภายในสำหรับ Prometheus /metrics (ค่าเริ่มต้น 127.0.0.1:9090)",
+  "cli.serve.flag.otlp_endpoint": "ปลายทาง HTTP OTLP สำหรับสแปน เมตริก และบันทึกเหตุการณ์",
+  "cli.serve.flag.otlp_allow_private_ip": "อนุญาตการส่งออก OTLP ไปยัง IP ส่วนตัวหรือ loopback"
 }

@@ -298,6 +298,7 @@ type LogicalModel struct {
 	ID               string
 	OrgID            *string
 	CanonicalSlug    string
+	DisplayName      string
 	ModalityKind     string
 	ContextWindow    int64
 	MaxOutputTokens  int64
@@ -312,6 +313,7 @@ type CreateLogicalModelParams struct {
 	ID               string
 	OrgID            *string
 	CanonicalSlug    string
+	DisplayName      string
 	ModalityKind     string
 	ContextWindow    int64
 	MaxOutputTokens  int64
@@ -1476,12 +1478,16 @@ func (r *Repository) CreateLogicalModel(ctx context.Context, params CreateLogica
 				return err
 			}
 		}
+		displayName := strings.TrimSpace(params.DisplayName)
+		if displayName == "" {
+			displayName = strings.TrimSpace(params.CanonicalSlug)
+		}
 		if _, err := tx.ExecContext(ctx, port.Rebind(r.dialect, `
 			INSERT INTO logical_models (
-				id, org_id, canonical_slug, modality_kind, context_window,
+				id, org_id, canonical_slug, display_name, modality_kind, context_window,
 				max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
-			id, nullStrPtr(params.OrgID), strings.TrimSpace(params.CanonicalSlug), params.ModalityKind,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
+			id, nullStrPtr(params.OrgID), strings.TrimSpace(params.CanonicalSlug), displayName, params.ModalityKind,
 			params.ContextWindow, params.MaxOutputTokens, capsJSON, now, now,
 		); err != nil {
 			return mapDBError(err)
@@ -1519,20 +1525,20 @@ func (r *Repository) GetLogicalModel(ctx context.Context, orgID *string, id stri
 	)
 	if orgID != nil && strings.TrimSpace(*orgID) != "" {
 		query = port.Rebind(r.dialect, `
-		SELECT id, org_id, canonical_slug, modality_kind, context_window,
+		SELECT id, org_id, canonical_slug, COALESCE(NULLIF(display_name, ''), canonical_slug), modality_kind, context_window,
 		       max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
 		FROM logical_models WHERE id = ? AND (org_id = ? OR org_id IS NULL)`)
 		args = []any{id, strings.TrimSpace(*orgID)}
 	} else {
 		query = port.Rebind(r.dialect, `
-		SELECT id, org_id, canonical_slug, modality_kind, context_window,
+		SELECT id, org_id, canonical_slug, COALESCE(NULLIF(display_name, ''), canonical_slug), modality_kind, context_window,
 		       max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
 		FROM logical_models WHERE id = ? AND org_id IS NULL`)
 		args = []any{id}
 	}
 	readRow := func(q rowQuerier) error {
 		return q.QueryRowContext(ctx, query, args...).Scan(
-			&out.ID, &rowOrgID, &out.CanonicalSlug, &out.ModalityKind, &out.ContextWindow,
+			&out.ID, &rowOrgID, &out.CanonicalSlug, &out.DisplayName, &out.ModalityKind, &out.ContextWindow,
 			&out.MaxOutputTokens, &capsJSON, &out.Version, &out.CreatedAtMs, &out.UpdatedAtMs,
 		)
 	}
@@ -1942,7 +1948,12 @@ func scanModelDeployment(row interface{ Scan(dest ...any) error }, deploymentID 
 }
 
 func hasNegativePricingRates(p snapshot.PricingNanoUSD) bool {
-	return p.InputPer1MNanoUSD < 0 ||
+	return p.InputTokenNanoUSD < 0 ||
+		p.OutputTokenNanoUSD < 0 ||
+		p.CacheReadTokenNanoUSD < 0 ||
+		p.CacheWriteTokenNanoUSD < 0 ||
+		p.ReasoningTokenNanoUSD < 0 ||
+		p.InputPer1MNanoUSD < 0 ||
 		p.OutputPer1MNanoUSD < 0 ||
 		p.CacheReadPer1MNanoUSD < 0 ||
 		p.CacheWritePer1MNanoUSD < 0 ||

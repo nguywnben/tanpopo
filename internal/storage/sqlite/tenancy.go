@@ -535,13 +535,17 @@ func (r *tenancyRepo) CreateEnvironment(ctx context.Context, orgID, projectID st
 	if params.RequireTestedCaps {
 		reqTested = 1
 	}
+	displayName := strings.TrimSpace(params.DisplayName)
+	if displayName == "" {
+		displayName = strings.TrimSpace(params.Slug)
+	}
 
 	err := r.withWriteTx(ctx, func(exec sqlExecQuery) error {
 		if _, err := exec.ExecContext(ctx, `
 			INSERT INTO environments (
-				id, org_id, project_id, slug, require_tested_caps, version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, ?, ?, ?, 1, ?, ?)`,
-			id, orgID, projectID, params.Slug, reqTested, now, now,
+				id, org_id, project_id, slug, display_name, require_tested_caps, version, created_at_ms, updated_at_ms
+			) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
+			id, orgID, projectID, params.Slug, displayName, reqTested, now, now,
 		); err != nil {
 			return mapSQLiteError(err)
 		}
@@ -562,6 +566,7 @@ func (r *tenancyRepo) CreateEnvironment(ctx context.Context, orgID, projectID st
 		OrgID:             orgID,
 		ProjectID:         projectID,
 		Slug:              params.Slug,
+		DisplayName:       displayName,
 		RequireTestedCaps: params.RequireTestedCaps,
 		Version:           1,
 		CreatedAtMs:       now,
@@ -574,7 +579,7 @@ func (r *tenancyRepo) GetEnvironment(ctx context.Context, orgID, envID string) (
 		return nil, fmt.Errorf("%w: org_id and env_id required", port.ErrInvalidInput)
 	}
 	return scanEnvironment(r.exec.QueryRowContext(ctx, `
-		SELECT id, org_id, project_id, slug, require_tested_caps, version, created_at_ms, updated_at_ms
+		SELECT id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps, version, created_at_ms, updated_at_ms
 		FROM environments WHERE org_id = ? AND id = ?`, orgID, envID))
 }
 
@@ -583,7 +588,7 @@ func (r *tenancyRepo) ListEnvironments(ctx context.Context, orgID, projectID str
 		return nil, fmt.Errorf("%w: org_id and project_id required", port.ErrInvalidInput)
 	}
 	rows, err := r.exec.QueryContext(ctx, `
-		SELECT id, org_id, project_id, slug, require_tested_caps, version, created_at_ms, updated_at_ms
+		SELECT id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps, version, created_at_ms, updated_at_ms
 		FROM environments WHERE org_id = ? AND project_id = ? ORDER BY id ASC`, orgID, projectID)
 	if err != nil {
 		return nil, mapSQLiteError(err)
@@ -613,7 +618,7 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 
 	err := r.withWriteTx(ctx, func(exec sqlExecQuery) error {
 		cur, err := scanEnvironment(exec.QueryRowContext(ctx, `
-			SELECT id, org_id, project_id, slug, require_tested_caps, version, created_at_ms, updated_at_ms
+			SELECT id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps, version, created_at_ms, updated_at_ms
 			FROM environments WHERE org_id = ? AND id = ?`, orgID, envID))
 		if err != nil {
 			return err
@@ -626,6 +631,13 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 		if params.Slug != nil {
 			nextSlug = *params.Slug
 		}
+		nextName := cur.DisplayName
+		if params.DisplayName != nil {
+			nextName = strings.TrimSpace(*params.DisplayName)
+		}
+		if nextName == "" {
+			nextName = nextSlug
+		}
 		nextTested := cur.RequireTestedCaps
 		if params.RequireTestedCaps != nil {
 			nextTested = *params.RequireTestedCaps
@@ -637,9 +649,9 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 
 		res, err := exec.ExecContext(ctx, `
 			UPDATE environments
-			SET slug = ?, require_tested_caps = ?, version = version + 1, updated_at_ms = ?
+			SET slug = ?, display_name = ?, require_tested_caps = ?, version = version + 1, updated_at_ms = ?
 			WHERE org_id = ? AND id = ? AND version = ?`,
-			nextSlug, reqInt, now, orgID, envID, expectedVersion,
+			nextSlug, nextName, reqInt, now, orgID, envID, expectedVersion,
 		)
 		if err != nil {
 			return mapSQLiteError(err)
@@ -661,7 +673,7 @@ func (r *tenancyRepo) UpdateEnvironment(ctx context.Context, orgID, envID string
 			return err
 		}
 		updated, err = scanEnvironment(exec.QueryRowContext(ctx, `
-			SELECT id, org_id, project_id, slug, require_tested_caps, version, created_at_ms, updated_at_ms
+			SELECT id, org_id, project_id, slug, COALESCE(NULLIF(display_name, ''), slug), require_tested_caps, version, created_at_ms, updated_at_ms
 			FROM environments WHERE org_id = ? AND id = ?`, orgID, envID))
 		return err
 	})
@@ -927,7 +939,7 @@ func scanEnvironment(row rowScanner) (*port.Environment, error) {
 	var env port.Environment
 	var req int64
 	if err := row.Scan(
-		&env.ID, &env.OrgID, &env.ProjectID, &env.Slug, &req,
+		&env.ID, &env.OrgID, &env.ProjectID, &env.Slug, &env.DisplayName, &req,
 		&env.Version, &env.CreatedAtMs, &env.UpdatedAtMs,
 	); err != nil {
 		return nil, mapSQLiteError(err)

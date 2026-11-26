@@ -37,7 +37,7 @@ type KillSwitch = components['schemas']['KillSwitchResource'];
 type Approval = components['schemas']['ApprovalRequestResource'];
 
 const securityRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
-const approvalRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
+const approvalRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'];
 
 export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]}) {
   const {navigate} = useRouter();

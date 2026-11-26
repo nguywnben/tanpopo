@@ -9,22 +9,30 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	collogspb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	colmetricspb "go.opentelemetry.io/proto/otlp/collector/metrics/v1"
+	coltracepb "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	"go.uber.org/goleak"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
 	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	"github.com/nguywnben/tanpopo/internal/telemetry/otel"
+	"github.com/nguywnben/tanpopo/internal/telemetry/privacy"
 	"github.com/nguywnben/tanpopo/internal/testkit/clock"
 	"github.com/nguywnben/tanpopo/internal/testkit/netguard"
 )
@@ -633,5 +641,124 @@ func TestBatchRequestTracePersistence(t *testing.T) {
 	}
 	if count != total {
 		t.Fatalf("expected %d persisted traces across batches, got %d", total, count)
+	}
+}
+
+func TestDEF065_OTLPTracesMetricsLogsAndPrivacyScrub(t *testing.T) {
+	t.Cleanup(func() {
+		goleak.VerifyNone(t)
+	})
+
+	var (
+		mu         sync.Mutex
+		traceReqs  []*coltracepb.ExportTraceServiceRequest
+		metricReqs []*colmetricspb.ExportMetricsServiceRequest
+		logReqs    []*collogspb.ExportLogsServiceRequest
+		rawPayloads [][]byte
+	)
+	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		mu.Lock()
+		rawPayloads = append(rawPayloads, body)
+		switch r.URL.Path {
+		case "/v1/traces":
+			req := &coltracepb.ExportTraceServiceRequest{}
+			if uerr := proto.Unmarshal(body, req); uerr == nil {
+				traceReqs = append(traceReqs, req)
+			}
+		case "/v1/metrics":
+			req := &colmetricspb.ExportMetricsServiceRequest{}
+			if uerr := proto.Unmarshal(body, req); uerr == nil {
+				metricReqs = append(metricReqs, req)
+			}
+		case "/v1/logs":
+			req := &collogspb.ExportLogsServiceRequest{}
+			if uerr := proto.Unmarshal(body, req); uerr == nil {
+				logReqs = append(logReqs, req)
+			}
+		default:
+			mu.Unlock()
+			http.NotFound(w, r)
+			return
+		}
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer collector.Close()
+
+	var logOut bytes.Buffer
+	pipe, err := otel.NewPipeline(otel.PipelineConfig{
+		ServiceName:           "tanpopo-test",
+		ServiceVersion:        "1.0.0-test",
+		OTLPEndpoint:          collector.URL,
+		OTLPAllowPrivateIP:    true,
+		OTLPAllowedCIDRs:      []string{"127.0.0.1/32"},
+		CapturePayloads:       false,
+		FlushInterval:         10 * time.Millisecond,
+		MetricsExportInterval: 25 * time.Millisecond,
+		LogOut:                &logOut,
+	})
+	if err != nil {
+		t.Fatalf("NewPipeline: %v", err)
+	}
+
+	ctx := context.Background()
+	_, span := pipe.StartStageSpan(ctx, "RouteAttempt",
+		attribute.String("authorization", "Bearer sk-secret-def065-leak"),
+		attribute.String("prompt", "secret prompt body def065"),
+		attribute.String("route_slug", "chat-default"),
+	)
+	pipe.EndSpan(span, nil)
+
+	pipe.Metrics.RecordHTTPRequest("data_plane", "org_1", "prj_1", "gpt-test", http.StatusOK, "")
+	if lerr := pipe.Logger.Log(privacy.LogRecord{
+		Level:      "INFO",
+		Event:      "gateway_request",
+		EntryPoint: "unified_http",
+		RequestID:  "req_def065",
+		Fields: map[string]any{
+			"authorization": "Bearer sk-secret-def065-leak",
+			"prompt":        "secret prompt body def065",
+			"http_status":   http.StatusOK,
+		},
+	}); lerr != nil {
+		t.Fatalf("Logger.Log: %v", lerr)
+	}
+
+	if err := pipe.ForceFlush(ctx); err != nil {
+		t.Fatalf("ForceFlush: %v", err)
+	}
+	if err := pipe.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+
+	mu.Lock()
+	tracesCount := len(traceReqs)
+	metricsCount := len(metricReqs)
+	logsCount := len(logReqs)
+	allPayloads := make([]byte, 0)
+	for _, b := range rawPayloads {
+		allPayloads = append(allPayloads, b...)
+	}
+	mu.Unlock()
+
+	if tracesCount == 0 {
+		t.Fatalf("expected OTLP /v1/traces export, got 0 batches")
+	}
+	if metricsCount == 0 {
+		t.Fatalf("expected OTLP /v1/metrics export, got 0 batches")
+	}
+	if logsCount == 0 {
+		t.Fatalf("expected OTLP /v1/logs export, got 0 batches")
+	}
+	combined := logOut.String() + "\n" + string(allPayloads)
+	for _, forbidden := range []string{"sk-secret-def065-leak", "secret prompt body def065"} {
+		if strings.Contains(combined, forbidden) {
+			t.Fatalf("privacy leak %q detected in OTLP/log output", forbidden)
+		}
 	}
 }

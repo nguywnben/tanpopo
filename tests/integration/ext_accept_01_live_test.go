@@ -70,6 +70,7 @@ func TestEXTAccept01_LiveBootstrapAndExtensionInstallApproval(t *testing.T) {
 		"TANPOPO_MASTER_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"TANPOPO_MASTER_KEY_FILE=",
 		"TANPOPO_MARKETPLACE_ARCHIVE_ROOT="+marketplaceDir,
+		"TANPOPO_METRICS_LISTEN=127.0.0.1:0",
 		"TANPOPO_TEST_HERMETIC=1",
 	)
 	server.Stdout, server.Stderr = logFile, logFile

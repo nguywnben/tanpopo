@@ -74,6 +74,7 @@ CREATE TABLE environments (
     org_id              VARCHAR(40) NOT NULL,
     project_id          VARCHAR(40) NOT NULL,
     slug                VARCHAR(32) NOT NULL, -- 'dev' | 'staging' | 'prod'
+    display_name        VARCHAR(128) NOT NULL DEFAULT '',
     require_tested_caps BOOLEAN NOT NULL DEFAULT 0 CHECK (require_tested_caps IN (0, 1)),
     version             BIGINT NOT NULL DEFAULT 1 CHECK (version >= 1),
     created_at_ms       BIGINT NOT NULL,
@@ -599,6 +600,7 @@ CREATE TABLE logical_models (
     id                     VARCHAR(40) PRIMARY KEY, -- 'lmd_<26_base32>'
     org_id                 VARCHAR(40) REFERENCES organizations(id) ON DELETE CASCADE,
     canonical_slug         VARCHAR(128) NOT NULL,
+    display_name           VARCHAR(128) NOT NULL DEFAULT '',
     modality_kind          VARCHAR(32) NOT NULL
                            CHECK (modality_kind IN ('CHAT', 'EMBEDDING', 'RERANK', 'MULTIMODAL')),
     context_window         INTEGER NOT NULL CHECK (context_window > 0),
@@ -1254,6 +1256,20 @@ CREATE TABLE distributed_leases (
     expires_at_ms  BIGINT NOT NULL CHECK (expires_at_ms > acquired_at_ms)
 );
 
+CREATE TABLE cluster_nodes (
+    node_id              VARCHAR(128) PRIMARY KEY,
+    role                 VARCHAR(24) NOT NULL CHECK (role IN ('all', 'control-plane', 'data-plane')),
+    listen_addr          VARCHAR(128) NOT NULL DEFAULT '',
+    config_epoch         BIGINT NOT NULL DEFAULT 0 CHECK (config_epoch >= 0),
+    snapshot_age_ms      BIGINT NOT NULL DEFAULT 0 CHECK (snapshot_age_ms >= 0),
+    health               VARCHAR(24) NOT NULL DEFAULT 'unknown',
+    storage_engine       VARCHAR(24) NOT NULL DEFAULT 'sqlite_wal',
+    wal_bytes            BIGINT NOT NULL DEFAULT 0 CHECK (wal_bytes >= 0),
+    loaded_kek_ids_json  TEXT NOT NULL DEFAULT '[]',
+    last_heartbeat_ms    BIGINT NOT NULL,
+    started_at_ms        BIGINT NOT NULL
+);
+
 -- =============================================================================
 -- Query-Plan-Justified Secondary & Partial Indexes
 -- =============================================================================
@@ -1315,3 +1331,6 @@ CREATE INDEX idx_webhook_deliveries_queue
 
 CREATE INDEX idx_config_changelog_org_epoch
     ON config_changelog (org_id, config_epoch DESC);
+
+CREATE INDEX idx_cluster_nodes_heartbeat
+    ON cluster_nodes (last_heartbeat_ms DESC);

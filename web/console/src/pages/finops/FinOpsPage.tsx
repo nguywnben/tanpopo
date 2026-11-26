@@ -23,7 +23,7 @@ type Environment = components['schemas']['Environment'];
 type VirtualKey = components['schemas']['VirtualKeySummary'];
 type GroupBy = 'project' | 'env' | 'key' | 'model';
 
-const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
+const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 
 export function FinOpsPage({
   pathname,
@@ -65,7 +65,7 @@ export function FinOpsPage({
   const [duplicateExisting, setDuplicateExisting] = useState<Budget | null>(null);
   const refreshSeqRef = useRef(0);
 
-  const isOrgOwner = roles.includes('ORG_OWNER');
+  const isOrgOwner = roles.includes('OPERATOR') || roles.includes('ORG_OWNER');
   const canManage = roles.some(role => manageRoles.includes(role));
 
   const refresh = useCallback(async () => {
@@ -319,7 +319,19 @@ export function FinOpsPage({
                   </div>
                 ),
               },
-              {id: 'period', header: t('finops.col.period'), width: '10%', render: row => <span>{t(`finops.period.${row.period}`)}</span>},
+              {
+                id: 'period',
+                header: t('finops.col.period'),
+                width: '13%',
+                render: row => (
+                  <div className="tp-stack-sm">
+                    <span>{t(`finops.period.${row.period}`)}</span>
+                    {row.period_start ? (
+                      <span className="tp-muted mono">{row.period_start.slice(0, 10)}</span>
+                    ) : null}
+                  </div>
+                ),
+              },
               {id: 'exact', header: t('finops.col.exactSettled'), width: '14%', render: row => <span className="mono">{formatMicroUSD(row.settled_exact_micros)}</span>},
               {id: 'estimated', header: t('finops.col.estimated'), width: '14%', render: row => <span className="mono">{formatMicroUSD(row.settled_estimated_micros)}</span>},
               {
@@ -387,11 +399,28 @@ export function FinOpsPage({
             ariaLabel={t('finops.chargebackTableAria')}
             loading={loading}
             rows={rows}
-            rowKey={row => row.group_key}
+            rowKey={row => (row.group_id ? `${groupBy}:${row.group_id}` : `${groupBy}:${row.group_key}:${row.key_prefix ?? ''}`)}
             emptyTitle={t('finops.emptyChargebackTitle')}
             emptyDescription={t('finops.emptyChargebackDesc')}
             columns={[
-              {id: 'group', header: t(`finops.group.${groupBy}`), primary: true, width: '22%', render: row => <span className="mono" style={{fontWeight: 600}}>{row.group_key}</span>},
+              {
+                id: 'group',
+                header: groupBy === 'key' ? t('finops.col.virtualKey') : t(`finops.group.${groupBy}`),
+                primary: true,
+                width: '26%',
+                render: row => (
+                  <div className="tp-stack-sm">
+                    <span className="mono" style={{fontWeight: 600}}>{row.group_key}</span>
+                    {groupBy === 'key' && (row.key_prefix || row.group_id) ? (
+                      <span className="tp-muted mono">
+                        {[row.key_prefix, row.group_id].filter(Boolean).join(' · ')}
+                      </span>
+                    ) : row.group_id && row.group_id !== row.group_key ? (
+                      <span className="tp-muted mono">{row.group_id}</span>
+                    ) : null}
+                  </div>
+                ),
+              },
               {
                 id: 'exact',
                 header: t('finops.col.exact'),

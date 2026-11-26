@@ -777,6 +777,11 @@ func (b *BlindHostCredentialBroker) sendOutbound(ctx context.Context, req Egress
 				}
 			}
 
+			switch unsealed.SecretKind {
+			case vault.SecretKindAPIKey, vault.SecretKindOAuth2TokenSet, vault.SecretKindHMACSecret, vault.SecretKindAWSSigV4Key, vault.SecretKindMTLSClientCert:
+			default:
+				return &Error{HTTPStatus: http.StatusForbidden, Code: "credential_kind_mismatch", Message: "secret kind is not permitted for outbound provider egress", Err: ErrInvalidEgressRequest}
+			}
 			injectionValue := unsealed.Plaintext
 			if item.inj.CryptoSign != nil && item.inj.CryptoSign.Algorithm == SigningAWSSigV4 && unsealed.SecretKind != vault.SecretKindAWSSigV4Key {
 				return &Error{HTTPStatus: http.StatusForbidden, Code: "credential_kind_mismatch", Message: "AWS SigV4 signing requires an AWS signing key secret", Err: ErrInvalidEgressRequest}

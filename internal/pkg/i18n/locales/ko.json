@@ -298,5 +298,8 @@
   "cli.bundle.flag.mirror_to": "선택적 로컬 디렉터리, file:// URI 또는 로컬 OCI 미러 대상",
   "cli.bundle.export.summary": "서명된 번들 {{path}} 내보내기 완료 ({{count}}개 확장, sha256={{sha256}})",
   "cli.bundle.verify.summary": "번들 {{path}} 검증 완료 ({{entries}}개 항목, key={{key}})",
-  "cli.bundle.import.summary": "{{count}}개 에어갭 아티팩트를 {{dest}}(으)로 가져왔습니다"
+  "cli.bundle.import.summary": "{{count}}개 에어갭 아티팩트를 {{dest}}(으)로 가져왔습니다",
+  "cli.serve.flag.metrics_listen": "Prometheus /metrics 내부 HTTP 수신 주소 (기본값 127.0.0.1:9090)",
+  "cli.serve.flag.otlp_endpoint": "추적, 메트릭 및 로그용 OTLP HTTP 엔드포인트",
+  "cli.serve.flag.otlp_allow_private_ip": "사설 또는 루프백 수집기 IP로 OTLP 내보내기 허용"
 }

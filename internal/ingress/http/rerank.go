@@ -213,7 +213,7 @@ func (s *Server) handleRerank(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	budgetSess := s.newRequestBudgetSession(match.Key, meta.RequestID, req.Model, rawBody, preAdm, nil)
+	budgetSess := s.newRequestBudgetSession(r.Context(), match.Key, meta.RequestID, req.Model, rawBody, preAdm, nil)
 	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
 		return
 	}

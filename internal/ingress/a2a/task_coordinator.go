@@ -218,6 +218,9 @@ type TaskCoordinator struct {
 
 	subMu       sync.Mutex
 	subscribers map[string]map[*sseSubscriber]struct{}
+
+	activeMu      sync.Mutex
+	activeCancels map[string]context.CancelFunc
 }
 
 // NewTaskCoordinator constructs an A2A TaskCoordinator.
@@ -244,11 +247,12 @@ func NewTaskCoordinator(cfg CoordinatorConfig) (*TaskCoordinator, error) {
 		cfg.Transport = &BrokerUpstreamTransport{Broker: cfg.Broker}
 	}
 	return &TaskCoordinator{
-		cfg:         cfg,
-		dialect:     port.DetectDialect(context.Background(), cfg.DB),
-		reg:         reg,
-		now:         nowFn,
-		subscribers: make(map[string]map[*sseSubscriber]struct{}),
+		cfg:           cfg,
+		dialect:       port.DetectDialect(context.Background(), cfg.DB),
+		reg:           reg,
+		now:           nowFn,
+		subscribers:   make(map[string]map[*sseSubscriber]struct{}),
+		activeCancels: make(map[string]context.CancelFunc),
 	}, nil
 }
 
@@ -412,6 +416,10 @@ func (c *TaskCoordinator) handleCreateTask(w http.ResponseWriter, r *http.Reques
 		default:
 			writeA2AError(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", err.Error())
 		}
+		return
+	}
+	if view.State == StateCanceled {
+		writeA2AJSON(w, http.StatusOK, view)
 		return
 	}
 	writeA2AJSON(w, http.StatusCreated, view)
@@ -813,20 +821,40 @@ func (c *TaskCoordinator) CreateTask(ctx context.Context, caller snapshot.KeyMat
 			return view, tErr
 		}
 		view = working
-		upResp, dErr := c.cfg.Transport.DispatchTask(ctx, agent, view, req.InputParts)
-		nextState := normalizeSM09State(upResp.State)
+		upResp, wasCanceled, dErr := c.dispatchTaskCancellable(ctx, caller.Key.OrgID, caller.Key.ProjectID, taskID, agent, view, req.InputParts)
+		if wasCanceled {
+			if latest, lErr := c.GetTask(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID); lErr == nil && latest.State == StateCanceled {
+				return latest, nil
+			}
+		}
+		rawUpState := strings.TrimSpace(upResp.State)
+		nextState := normalizeSM09State(rawUpState)
 		if dErr != nil {
+			nextState = StateFailed
+		} else if rawUpState != "" && nextState == "" {
 			nextState = StateFailed
 		} else if nextState == "" {
 			nextState = StateCompleted
 		}
-		doneView, trErr := c.TransitionTask(ctx, caller.Key.OrgID, caller.Key.ProjectID, taskID, TaskTransitionRequest{
+		if nextState == StateWorking {
+			// Task is already in SM-09 working state; preserve working state cleanly without a duplicate working -> working transition.
+			if len(upResp.Artifacts) > 0 {
+				if withArtifacts, aErr := c.appendArtifactsInPlace(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID, upResp.Artifacts); aErr == nil {
+					return withArtifacts, nil
+				}
+			}
+			return view, nil
+		}
+		doneView, trErr := c.TransitionTask(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID, TaskTransitionRequest{
 			State:         nextState,
 			PromptMessage: upResp.PromptMessage,
 			SpentMicros:   upResp.SpentMicros,
 			Artifacts:     upResp.Artifacts,
 		})
 		if trErr != nil {
+			if latest, lErr := c.GetTask(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID); lErr == nil && latest.State == StateCanceled {
+				return latest, nil
+			}
 			if failedView, fErr := c.TransitionTask(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID, TaskTransitionRequest{State: StateFailed}); fErr == nil {
 				view = failedView
 			}
@@ -1271,20 +1299,39 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 		if epErr != nil {
 			return updated, epErr
 		}
-		upResp, dErr := c.cfg.Transport.DispatchTask(ctx, ep, updated, req.InputParts)
-		nextState := normalizeSM09State(upResp.State)
+		upResp, wasCanceled, dErr := c.dispatchTaskCancellable(ctx, orgID, projectID, taskID, ep, updated, req.InputParts)
+		if wasCanceled {
+			if latest, lErr := c.GetTask(context.WithoutCancel(ctx), orgID, projectID, taskID); lErr == nil && latest.State == StateCanceled {
+				return latest, nil
+			}
+		}
+		rawUpState := strings.TrimSpace(upResp.State)
+		nextState := normalizeSM09State(rawUpState)
 		if dErr != nil {
+			nextState = StateFailed
+		} else if rawUpState != "" && nextState == "" {
 			nextState = StateFailed
 		} else if nextState == "" {
 			nextState = StateCompleted
 		}
-		nextView, trErr := c.transitionTaskInternal(ctx, orgID, projectID, taskID, requiredCallerKeyID, auditMeta, TaskTransitionRequest{
+		if nextState == StateWorking {
+			if len(upResp.Artifacts) > 0 {
+				if withArtifacts, aErr := c.appendArtifactsInPlace(context.WithoutCancel(ctx), orgID, projectID, taskID, upResp.Artifacts); aErr == nil {
+					return withArtifacts, nil
+				}
+			}
+			return updated, nil
+		}
+		nextView, trErr := c.transitionTaskInternal(context.WithoutCancel(ctx), orgID, projectID, taskID, requiredCallerKeyID, auditMeta, TaskTransitionRequest{
 			State:         nextState,
 			PromptMessage: upResp.PromptMessage,
 			SpentMicros:   upResp.SpentMicros,
 			Artifacts:     upResp.Artifacts,
 		})
 		if trErr != nil {
+			if latest, lErr := c.GetTask(context.WithoutCancel(ctx), orgID, projectID, taskID); lErr == nil && latest.State == StateCanceled {
+				return latest, nil
+			}
 			if failedView, fErr := c.transitionTaskInternal(context.WithoutCancel(ctx), orgID, projectID, taskID, requiredCallerKeyID, auditMeta, TaskTransitionRequest{State: StateFailed}); fErr == nil {
 				updated = failedView
 			}
@@ -1350,17 +1397,166 @@ func (c *TaskCoordinator) ResumeAdminTask(ctx context.Context, orgID, projectID,
 
 // CancelAdminTask cancels a non-terminal A2A task from Control Plane Admin API within verified project scope.
 func (c *TaskCoordinator) CancelAdminTask(ctx context.Context, orgID, projectID, taskID, actorID string) (TaskView, error) {
-	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, "", taskAuditAttribution{
+	view, err := c.transitionTaskInternal(ctx, orgID, projectID, taskID, "", taskAuditAttribution{
 		actorID:    actorID,
 		actorKind:  "PRINCIPAL",
 		entryPoint: port.AuditEntryPointAdminAPI,
 		eventType:  "a2a.task.canceled_by_admin",
 	}, TaskTransitionRequest{State: StateCanceled})
+	if err == nil {
+		c.cancelActiveDispatch(orgID, taskID)
+	}
+	return view, err
 }
 
 // CancelTask cancels a non-terminal A2A task owned by callerVKeyID and releases any held sub-budget.
 func (c *TaskCoordinator) CancelTask(ctx context.Context, orgID, projectID, taskID, callerVKeyID string) (TaskView, error) {
-	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, strings.TrimSpace(callerVKeyID), defaultDataPlaneTaskAudit(), TaskTransitionRequest{State: StateCanceled})
+	view, err := c.transitionTaskInternal(ctx, orgID, projectID, taskID, strings.TrimSpace(callerVKeyID), defaultDataPlaneTaskAudit(), TaskTransitionRequest{State: StateCanceled})
+	if err == nil {
+		c.cancelActiveDispatch(orgID, taskID)
+	}
+	return view, err
+}
+
+func activeDispatchKey(orgID, taskID string) string {
+	return strings.TrimSpace(orgID) + ":" + strings.TrimSpace(taskID)
+}
+
+func (c *TaskCoordinator) registerActiveDispatch(orgID, taskID string, cancel context.CancelFunc) {
+	if c == nil || cancel == nil {
+		return
+	}
+	c.activeMu.Lock()
+	if c.activeCancels == nil {
+		c.activeCancels = make(map[string]context.CancelFunc)
+	}
+	c.activeCancels[activeDispatchKey(orgID, taskID)] = cancel
+	c.activeMu.Unlock()
+}
+
+func (c *TaskCoordinator) unregisterActiveDispatch(orgID, taskID string) {
+	if c == nil {
+		return
+	}
+	c.activeMu.Lock()
+	delete(c.activeCancels, activeDispatchKey(orgID, taskID))
+	c.activeMu.Unlock()
+}
+
+func (c *TaskCoordinator) cancelActiveDispatch(orgID, taskID string) {
+	if c == nil {
+		return
+	}
+	c.activeMu.Lock()
+	cancel := c.activeCancels[activeDispatchKey(orgID, taskID)]
+	c.activeMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (c *TaskCoordinator) isTaskCanceledDB(ctx context.Context, orgID, projectID, taskID string) bool {
+	if c == nil || c.cfg.DB == nil {
+		return false
+	}
+	tx, err := c.cfg.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return false
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, c.dialect, orgID); err != nil {
+		return false
+	}
+	var dbState string
+	q := `SELECT state FROM a2a_tasks WHERE org_id = ? AND id = ?`
+	args := []any{orgID, taskID}
+	if strings.TrimSpace(projectID) != "" {
+		q += ` AND project_id = ?`
+		args = append(args, projectID)
+	}
+	if err := tx.QueryRowContext(ctx, port.Rebind(c.dialect, q), args...).Scan(&dbState); err != nil {
+		return false
+	}
+	return dbState == dbStateCanceled
+}
+
+func (c *TaskCoordinator) dispatchTaskCancellable(
+	ctx context.Context,
+	orgID, projectID, taskID string,
+	agent *AgentEndpoint,
+	task TaskView,
+	inputParts []map[string]any,
+) (UpstreamTaskResponse, bool, error) {
+	dispatchCtx, cancelDispatch := context.WithCancel(ctx)
+	defer cancelDispatch()
+	c.registerActiveDispatch(orgID, taskID, cancelDispatch)
+	defer c.unregisterActiveDispatch(orgID, taskID)
+
+	watchDone := make(chan struct{})
+	watchStop := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-watchStop:
+				return
+			case <-dispatchCtx.Done():
+				return
+			case <-ticker.C:
+				if c.isTaskCanceledDB(dispatchCtx, orgID, projectID, taskID) {
+					cancelDispatch()
+					return
+				}
+			}
+		}
+	}()
+
+	upResp, dErr := c.cfg.Transport.DispatchTask(dispatchCtx, agent, task, inputParts)
+	close(watchStop)
+	<-watchDone
+	canceled := (dispatchCtx.Err() != nil && ctx.Err() == nil) || c.isTaskCanceledDB(context.WithoutCancel(ctx), orgID, projectID, taskID)
+	return upResp, canceled, dErr
+}
+
+func (c *TaskCoordinator) appendArtifactsInPlace(ctx context.Context, orgID, projectID, taskID string, extra []map[string]any) (TaskView, error) {
+	nowMs := c.now().UTC().UnixMilli()
+	tx, err := c.cfg.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return TaskView{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := port.SetOrgRLSTx(ctx, tx, c.dialect, orgID); err != nil {
+		return TaskView{}, err
+	}
+	cur, _, _, _, err := c.loadTaskWithMetaTx(ctx, tx, orgID, projectID, taskID, true)
+	if err != nil {
+		return TaskView{}, err
+	}
+	if cur.State != StateWorking {
+		return cur, nil
+	}
+	merged := append([]map[string]any(nil), cur.Artifacts...)
+	merged = append(merged, extra...)
+	toPersist := encodeArtifactsWithPrompt(merged, cur.PromptMessage)
+	artifactsBytes, err := json.Marshal(toPersist)
+	if err != nil {
+		return TaskView{}, err
+	}
+	if _, err := tx.ExecContext(ctx, port.Rebind(c.dialect, `
+		UPDATE a2a_tasks SET artifacts_json = ?, updated_at_ms = ? WHERE org_id = ? AND id = ? AND state = ?`),
+		string(artifactsBytes), nowMs, orgID, taskID, dbStateWorking,
+	); err != nil {
+		return TaskView{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return TaskView{}, err
+	}
+	cur.Artifacts = merged
+	cur.UpdatedAt = time.UnixMilli(nowMs).UTC().Format(time.RFC3339Nano)
+	c.broadcastTask(cur)
+	return cur, nil
 }
 
 func (c *TaskCoordinator) loadTaskTx(ctx context.Context, tx *sql.Tx, orgID, projectID, taskID string) (TaskView, error) {

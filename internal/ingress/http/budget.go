@@ -51,6 +51,7 @@ type requestBudgetSession struct {
 }
 
 func (s *Server) newRequestBudgetSession(
+	ctx context.Context,
 	key *snapshot.VirtualKeyView,
 	reqID string,
 	modelSlug string,
@@ -86,6 +87,10 @@ func (s *Server) newRequestBudgetSession(
 	if renewEvery <= 0 {
 		renewEvery = time.Millisecond
 	}
+	ledgerReqID := traceRecordIDFromContext(ctx)
+	if ledgerReqID == "" {
+		ledgerReqID = idgen.MustNew(idgen.PrefixTrace)
+	}
 	return &requestBudgetSession{
 		svc:             s.budgetLedger,
 		defaultHoldOut:  defaultHold,
@@ -95,7 +100,7 @@ func (s *Server) newRequestBudgetSession(
 		envID:           key.EnvID,
 		vkeyID:          key.ID,
 		reqID:           reqID,
-		ledgerReqID:     idgen.MustNew(idgen.PrefixTrace),
+		ledgerReqID:     ledgerReqID,
 		modelSlug:       modelSlug,
 		inputTextBytes:  textBytes,
 		maxOutputTokens: maxOut,

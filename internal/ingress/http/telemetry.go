@@ -108,6 +108,14 @@ func telemetryFromContext(ctx context.Context) *requestTelemetry {
 	return rt
 }
 
+func traceRecordIDFromContext(ctx context.Context) string {
+	rt := telemetryFromContext(ctx)
+	if rt == nil {
+		return ""
+	}
+	return strings.TrimSpace(rt.traceRecordID)
+}
+
 func (rt *requestTelemetry) recordAuth(match snapshot.KeyMatchResult) {
 	if rt == nil || match.Key == nil {
 		return

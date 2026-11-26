@@ -310,7 +310,7 @@ func (r *Resolver) evaluate(req ResolveRequest) ExplainResult {
 		adp := cand.Adapter
 
 		// Tenant, logical model & project ownership invariant.
-		if dep.OrgID != req.OrgID || cand.LogicalModel == nil || conn == nil || !conn.VisibleToProject(req.OrgID, req.ProjectID) {
+		if dep.OrgID != req.OrgID || cand.LogicalModel == nil || conn == nil || !conn.VisibleToProjectScopeOnly(req.OrgID, req.ProjectID) {
 			out.RejectedDeployments = append(out.RejectedDeployments, ExplainRejectedDeployment{
 				DeploymentID: dep.ID,
 				Stage:        "HARD_COMPLIANCE_FILTER",
@@ -342,13 +342,22 @@ func (r *Resolver) evaluate(req ResolveRequest) ExplainResult {
 			})
 			continue
 		}
-		if strings.EqualFold(adp.ExtensionState, installer.StateQuarantined) {
+		if conn.AdapterQuarantined || strings.EqualFold(adp.ExtensionState, installer.StateQuarantined) {
 			sawQuarantined = true
 			out.RejectedDeployments = append(out.RejectedDeployments, ExplainRejectedDeployment{
 				DeploymentID: dep.ID,
 				Stage:        "HARD_COMPLIANCE_FILTER",
 				RuleCode:     "EXTENSION_QUARANTINED",
 				Detail:       fmt.Sprintf("Adapter %q is quarantined.", adp.AdapterSlug),
+			})
+			continue
+		}
+		if !conn.VisibleToProject(req.OrgID, req.ProjectID) {
+			out.RejectedDeployments = append(out.RejectedDeployments, ExplainRejectedDeployment{
+				DeploymentID: dep.ID,
+				Stage:        "HARD_COMPLIANCE_FILTER",
+				RuleCode:     "SCOPE_OR_CONNECTION_UNAVAILABLE",
+				Detail:       "Backing extension is disabled or blocked by organization trust policy.",
 			})
 			continue
 		}
@@ -864,10 +873,25 @@ func targetMatchesNativeDialect(target *snapshot.ResolvedTarget, dialect string)
 }
 
 func estimateCostNano(p snapshot.PricingNanoUSD, estInTokens, estOutTokens int64) int64 {
-	// price_per_1m * tokens / 1_000_000 in strict integer arithmetic (0 floats).
+	if p.IsCanonicalPerToken() {
+		inCost := mulCapInt64(max(int64(0), estInTokens), max(int64(0), p.InputTokenNanoUSD))
+		outCost := mulCapInt64(max(int64(0), estOutTokens), max(int64(0), p.OutputTokenNanoUSD))
+		return safeAddInt64(inCost, outCost)
+	}
+	// Legacy v1 compatibility: price_per_1m * tokens / 1_000_000 in strict integer arithmetic (0 floats).
 	inCost := mulDivSat(estInTokens, p.InputPer1MNanoUSD, 1_000_000)
 	outCost := mulDivSat(estOutTokens, p.OutputPer1MNanoUSD, 1_000_000)
 	return safeAddInt64(inCost, outCost)
+}
+
+func mulCapInt64(a, b int64) int64 {
+	if a <= 0 || b <= 0 {
+		return 0
+	}
+	if a > math.MaxInt64/b {
+		return math.MaxInt64
+	}
+	return a * b
 }
 
 func mulDivSat(a, b, div int64) int64 {

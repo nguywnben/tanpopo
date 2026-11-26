@@ -49,6 +49,7 @@ type createLogicalModelRequest struct {
 	ID              string                `json:"id"`
 	Slug            string                `json:"slug"`
 	DisplayName     string                `json:"display_name"`
+	ProjectID       string                `json:"project_id"`
 	ModalityKind    string                `json:"modality_kind"`
 	ContextWindow   int64                 `json:"context_window"`
 	MaxOutputTokens int64                 `json:"max_output_tokens"`
@@ -57,21 +58,24 @@ type createLogicalModelRequest struct {
 }
 
 type rateCardNanoUSDDTO struct {
-	InputTokenNanoUSD      int64 `json:"input_token_nano_usd"`
-	OutputTokenNanoUSD     int64 `json:"output_token_nano_usd"`
-	CacheReadTokenNanoUSD  int64 `json:"cache_read_token_nano_usd"`
-	CacheWriteTokenNanoUSD int64 `json:"cache_write_token_nano_usd"`
-	ReasoningTokenNanoUSD  int64 `json:"reasoning_token_nano_usd"`
-	ImageUnitNanoUSD       int64 `json:"image_unit_nano_usd"`
-	AudioSecNanoUSD        int64 `json:"audio_sec_nano_usd"`
-	DocumentPageNanoUSD    int64 `json:"document_page_nano_usd"`
-	SelfHostedZeroRate     bool  `json:"self_hosted_zero_rate"`
+	InputTokenNanoUSD      int64  `json:"input_token_nano_usd"`
+	OutputTokenNanoUSD     int64  `json:"output_token_nano_usd"`
+	CacheReadTokenNanoUSD  int64  `json:"cache_read_token_nano_usd"`
+	CacheWriteTokenNanoUSD int64  `json:"cache_write_token_nano_usd"`
+	ReasoningTokenNanoUSD  int64  `json:"reasoning_token_nano_usd"`
+	ImageUnitNanoUSD       int64  `json:"image_unit_nano_usd"`
+	AudioSecNanoUSD        int64  `json:"audio_sec_nano_usd"`
+	DocumentPageNanoUSD    int64  `json:"document_page_nano_usd"`
+	SelfHostedZeroRate     bool   `json:"self_hosted_zero_rate"`
+	TokenRateUnit          string `json:"token_rate_unit,omitempty"`
 }
 
 type storedPricingDocument struct {
+	PricingSchemaVersion     int    `json:"pricing_schema_version,omitempty"`
+	TokenRateUnit            string `json:"token_rate_unit,omitempty"`
 	EnvID                    string `json:"env_id,omitempty"`
-	InputPer1MNanoUSD        int64  `json:"input_per_1m_nano_usd"`
-	OutputPer1MNanoUSD       int64  `json:"output_per_1m_nano_usd"`
+	InputPer1MNanoUSD        int64  `json:"input_per_1m_nano_usd,omitempty"`
+	OutputPer1MNanoUSD       int64  `json:"output_per_1m_nano_usd,omitempty"`
 	CacheReadPer1MNanoUSD    int64  `json:"cache_read_per_1m_nano_usd,omitempty"`
 	CacheWritePer1MNanoUSD   int64  `json:"cache_write_per_1m_nano_usd,omitempty"`
 	ReasoningPer1MNanoUSD    int64  `json:"reasoning_per_1m_nano_usd,omitempty"`
@@ -161,7 +165,7 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 	var q strings.Builder
 	args := []any{orgID}
 	q.WriteString(`
-		SELECT id, canonical_slug, context_window, max_output_tokens, base_capabilities_json, created_at_ms
+		SELECT id, canonical_slug, COALESCE(NULLIF(display_name, ''), canonical_slug), context_window, max_output_tokens, base_capabilities_json, created_at_ms
 		FROM logical_models
 		WHERE (org_id = ? OR org_id IS NULL)`)
 	if cur != nil {
@@ -185,11 +189,11 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var (
-				id, slug, capsJSON string
-				ctxWin, maxOut     int64
-				createdMs          int64
+				id, slug, displayName, capsJSON string
+				ctxWin, maxOut                  int64
+				createdMs                       int64
 			)
-			if serr := rows.Scan(&id, &slug, &ctxWin, &maxOut, &capsJSON, &createdMs); serr != nil {
+			if serr := rows.Scan(&id, &slug, &displayName, &ctxWin, &maxOut, &capsJSON, &createdMs); serr != nil {
 				scanErr = serr
 				return nil
 			}
@@ -197,7 +201,7 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 			if strings.TrimSpace(capsJSON) != "" {
 				_ = json.Unmarshal([]byte(capsJSON), &capsMap)
 			}
-			dto := toLogicalModelDTO(id, slug, slug, ctxWin, maxOut, "", capsMap)
+			dto := toLogicalModelDTO(id, slug, displayName, ctxWin, maxOut, "", capsMap)
 			items = append(items, modelRow{dto: dto, createdMs: createdMs})
 		}
 		if ierr := rows.Err(); ierr != nil {
@@ -239,6 +243,28 @@ func (s *Server) handleListAdminModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func resolveBoundProjectScopeForAction(actor *rbac.Actor, orgID string, action rbac.Action) (string, bool) {
+	if actor == nil || strings.TrimSpace(orgID) == "" {
+		return "", false
+	}
+	for _, b := range actor.Bindings {
+		if b.ScopeType == rbac.ScopeInstance && b.RoleName == rbac.RoleOperator && b.OrgID == nil {
+			return "", false
+		}
+		if b.ScopeType == rbac.ScopeOrg && b.OrgID != nil && *b.OrgID == orgID {
+			return "", false
+		}
+	}
+	for _, b := range actor.Bindings {
+		if b.ScopeType == rbac.ScopeProject && b.OrgID != nil && *b.OrgID == orgID && strings.TrimSpace(b.ScopeID) != "" {
+			if rbac.Authorize(actor, action, rbac.TargetScope{OrgID: orgID, ProjectID: b.ScopeID}) == nil {
+				return b.ScopeID, true
+			}
+		}
+	}
+	return "", false
+}
+
 func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) {
 	sc, ok := s.authenticate(w, r)
 	if !ok {
@@ -252,10 +278,29 @@ func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	if !s.authorize(w, r, sc, rbac.ActionModelWrite, rbac.TargetScope{OrgID: orgID}) {
+	projectID := strings.TrimSpace(req.ProjectID)
+	targetScope := rbac.TargetScope{OrgID: orgID}
+	if projectID != "" {
+		targetScope.ProjectID = projectID
+	} else if pid, hasBoundProj := resolveBoundProjectScopeForAction(sc.Actor, orgID, rbac.ActionModelWrite); hasBoundProj {
+		targetScope.ProjectID = pid
+	}
+	if !s.authorize(w, r, sc, rbac.ActionModelWrite, targetScope) {
 		return
 	}
-	if !s.requireActiveOrg(w, r, orgID) {
+	if projectID != "" {
+		if _, err := s.storage.Tenancy().GetProject(r.Context(), orgID, projectID); err != nil {
+			if errors.Is(err, port.ErrNotFound) {
+				writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "project not found", false, nil)
+				return
+			}
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating project", true, nil)
+			return
+		}
+		if !s.requireActiveOrgAndProject(w, r, orgID, projectID) {
+			return
+		}
+	} else if !s.requireActiveOrg(w, r, orgID) {
 		return
 	}
 
@@ -328,10 +373,10 @@ func (s *Server) handleCreateAdminModel(w http.ResponseWriter, r *http.Request) 
 
 	if _, err := tx.ExecContext(r.Context(), s.rebind(`
 		INSERT INTO logical_models (
-			id, org_id, canonical_slug, modality_kind, context_window,
+			id, org_id, canonical_slug, display_name, modality_kind, context_window,
 			max_output_tokens, base_capabilities_json, version, created_at_ms, updated_at_ms
-		) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
-		modelID, orgID, slug, modality, req.ContextWindow, req.MaxOutputTokens, string(capsJSON), now, now,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
+		modelID, orgID, slug, displayName, modality, req.ContextWindow, req.MaxOutputTokens, string(capsJSON), now, now,
 	); err != nil {
 		var pgErr *pgconn.PgError
 		if (errors.As(err, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(err.Error()), "unique") {
@@ -735,7 +780,15 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	pricingDoc := encodeStoredPricingDocument(envID, *req.RateCard)
+	rawUnit := strings.TrimSpace(req.RateCard.TokenRateUnit)
+	if rawUnit != "" && !strings.EqualFold(rawUnit, "NANO_USD_PER_TOKEN") && !strings.EqualFold(rawUnit, "nano_usd_per_token") {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "new deployments must use canonical token_rate_unit NANO_USD_PER_TOKEN", false, nil)
+		return
+	}
+	canonicalCard := *req.RateCard
+	canonicalCard.TokenRateUnit = "NANO_USD_PER_TOKEN"
+
+	pricingDoc := encodeStoredPricingDocument(envID, canonicalCard)
 	pricingBytes, err := json.Marshal(pricingDoc)
 	if err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding rate card", true, nil)
@@ -816,7 +869,7 @@ func (s *Server) handleCreateDeployment(w http.ResponseWriter, r *http.Request) 
 		State:              state,
 		IdleChunkTimeoutMs: idleTO,
 		FirstByteTimeoutMs: fbTO,
-		RateCard:           *req.RateCard,
+		RateCard:           canonicalCard,
 		Version:            1,
 	})
 }
@@ -904,7 +957,13 @@ func (s *Server) handleUpdateDeployment(w http.ResponseWriter, r *http.Request) 
 			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "rate_card nano-USD values cannot be negative", false, nil)
 			return
 		}
+		rawUnit := strings.TrimSpace(req.RateCard.TokenRateUnit)
+		if rawUnit != "" && !strings.EqualFold(rawUnit, "NANO_USD_PER_TOKEN") && !strings.EqualFold(rawUnit, "nano_usd_per_token") {
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "updated rate_card must use canonical token_rate_unit NANO_USD_PER_TOKEN", false, nil)
+			return
+		}
 		nextCard = *req.RateCard
+		nextCard.TokenRateUnit = "NANO_USD_PER_TOKEN"
 	}
 
 	pricingDoc := encodeStoredPricingDocument(cur.EnvID, nextCard)
@@ -1343,13 +1402,26 @@ func validateRateCardNonNegative(rc rateCardNanoUSDDTO) bool {
 }
 
 func encodeStoredPricingDocument(envID string, rc rateCardNanoUSDDTO) storedPricingDocument {
+	if strings.EqualFold(strings.TrimSpace(rc.TokenRateUnit), "LEGACY_NANO_USD_PER_1M") {
+		return storedPricingDocument{
+			PricingSchemaVersion:    1,
+			TokenRateUnit:           "legacy_nano_usd_per_1m",
+			EnvID:                   envID,
+			InputPer1MNanoUSD:       rc.InputTokenNanoUSD,
+			OutputPer1MNanoUSD:      rc.OutputTokenNanoUSD,
+			CacheReadPer1MNanoUSD:   rc.CacheReadTokenNanoUSD,
+			CacheWritePer1MNanoUSD:  rc.CacheWriteTokenNanoUSD,
+			ReasoningPer1MNanoUSD:   rc.ReasoningTokenNanoUSD,
+			ImagePerUnitNanoUSD:     rc.ImageUnitNanoUSD,
+			AudioInputPerSecNanoUSD: rc.AudioSecNanoUSD,
+			DocumentPageNanoUSD:     rc.DocumentPageNanoUSD,
+			SelfHostedZeroRate:      rc.SelfHostedZeroRate,
+		}
+	}
 	return storedPricingDocument{
+		PricingSchemaVersion:     2,
+		TokenRateUnit:            "nano_usd_per_token",
 		EnvID:                    envID,
-		InputPer1MNanoUSD:        rc.InputTokenNanoUSD,
-		OutputPer1MNanoUSD:       rc.OutputTokenNanoUSD,
-		CacheReadPer1MNanoUSD:    rc.CacheReadTokenNanoUSD,
-		CacheWritePer1MNanoUSD:   rc.CacheWriteTokenNanoUSD,
-		ReasoningPer1MNanoUSD:    rc.ReasoningTokenNanoUSD,
 		ImagePerUnitNanoUSD:      rc.ImageUnitNanoUSD,
 		AudioInputPerSecNanoUSD:  rc.AudioSecNanoUSD,
 		DocumentPageNanoUSD:      rc.DocumentPageNanoUSD,
@@ -1368,16 +1440,43 @@ func encodeStoredPricingDocument(envID string, rc rateCardNanoUSDDTO) storedPric
 func decodeStoredPricingDocument(raw string) (string, rateCardNanoUSDDTO) {
 	var doc storedPricingDocument
 	_ = json.Unmarshal([]byte(raw), &doc)
+	hasLegacyPer1M := doc.InputPer1MNanoUSD > 0 ||
+		doc.OutputPer1MNanoUSD > 0 ||
+		doc.CacheReadPer1MNanoUSD > 0 ||
+		doc.CacheWritePer1MNanoUSD > 0 ||
+		doc.ReasoningPer1MNanoUSD > 0
+	isCanonical := doc.PricingSchemaVersion >= 2 ||
+		strings.EqualFold(strings.TrimSpace(doc.TokenRateUnit), "nano_usd_per_token") ||
+		!hasLegacyPer1M
+	unit := "NANO_USD_PER_TOKEN"
+	if !isCanonical {
+		unit = "LEGACY_NANO_USD_PER_1M"
+	}
+	var inTok, outTok, crTok, cwTok, reasTok int64
+	if isCanonical {
+		inTok = doc.InputTokenNanoUSD
+		outTok = doc.OutputTokenNanoUSD
+		crTok = doc.CacheReadTokenNanoUSD
+		cwTok = doc.CacheWriteTokenNanoUSD
+		reasTok = doc.ReasoningTokenNanoUSD
+	} else {
+		inTok = coalescePositiveInt64(doc.InputPer1MNanoUSD, doc.InputTokenNanoUSD)
+		outTok = coalescePositiveInt64(doc.OutputPer1MNanoUSD, doc.OutputTokenNanoUSD)
+		crTok = coalescePositiveInt64(doc.CacheReadPer1MNanoUSD, doc.CacheReadTokenNanoUSD)
+		cwTok = coalescePositiveInt64(doc.CacheWritePer1MNanoUSD, doc.CacheWriteTokenNanoUSD)
+		reasTok = coalescePositiveInt64(doc.ReasoningPer1MNanoUSD, doc.ReasoningTokenNanoUSD)
+	}
 	rc := rateCardNanoUSDDTO{
-		InputTokenNanoUSD:      coalescePositiveInt64(doc.InputTokenNanoUSD, doc.InputPer1MNanoUSD),
-		OutputTokenNanoUSD:     coalescePositiveInt64(doc.OutputTokenNanoUSD, doc.OutputPer1MNanoUSD),
-		CacheReadTokenNanoUSD:  coalescePositiveInt64(doc.CacheReadTokenNanoUSD, doc.CacheReadPer1MNanoUSD),
-		CacheWriteTokenNanoUSD: coalescePositiveInt64(doc.CacheWriteTokenNanoUSD, doc.CacheWritePer1MNanoUSD),
-		ReasoningTokenNanoUSD:  coalescePositiveInt64(doc.ReasoningTokenNanoUSD, doc.ReasoningPer1MNanoUSD),
+		InputTokenNanoUSD:      inTok,
+		OutputTokenNanoUSD:     outTok,
+		CacheReadTokenNanoUSD:  crTok,
+		CacheWriteTokenNanoUSD: cwTok,
+		ReasoningTokenNanoUSD:  reasTok,
 		ImageUnitNanoUSD:       coalescePositiveInt64(doc.ImageUnitNanoUSD, doc.ImagePerUnitNanoUSD),
 		AudioSecNanoUSD:        coalescePositiveInt64(doc.AudioSecNanoUSD, doc.AudioInputPerSecNanoUSD),
 		DocumentPageNanoUSD:    coalescePositiveInt64(doc.DocumentPageTokenNanoUSD, doc.DocumentPageNanoUSD),
 		SelfHostedZeroRate:     doc.SelfHostedZeroRate,
+		TokenRateUnit:          unit,
 	}
 	return strings.TrimSpace(doc.EnvID), rc
 }

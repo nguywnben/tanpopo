@@ -1707,12 +1707,16 @@ func (s *Server) handleListProjectEnvironments(w http.ResponseWriter, r *http.Re
 
 	out := make([]environmentDTO, len(envs))
 	for i, e := range envs {
+		envName := strings.TrimSpace(e.DisplayName)
+		if envName == "" {
+			envName = e.Slug
+		}
 		out[i] = environmentDTO{
 			ID:        e.ID,
 			OrgID:     e.OrgID,
 			ProjectID: e.ProjectID,
 			Slug:      e.Slug,
-			Name:      e.Slug,
+			Name:      envName,
 			CreatedAt: formatTimeRFC3339Ms(e.CreatedAtMs),
 		}
 	}
@@ -1773,7 +1777,8 @@ func (s *Server) handleCreateProjectEnvironment(w http.ResponseWriter, r *http.R
 		RequestID:  requestIDFromContext(r.Context()),
 	})
 	env, err := s.storage.Tenancy().CreateEnvironment(auditCtx, orgID, prj.ID, port.CreateEnvironmentParams{
-		Slug: slug,
+		Slug:        slug,
+		DisplayName: name,
 	})
 	if err != nil {
 		switch {
@@ -1791,12 +1796,16 @@ func (s *Server) handleCreateProjectEnvironment(w http.ResponseWriter, r *http.R
 		_ = s.snapshots.Refresh(r.Context())
 	}
 
+	envName := strings.TrimSpace(env.DisplayName)
+	if envName == "" {
+		envName = name
+	}
 	dto := environmentDTO{
 		ID:        env.ID,
 		OrgID:     env.OrgID,
 		ProjectID: env.ProjectID,
 		Slug:      env.Slug,
-		Name:      name,
+		Name:      envName,
 		CreatedAt: formatTimeRFC3339Ms(env.CreatedAtMs),
 	}
 	w.Header().Set("ETag", FormatETag(env.Version))

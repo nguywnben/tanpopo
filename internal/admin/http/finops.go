@@ -29,6 +29,8 @@ type budgetResourceDTO struct {
 	ScopeTier               string `json:"scope_tier"`
 	ScopeID                 string `json:"scope_id"`
 	Period                  string `json:"period"`
+	PeriodStart             string `json:"period_start,omitempty"`
+	PeriodEnd               string `json:"period_end,omitempty"`
 	HardLimitMicros         int64  `json:"hard_limit_micros"`
 	SoftWarningPercents     []int  `json:"soft_warning_percents"`
 	SettledExactMicros      int64  `json:"settled_exact_micros"`
@@ -48,7 +50,9 @@ type updateBudgetRequest struct {
 }
 
 type usageChargebackRowDTO struct {
+	GroupID               string `json:"group_id,omitempty"`
 	GroupKey              string `json:"group_key"`
+	KeyPrefix             string `json:"key_prefix,omitempty"`
 	ExactMicroUSD         int64  `json:"exact_micro_usd"`
 	EstimatedMicroUSD     int64  `json:"estimated_micro_usd"`
 	ExactRequestCount     int64  `json:"exact_request_count"`
@@ -139,7 +143,7 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 		var q strings.Builder
 		args := []any{orgID}
 		q.WriteString(`
-		SELECT id, scope_type, scope_id, period_kind, hard_limit_micros,
+		SELECT id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms, hard_limit_micros,
 		       reserved_hold_micros, settled_exact_micros, settled_estimated_micros,
 		       negative_carryover_micros, soft_alert_thresholds_pct_json,
 		       version, created_at_ms
@@ -157,6 +161,8 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 			scopeType    string
 			scopeID      string
 			periodKind   string
+			periodStart  int64
+			periodEnd    int64
 			threshJSON   string
 			hardLimit    int64
 			reservedHold int64
@@ -177,7 +183,7 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 			for rows.Next() {
 				var rrow rawBudgetRow
 				if serr := rows.Scan(
-					&rrow.id, &rrow.scopeType, &rrow.scopeID, &rrow.periodKind, &rrow.hardLimit,
+					&rrow.id, &rrow.scopeType, &rrow.scopeID, &rrow.periodKind, &rrow.periodStart, &rrow.periodEnd, &rrow.hardLimit,
 					&rrow.reservedHold, &rrow.exactMicros, &rrow.estMicros, &rrow.carryover,
 					&rrow.threshJSON, &rrow.ver, &rrow.createdMs,
 				); serr != nil {
@@ -219,6 +225,8 @@ func (s *Server) handleListBudgets(w http.ResponseWriter, r *http.Request) {
 					ScopeTier:               mapBudgetScopeDBToOpenAPI(rrow.scopeType),
 					ScopeID:                 rrow.scopeID,
 					Period:                  mapBudgetPeriodOpenAPI(rrow.periodKind),
+					PeriodStart:             formatTimeRFC3339Ms(rrow.periodStart),
+					PeriodEnd:               formatTimeRFC3339Ms(rrow.periodEnd),
 					HardLimitMicros:         rrow.hardLimit,
 					SoftWarningPercents:     decodeSoftThresholds(rrow.threshJSON),
 					SettledExactMicros:      rrow.exactMicros,
@@ -390,13 +398,23 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed scoping budget creation tx", true, nil)
 			return
 		}
+		settledExact, settledEst, sumErr := s.sumBudgetScopeSettledInPeriodTx(r.Context(), tx, orgID, dbScope, targetScopeID, pStart, pEnd)
+		if sumErr != nil {
+			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reconciling existing period spend", true, nil)
+			return
+		}
+		carryover := int64(0)
+		if settledExact+settledEst > *req.HardLimitMicros {
+			carryover = (settledExact + settledEst) - *req.HardLimitMicros
+		}
 		if _, insErr := tx.ExecContext(r.Context(), s.rebind(`
 			INSERT INTO budget_ledgers (
 				id, org_id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms,
-				hard_limit_micros, soft_alert_thresholds_pct_json, version, created_at_ms, updated_at_ms
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
+				hard_limit_micros, settled_exact_micros, settled_estimated_micros, negative_carryover_micros,
+				soft_alert_thresholds_pct_json, version, created_at_ms, updated_at_ms
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`),
 			budgetID, orgID, dbScope, targetScopeID, period, pStart, pEnd,
-			*req.HardLimitMicros, string(threshJSONBytes), now, now,
+			*req.HardLimitMicros, settledExact, settledEst, carryover, string(threshJSONBytes), now, now,
 		); insErr != nil {
 			var pgErr *pgconn.PgError
 			if (errors.As(insErr, &pgErr) && pgErr.Code == "23505") || strings.Contains(strings.ToLower(insErr.Error()), "unique") {
@@ -498,12 +516,6 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	totalSettled := curDTO.SettledExactMicros + curDTO.SettledEstimatedMicros
-	newCarryover := int64(0)
-	if totalSettled > *req.HardLimitMicros {
-		newCarryover = totalSettled - *req.HardLimitMicros
-	}
-	newUtilPct := computeBudgetUtilizationPct(totalSettled, *req.HardLimitMicros)
 	now := s.nowMs()
 	nextPeriodStart, nextPeriodEnd := existingPeriodStart, existingPeriodEnd
 	if period != existingPeriodKind {
@@ -521,19 +533,40 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	reconciledExact, reconciledEst, sumErr := s.sumBudgetScopeSettledInPeriodTx(r.Context(), tx, orgID, scopeType, scopeID, nextPeriodStart, nextPeriodEnd)
+	if sumErr != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reconciling period spend", true, nil)
+		return
+	}
+	nextExact, nextEst := curDTO.SettledExactMicros, curDTO.SettledEstimatedMicros
+	if period != existingPeriodKind || reconciledExact > nextExact {
+		nextExact = reconciledExact
+	}
+	if period != existingPeriodKind || reconciledEst > nextEst {
+		nextEst = reconciledEst
+	}
+	totalSettled := nextExact + nextEst
+	newCarryover := int64(0)
+	if totalSettled > *req.HardLimitMicros {
+		newCarryover = totalSettled - *req.HardLimitMicros
+	}
+	newUtilPct := computeBudgetUtilizationPct(totalSettled, *req.HardLimitMicros)
+
 	res, err := tx.ExecContext(r.Context(), s.rebind(`
 		UPDATE budget_ledgers
 		SET period_kind = ?,
 		    period_start_ms = ?,
 		    period_end_ms = ?,
 		    hard_limit_micros = ?,
+		    settled_exact_micros = ?,
+		    settled_estimated_micros = ?,
 		    negative_carryover_micros = ?,
 		    soft_alert_thresholds_pct_json = ?,
 		    last_alerted_threshold_pct = CASE WHEN ? < last_alerted_threshold_pct THEN ? ELSE last_alerted_threshold_pct END,
 		    version = version + 1,
 		    updated_at_ms = ?
 		WHERE org_id = ? AND id = ? AND version = ?`),
-		period, nextPeriodStart, nextPeriodEnd, *req.HardLimitMicros, newCarryover, string(threshJSONBytes),
+		period, nextPeriodStart, nextPeriodEnd, *req.HardLimitMicros, nextExact, nextEst, newCarryover, string(threshJSONBytes),
 		newUtilPct, newUtilPct, now, orgID, budgetID, expectedVer,
 	)
 	if err != nil {
@@ -675,7 +708,7 @@ func (s *Server) handleExportUsage(w http.ResponseWriter, r *http.Request) {
 
 	var buf bytes.Buffer
 	cw := csv.NewWriter(&buf)
-	if err := cw.Write([]string{"group_key", "exact_micro_usd", "estimated_micro_usd", "exact_request_count", "estimated_request_count", "unmetered_request_count"}); err != nil {
+	if err := cw.Write([]string{"group_key", "exact_micro_usd", "estimated_micro_usd", "exact_request_count", "estimated_request_count", "unmetered_request_count", "group_id", "key_prefix"}); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding CSV header", true, nil)
 		return
 	}
@@ -687,6 +720,8 @@ func (s *Server) handleExportUsage(w http.ResponseWriter, r *http.Request) {
 			strconv.FormatInt(row.ExactRequestCount, 10),
 			strconv.FormatInt(row.EstimatedRequestCount, 10),
 			strconv.FormatInt(row.UnmeteredRequestCount, 10),
+			sanitizeCSVCell(row.GroupID),
+			sanitizeCSVCell(row.KeyPrefix),
 		}); err != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed encoding CSV row", true, nil)
 			return
@@ -762,23 +797,31 @@ func parseOptionalTimeWindowParams(w http.ResponseWriter, r *http.Request) (*int
 }
 
 func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionContext, orgID, groupBy string, fromMs, toMs *int64) ([]usageChargebackRowDTO, error) {
-	var selectExpr, joinSQL string
-	groupByExpr := "grp_key"
+	var idExpr, selectExpr, prefixExpr, joinSQL, groupByExpr string
 	switch groupBy {
 	case "project":
+		idExpr = `COALESCE(us.project_id, '')`
 		selectExpr = `COALESCE(p.display_name, p.slug, us.project_id)`
+		prefixExpr = `''`
 		joinSQL = `LEFT JOIN projects p ON p.org_id = us.org_id AND p.id = us.project_id`
 		groupByExpr = `us.project_id, grp_key`
 	case "env":
+		idExpr = `COALESCE(us.env_id, '')`
 		selectExpr = `COALESCE(e.slug, us.env_id)`
+		prefixExpr = `''`
 		joinSQL = `LEFT JOIN environments e ON e.org_id = us.org_id AND e.id = us.env_id`
 		groupByExpr = `us.env_id, grp_key`
 	case "key":
+		idExpr = `COALESCE(us.virtual_key_id, '')`
 		selectExpr = `COALESCE(vk.name, us.virtual_key_id)`
+		prefixExpr = `COALESCE(CASE WHEN vk.key_prefix IS NOT NULL AND vk.key_prefix <> '' AND vk.last_four IS NOT NULL AND vk.last_four <> '' THEN vk.key_prefix || '...' || vk.last_four ELSE COALESCE(vk.key_prefix, '') END, '')`
 		joinSQL = `LEFT JOIN virtual_keys vk ON vk.org_id = us.org_id AND vk.id = us.virtual_key_id`
-		groupByExpr = `us.virtual_key_id, grp_key`
+		groupByExpr = `us.virtual_key_id, grp_key, key_prefix_col`
 	case "model":
+		idExpr = `COALESCE(us.logical_model_slug, 'unknown')`
 		selectExpr = `COALESCE(us.logical_model_slug, 'unknown')`
+		prefixExpr = `''`
+		groupByExpr = `grp_key`
 	default:
 		return nil, fmt.Errorf("unsupported group_by %q", groupBy)
 	}
@@ -808,7 +851,9 @@ func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionCo
 	}
 
 	query := fmt.Sprintf(`
-		SELECT %s AS grp_key,
+		SELECT %s AS grp_id,
+		       %s AS grp_key,
+		       %s AS key_prefix_col,
 		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'EXACT' THEN us.total_cost_micros ELSE 0 END), 0),
 		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'ESTIMATED' THEN us.total_cost_micros ELSE 0 END), 0),
 		       COALESCE(SUM(CASE WHEN us.usage_accuracy = 'EXACT' THEN 1 ELSE 0 END), 0),
@@ -818,7 +863,7 @@ func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionCo
 		%s
 		WHERE %s
 		GROUP BY %s
-		ORDER BY grp_key ASC`, selectExpr, joinSQL, strings.Join(conds, " AND "), groupByExpr)
+		ORDER BY grp_key ASC, grp_id ASC`, idExpr, selectExpr, prefixExpr, joinSQL, strings.Join(conds, " AND "), groupByExpr)
 
 	out := make([]usageChargebackRowDTO, 0)
 	if err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
@@ -829,7 +874,7 @@ func (s *Server) queryUsageChargebackRows(ctx context.Context, sc *authSessionCo
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var r usageChargebackRowDTO
-			if scanErr := rows.Scan(&r.GroupKey, &r.ExactMicroUSD, &r.EstimatedMicroUSD, &r.ExactRequestCount, &r.EstimatedRequestCount, &r.UnmeteredRequestCount); scanErr != nil {
+			if scanErr := rows.Scan(&r.GroupID, &r.GroupKey, &r.KeyPrefix, &r.ExactMicroUSD, &r.EstimatedMicroUSD, &r.ExactRequestCount, &r.EstimatedRequestCount, &r.UnmeteredRequestCount); scanErr != nil {
 				return scanErr
 			}
 			out = append(out, r)
@@ -920,18 +965,18 @@ func (s *Server) countScopeUnmeteredRequests(ctx context.Context, orgID, scopeTy
 
 func (s *Server) loadBudgetResourceDTO(ctx context.Context, orgID, budgetID string) (budgetResourceDTO, error) {
 	var (
-		id, scopeType, scopeID, periodKind, threshJSON  string
-		hardLimit, reservedHold, exactMicros, estMicros int64
-		carryover, ver                                  int64
+		id, scopeType, scopeID, periodKind, threshJSON                  string
+		periodStartMs, periodEndMs, hardLimit, reservedHold, exact, est int64
+		carryover, ver                                                  int64
 	)
 	err := s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
 		return q.QueryRowContext(ctx, s.rebind(`
-		SELECT id, scope_type, scope_id, period_kind, hard_limit_micros,
+		SELECT id, scope_type, scope_id, period_kind, period_start_ms, period_end_ms, hard_limit_micros,
 		       reserved_hold_micros, settled_exact_micros, settled_estimated_micros,
 		       negative_carryover_micros, soft_alert_thresholds_pct_json, version
 		FROM budget_ledgers
 		WHERE org_id = ? AND id = ?`), orgID, budgetID,
-		).Scan(&id, &scopeType, &scopeID, &periodKind, &hardLimit, &reservedHold, &exactMicros, &estMicros, &carryover, &threshJSON, &ver)
+		).Scan(&id, &scopeType, &scopeID, &periodKind, &periodStartMs, &periodEndMs, &hardLimit, &reservedHold, &exact, &est, &carryover, &threshJSON, &ver)
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return budgetResourceDTO{}, port.ErrNotFound
@@ -944,10 +989,12 @@ func (s *Server) loadBudgetResourceDTO(ctx context.Context, orgID, budgetID stri
 		ScopeTier:               mapBudgetScopeDBToOpenAPI(scopeType),
 		ScopeID:                 scopeID,
 		Period:                  mapBudgetPeriodOpenAPI(periodKind),
+		PeriodStart:             formatTimeRFC3339Ms(periodStartMs),
+		PeriodEnd:               formatTimeRFC3339Ms(periodEndMs),
 		HardLimitMicros:         hardLimit,
 		SoftWarningPercents:     decodeSoftThresholds(threshJSON),
-		SettledExactMicros:      exactMicros,
-		SettledEstimatedMicros:  estMicros,
+		SettledExactMicros:      exact,
+		SettledEstimatedMicros:  est,
 		ReservedHoldMicros:      reservedHold,
 		NegativeCarryoverMicros: carryover,
 		UnmeteredRequestCount:   s.countScopeUnmeteredRequests(ctx, orgID, scopeType, scopeID),
@@ -1032,10 +1079,43 @@ func computePeriodWindowMs(nowMs int64, period string) (int64, int64) {
 		return start.UnixMilli(), start.AddDate(0, 0, 1).UnixMilli()
 	}
 	if period == ledger.PeriodTotalLifetime {
-		return nowMs, nowMs + (3650 * 24 * time.Hour).Milliseconds()
+		return 0, nowMs + (3650 * 24 * time.Hour).Milliseconds()
 	}
 	start := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 	return start.UnixMilli(), start.AddDate(0, 1, 0).UnixMilli()
+}
+
+func (s *Server) sumBudgetScopeSettledInPeriodTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	orgID, scopeType, scopeID string,
+	periodStartMs, periodEndMs int64,
+) (exactMicros, estMicros int64, err error) {
+	var scopeCol string
+	switch scopeType {
+	case ledger.ScopeOrg:
+		scopeCol = "org_id"
+	case ledger.ScopeProject:
+		scopeCol = "project_id"
+	case ledger.ScopeEnv:
+		scopeCol = "env_id"
+	case ledger.ScopeVirtualKey:
+		scopeCol = "virtual_key_id"
+	default:
+		return 0, 0, fmt.Errorf("unsupported budget scope %q", scopeType)
+	}
+	query := fmt.Sprintf(`
+		SELECT COALESCE(SUM(CASE WHEN usage_accuracy = 'EXACT' THEN total_cost_micros ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN usage_accuracy = 'ESTIMATED' THEN total_cost_micros ELSE 0 END), 0)
+		FROM usage_settlements
+		WHERE org_id = ?
+		  AND %s = ?
+		  AND settled_at_ms >= ?
+		  AND settled_at_ms < ?`, scopeCol)
+	if qErr := tx.QueryRowContext(ctx, s.rebind(query), orgID, scopeID, periodStartMs, periodEndMs).Scan(&exactMicros, &estMicros); qErr != nil {
+		return 0, 0, qErr
+	}
+	return exactMicros, estMicros, nil
 }
 
 func computeBudgetUtilizationPct(totalSettled, hardLimit int64) int {

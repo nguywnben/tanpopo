@@ -1040,3 +1040,63 @@ func TestEngineExtractUsageMultiFrameSSEAndLeadingModelsPath(t *testing.T) {
 		t.Fatalf("expected TargetModel gemini-2.5-flash from leading models/ path, got %q", hints.TargetModel)
 	}
 }
+
+func TestDEF051_OllamaNDJSONZeroAndInvalidCounters(t *testing.T) {
+	ctx := context.Background()
+	eng, err := CompileSpec(Spec{
+		ID:   "@tanpopo/ollama",
+		Slug: "ollama",
+		ResponseMapping: ResponseMappingSpec{
+			UsagePaths: UsagePathSpec{
+				InputTokens:  "$.usage.prompt_tokens || $.prompt_eval_count",
+				OutputTokens: "$.usage.completion_tokens || $.eval_count",
+			},
+		},
+		StreamMapping: StreamMappingSpec{
+			UsagePaths: UsagePathSpec{
+				InputTokens:  "$.usage.prompt_tokens || $.prompt_eval_count",
+				OutputTokens: "$.usage.completion_tokens || $.eval_count",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CompileSpec failed: %v", err)
+	}
+
+	// 1. Multi-line NDJSON stream where final done frame uses Ollama native counters.
+	ndjsonStream := []byte("{\"model\":\"qwen2.5\",\"message\":{\"role\":\"assistant\",\"content\":\"hi\"},\"done\":false}\n" +
+		"{\"model\":\"qwen2.5\",\"done\":true,\"prompt_eval_count\":12,\"eval_count\":5}\n")
+	uND, err := eng.ExtractUsage(ctx, port.ExtractUsageInput{
+		RequestID:                 "req_ollama_ndjson",
+		RawResponseOrTrailerBytes: ndjsonStream,
+	})
+	if err != nil || uND.Accuracy != port.UsageAccuracyExact || uND.InputTokens != 12 || uND.OutputTokens != 5 {
+		t.Fatalf("expected EXACT 12/5 from Ollama NDJSON fallback path, got %+v err=%v", uND, err)
+	}
+
+	// 2. Explicit zero counters MUST still report EXACT (0 tokens != missing).
+	uZero, err := eng.ExtractUsage(ctx, port.ExtractUsageInput{
+		RequestID:                 "req_ollama_zero",
+		RawResponseOrTrailerBytes: []byte(`{"done":true,"prompt_eval_count":0,"eval_count":0}`),
+	})
+	if err != nil || uZero.Accuracy != port.UsageAccuracyExact || uZero.InputTokens != 0 || uZero.OutputTokens != 0 {
+		t.Fatalf("expected EXACT 0/0 for explicit zero counters, got %+v err=%v", uZero, err)
+	}
+
+	// 3. Negative, fractional, and conflicting usage counters MUST NOT settle as EXACT.
+	badPayloads := [][]byte{
+		[]byte(`{"prompt_eval_count":-1,"eval_count":5}`),
+		[]byte(`{"prompt_eval_count":1.5,"eval_count":5}`),
+		[]byte(`{"usage":{"prompt_tokens":10,"completion_tokens":5},"prompt_eval_count":11,"eval_count":5}`),
+	}
+	for i, raw := range badPayloads {
+		uBad, bErr := eng.ExtractUsage(ctx, port.ExtractUsageInput{
+			RequestID:                 fmt.Sprintf("req_bad_%d", i),
+			RawResponseOrTrailerBytes: raw,
+		})
+		if bErr == nil && uBad.Accuracy == port.UsageAccuracyExact {
+			t.Fatalf("case %d: expected non-EXACT or error for malformed/conflicting counter %s, got %+v", i, string(raw), uBad)
+		}
+	}
+}
+

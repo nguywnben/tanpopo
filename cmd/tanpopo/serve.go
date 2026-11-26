@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -57,6 +58,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/storage/postgres"
 	"github.com/nguywnben/tanpopo/internal/storage/sqlite"
 	telemetry "github.com/nguywnben/tanpopo/internal/telemetry/otel"
+	"github.com/nguywnben/tanpopo/internal/telemetry/privacy"
 	"github.com/nguywnben/tanpopo/internal/webhook"
 	"github.com/nguywnben/tanpopo/internal/webui"
 )
@@ -66,11 +68,20 @@ type serveRuntimeConfig struct {
 	MultiOrgDisabled    bool
 	HasOfflineOverride  bool
 	HasMultiOrgOverride bool
+	MetricsListen       string
+	HasMetricsListen    bool
+	OTLPEndpoint        string
+	OTLPAllowPrivateIP  bool
+	HasOTLPAllowPrivate bool
+	OnListen            func(mainAddr, metricsAddr string)
 }
 
 func newServeCommand(loc i18n.Locale) *cobra.Command {
 	role := "all"
 	listen := envOr("TANPOPO_LISTEN_ADDR", "127.0.0.1:8080")
+	metricsListen := envOr("TANPOPO_METRICS_LISTEN", "127.0.0.1:9090")
+	otlpEndpoint := envOr("TANPOPO_OTLP_ENDPOINT", os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	otlpAllowPrivateIP := parseEnvBool("TANPOPO_OTLP_ALLOW_PRIVATE_IP", false)
 	offlineFlag := false
 	multiOrgFlag := true
 	cmd := &cobra.Command{
@@ -92,6 +103,11 @@ func newServeCommand(loc i18n.Locale) *cobra.Command {
 				MultiOrgDisabled:    !multiOrgFlag,
 				HasOfflineOverride:  cmd.Flags().Changed("offline"),
 				HasMultiOrgOverride: cmd.Flags().Changed("multi-org"),
+				MetricsListen:       metricsListen,
+				HasMetricsListen:    cmd.Flags().Changed("metrics-listen"),
+				OTLPEndpoint:        otlpEndpoint,
+				OTLPAllowPrivateIP:  otlpAllowPrivateIP,
+				HasOTLPAllowPrivate: cmd.Flags().Changed("otlp-allow-private-ip"),
 			}
 			if err := serveWithConfig(cmd.Context(), role, listen, cfg); err != nil {
 				return &testharness.ExitError{Code: testharness.ExitInternal, Message: i18n.T(loc, "cli.serve.err.failed"), Cause: err}
@@ -101,6 +117,9 @@ func newServeCommand(loc i18n.Locale) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&role, "role", role, i18n.T(loc, "cli.serve.flag.role"))
 	cmd.Flags().StringVar(&listen, "listen", listen, i18n.T(loc, "cli.serve.flag.listen"))
+	cmd.Flags().StringVar(&metricsListen, "metrics-listen", metricsListen, i18n.T(loc, "cli.serve.flag.metrics_listen"))
+	cmd.Flags().StringVar(&otlpEndpoint, "otlp-endpoint", otlpEndpoint, i18n.T(loc, "cli.serve.flag.otlp_endpoint"))
+	cmd.Flags().BoolVar(&otlpAllowPrivateIP, "otlp-allow-private-ip", otlpAllowPrivateIP, i18n.T(loc, "cli.serve.flag.otlp_allow_private_ip"))
 	cmd.Flags().BoolVar(&offlineFlag, "offline", false, i18n.T(loc, "cli.serve.flag.offline"))
 	cmd.Flags().BoolVar(&multiOrgFlag, "multi-org", true, i18n.T(loc, "cli.serve.flag.multi_org"))
 	return cmd
@@ -120,7 +139,7 @@ func serveWithConfig(ctx context.Context, role, listen string, cfg serveRuntimeC
 		return err
 	}
 	var draining atomic.Bool
-	handler, closeRuntime, err := buildRuntimeWithConfig(ctx, role, listen, nil, &draining, cfg)
+	handler, metricsHandler, closeRuntime, err := buildRuntimeDetailed(ctx, role, listen, nil, &draining, cfg)
 	if err != nil {
 		return err
 	}
@@ -129,13 +148,47 @@ func serveWithConfig(ctx context.Context, role, listen string, cfg serveRuntimeC
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", listen, err)
 	}
+	metricsListen := strings.TrimSpace(cfg.MetricsListen)
+	if !cfg.HasMetricsListen {
+		metricsListen = envOr("TANPOPO_METRICS_LISTEN", "127.0.0.1:9090")
+	}
+	var (
+		metricsListener net.Listener
+		metricsServer   *http.Server
+		metricsAddr     string
+	)
+	if metricsHandler != nil && metricsListen != "" && !strings.EqualFold(metricsListen, "disabled") && !strings.EqualFold(metricsListen, "off") && !strings.EqualFold(metricsListen, "none") && (metricsListen != listen || strings.HasSuffix(metricsListen, ":0")) {
+		metricsListener, err = net.Listen("tcp", metricsListen)
+		if err != nil {
+			_ = listener.Close()
+			return fmt.Errorf("listen internal metrics on %s: %w", metricsListen, err)
+		}
+		metricsAddr = metricsListener.Addr().String()
+		metricsMux := http.NewServeMux()
+		metricsMux.Handle("/metrics", metricsHandler)
+		metricsServer = &http.Server{
+			Handler:           metricsMux,
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       90 * time.Second,
+		}
+	}
 	server := &http.Server{
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       90 * time.Second,
 	}
+	if cfg.OnListen != nil {
+		cfg.OnListen(listener.Addr().String(), metricsAddr)
+	}
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(listener) }()
+	if metricsServer != nil {
+		go func() {
+			if mErr := metricsServer.Serve(metricsListener); mErr != nil && !errors.Is(mErr, http.ErrServerClosed) {
+				slog.Warn("internal metrics listener exited", "addr", metricsAddr, "error", mErr)
+			}
+		}()
+	}
 	select {
 	case <-ctx.Done():
 		// Mark /readyz as 503 immediately on shutdown signal while draining in-flight SSE streams (OPS-AC-06).
@@ -146,16 +199,26 @@ func serveWithConfig(ctx context.Context, role, listen string, cfg serveRuntimeC
 		}
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
+		var shutdownErr error
+		if metricsServer != nil {
+			if mErr := metricsServer.Shutdown(shutdownCtx); mErr != nil {
+				_ = metricsServer.Close()
+				shutdownErr = errors.Join(shutdownErr, mErr)
+			}
+		}
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			_ = server.Close()
-			return err
+			return errors.Join(shutdownErr, err)
 		}
 		err := <-done
 		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+			return shutdownErr
 		}
-		return err
+		return errors.Join(shutdownErr, err)
 	case err := <-done:
+		if metricsServer != nil {
+			_ = metricsServer.Close()
+		}
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
@@ -211,50 +274,56 @@ func buildRuntimeInternal(ctx context.Context, role, listen string, beforeSQLite
 }
 
 func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLiteClose func(*sql.DB), draining *atomic.Bool, runtimeCfg serveRuntimeConfig) (http.Handler, func() error, error) {
+	handler, _, closeRuntime, err := buildRuntimeDetailed(ctx, role, listen, beforeSQLiteClose, draining, runtimeCfg)
+	return handler, closeRuntime, err
+}
+
+func buildRuntimeDetailed(ctx context.Context, role, listen string, beforeSQLiteClose func(*sql.DB), draining *atomic.Bool, runtimeCfg serveRuntimeConfig) (http.Handler, http.Handler, func() error, error) {
 	if role != "all" && role != "data-plane" && role != "control-plane" {
-		return nil, nil, fmt.Errorf("invalid service role %q", role)
+		return nil, nil, nil, fmt.Errorf("invalid service role %q", role)
 	}
 	dataDir := envOr("TANPOPO_DATA_DIR", "data")
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
-		return nil, nil, fmt.Errorf("create data directory: %w", err)
+		return nil, nil, nil, fmt.Errorf("create data directory: %w", err)
 	}
 	if err := os.Chmod(dataDir, 0o700); err != nil {
-		return nil, nil, fmt.Errorf("secure data directory: %w", err)
+		return nil, nil, nil, fmt.Errorf("secure data directory: %w", err)
 	}
 	pluginsDir := envOr("TANPOPO_PLUGINS_DIR", filepath.Join(dataDir, "plugins"))
 	if err := os.MkdirAll(pluginsDir, 0o700); err != nil {
-		return nil, nil, fmt.Errorf("create plugins directory: %w", err)
+		return nil, nil, nil, fmt.Errorf("create plugins directory: %w", err)
 	}
 	pgDSN := strings.TrimSpace(os.Getenv("TANPOPO_PG_DSN"))
 	storageEngine := strings.ToLower(strings.TrimSpace(os.Getenv("TANPOPO_STORAGE_ENGINE")))
 	switch storageEngine {
 	case "", "sqlite", "postgres":
 	default:
-		return nil, nil, fmt.Errorf("unsupported TANPOPO_STORAGE_ENGINE %q: expected sqlite or postgres", storageEngine)
+		return nil, nil, nil, fmt.Errorf("unsupported TANPOPO_STORAGE_ENGINE %q: expected sqlite or postgres", storageEngine)
 	}
 	var (
 		store         runtimeStore
 		isPostgres    bool
 		dialect       = port.DialectSQLite
+		sqliteDBPath  string
 		postShredHook func(context.Context) error
 	)
 	if storageEngine == "postgres" || (storageEngine == "" && pgDSN != "") {
 		if pgDSN == "" {
-			return nil, nil, errors.New("TANPOPO_PG_DSN is required when TANPOPO_STORAGE_ENGINE=postgres")
+			return nil, nil, nil, errors.New("TANPOPO_PG_DSN is required when TANPOPO_STORAGE_ENGINE=postgres")
 		}
 		pgStore, openErr := postgres.Open(ctx, postgres.Options{DSN: pgDSN})
 		if openErr != nil {
-			return nil, nil, fmt.Errorf("open PostgreSQL store: %w", openErr)
+			return nil, nil, nil, fmt.Errorf("open PostgreSQL store: %w", openErr)
 		}
 		store = pgStore
 		isPostgres = true
 		dialect = port.DialectPostgres
 		postShredHook = pgStore.Ping
 	} else {
-		dbPath := envOr("TANPOPO_DB_PATH", filepath.Join(dataDir, "tanpopo.db"))
-		sqliteStore, openErr := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath})
+		sqliteDBPath = envOr("TANPOPO_DB_PATH", filepath.Join(dataDir, "tanpopo.db"))
+		sqliteStore, openErr := sqlite.Open(ctx, sqlite.Config{DBPath: sqliteDBPath})
 		if openErr != nil {
-			return nil, nil, fmt.Errorf("open local SQLite store: %w", openErr)
+			return nil, nil, nil, fmt.Errorf("open local SQLite store: %w", openErr)
 		}
 		store = sqliteStore
 		postShredHook = sqliteStore.CheckpointWAL
@@ -264,12 +333,12 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	auditLog, err := audit.NewLogger(audit.LoggerConfig{DB: db})
 	if err != nil {
 		closeStore()
-		return nil, nil, fmt.Errorf("initialize audit logger: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize audit logger: %w", err)
 	}
 	if sinkSetter, ok := store.(interface{ SetAuditSink(port.AuditSink) error }); ok {
 		if setErr := sinkSetter.SetAuditSink(auditLog); setErr != nil {
 			closeStore()
-			return nil, nil, fmt.Errorf("wire audit sink to store: %w", setErr)
+			return nil, nil, nil, fmt.Errorf("wire audit sink to store: %w", setErr)
 		}
 	}
 	var ledgerService *ledger.Service
@@ -277,7 +346,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	kek, err := vault.LoadStaticKEKFromEnv(activeKEKID, os.LookupEnv)
 	if err != nil {
 		closeStore()
-		return nil, nil, fmt.Errorf("load Master KEK: %w", err)
+		return nil, nil, nil, fmt.Errorf("load Master KEK: %w", err)
 	}
 	closeKeys := func() { kek.Close() }
 	for idx, rawPrev := range parseEnvCSV("TANPOPO_MASTER_KEY_PREVIOUS") {
@@ -285,38 +354,38 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		if parseErr != nil {
 			closeKeys()
 			closeStore()
-			return nil, nil, fmt.Errorf("parse TANPOPO_MASTER_KEY_PREVIOUS[%d]: %w", idx, parseErr)
+			return nil, nil, nil, fmt.Errorf("parse TANPOPO_MASTER_KEY_PREVIOUS[%d]: %w", idx, parseErr)
 		}
 		regErr := kek.RegisterKey(fmt.Sprintf("kek_prev_%d", idx), prevKey, false)
 		clear(prevKey)
 		if regErr != nil {
 			closeKeys()
 			closeStore()
-			return nil, nil, fmt.Errorf("register previous Master KEK[%d]: %w", idx, regErr)
+			return nil, nil, nil, fmt.Errorf("register previous Master KEK[%d]: %w", idx, regErr)
 		}
 	}
 	vaultStore, err := vault.NewStore(vault.Config{DB: db, KEK: kek, PostShredHook: postShredHook})
 	if err != nil {
 		closeKeys()
 		closeStore()
-		return nil, nil, fmt.Errorf("initialize vault: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize vault: %w", err)
 	}
 	builtinCatalog, err := builtin.NewCatalog()
 	if err != nil {
 		closeKeys()
 		closeStore()
-		return nil, nil, fmt.Errorf("initialize built-in official catalog: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize built-in official catalog: %w", err)
 	}
 	releaseRootPubs, err := builtin.LoadReleaseRootPublicKeys(os.LookupEnv, dataDir)
 	if err != nil {
 		closeKeys()
 		closeStore()
-		return nil, nil, fmt.Errorf("load extension release root public keys: %w", err)
+		return nil, nil, nil, fmt.Errorf("load extension release root public keys: %w", err)
 	}
 	if err := builtinCatalog.LoadOperatorReleaseSignatures(os.LookupEnv, dataDir); err != nil {
 		closeKeys()
 		closeStore()
-		return nil, nil, fmt.Errorf("load extension release signatures: %w", err)
+		return nil, nil, nil, fmt.Errorf("load extension release signatures: %w", err)
 	}
 	trustedKeyring := trust.TrustedKeyring{RootPublicKeys: releaseRootPubs}
 	var builtinSigner builtin.SignerFunc
@@ -324,7 +393,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	if err != nil {
 		closeKeys()
 		closeStore()
-		return nil, nil, fmt.Errorf("initialize configuration snapshot: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize configuration snapshot: %w", err)
 	}
 
 	var (
@@ -348,7 +417,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 			vaultStore.Close()
 			closeKeys()
 			closeStore()
-			return nil, nil, fmt.Errorf("dial Valkey Cluster: %w", err)
+			return nil, nil, nil, fmt.Errorf("dial Valkey Cluster: %w", err)
 		}
 		replicas := int64(1)
 		if rawReps := strings.TrimSpace(os.Getenv("TANPOPO_VALKEY_REPLICAS")); rawReps != "" {
@@ -365,7 +434,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 			vaultStore.Close()
 			closeKeys()
 			closeStore()
-			return nil, nil, fmt.Errorf("initialize Valkey rate limiter: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize Valkey rate limiter: %w", err)
 		}
 	}
 
@@ -374,10 +443,13 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	runtimeCtx, cancelRuntime := context.WithCancel(context.Background())
 	watcherDone := make(chan struct{})
 	var webhookDone chan struct{}
+	var vkeyReaperDone chan struct{}
 	var closeWebhookDispatcher func() error
 	var webhookDispatcher *webhook.Dispatcher
 	var approvalMaintenanceDone chan struct{}
 	var marketplaceDone <-chan struct{}
+	var clusterNodesDone chan struct{}
+	nodeID := resolveRuntimeNodeID()
 	if isPostgres || vkClient != nil {
 		var pubsubBus snapshot.PubSubBus
 		if vkClient != nil {
@@ -400,7 +472,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 			closeKeys()
 			closeStore()
 			cancelRuntime()
-			return nil, nil, fmt.Errorf("initialize cluster snapshot sync: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize cluster snapshot sync: %w", err)
 		}
 		clusterDone = make(chan struct{})
 		go func() {
@@ -460,11 +532,20 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 			if approvalMaintenanceDone != nil {
 				<-approvalMaintenanceDone
 			}
+			if vkeyReaperDone != nil {
+				<-vkeyReaperDone
+			}
 			if budgetLoopDone != nil {
 				<-budgetLoopDone
 			}
 			if clusterDone != nil {
 				<-clusterDone
+			}
+			if clusterNodesDone != nil {
+				<-clusterNodesDone
+				delCtx, delCancel := context.WithTimeout(context.Background(), 2*time.Second)
+				_, _ = db.ExecContext(delCtx, port.Rebind(dialect, `DELETE FROM cluster_nodes WHERE node_id = ?`), nodeID)
+				delCancel()
 			}
 			<-watcherDone
 			recordActiveDBConnections("after snapshot watcher shutdown")
@@ -493,7 +574,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	catalogRepo, err := catalog.NewRepository(catalog.Config{DB: db, Snapshots: snaps, Keyring: trustedKeyring, Audit: auditLog})
 	if err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("initialize provider catalog: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize provider catalog: %w", err)
 	}
 	redirectURI := strings.TrimSpace(os.Getenv("TANPOPO_OAUTH_REDIRECT_URI"))
 	allowHermeticHTTP := strings.TrimSpace(os.Getenv("TANPOPO_TEST_HERMETIC")) == "1"
@@ -524,7 +605,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	})
 	if err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("initialize webhook dispatcher: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize webhook dispatcher: %w", err)
 	}
 	closeWebhookDispatcher = webhookDispatcher.Close
 	killSwitch, err := killswitch.NewRegistry(ctx, killswitch.RegistryConfig{
@@ -547,7 +628,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	})
 	if err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("initialize kill switches: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize kill switches: %w", err)
 	}
 	snaps.RegisterKillSwitchSync(killSwitch.RefreshFromDB)
 	ledgerService, err = ledger.NewService(ledger.Config{
@@ -587,15 +668,9 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	})
 	if err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("initialize usage ledger: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize usage ledger: %w", err)
 	}
 	if vkClient != nil && (role == "all" || role == "data-plane") {
-		nodeID := strings.TrimSpace(os.Getenv("TANPOPO_NODE_ID"))
-		if nodeID == "" {
-			if hn, herr := os.Hostname(); herr == nil && strings.TrimSpace(hn) != "" {
-				nodeID = strings.TrimSpace(hn)
-			}
-		}
 		vkBudgetCoord, err = vkcluster.NewBudgetCoordinator(vkcluster.BudgetCoordinatorConfig{
 			Client: vkClient,
 			DB:     db,
@@ -604,7 +679,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		})
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize Valkey budget coordinator: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize Valkey budget coordinator: %w", err)
 		}
 		budgetLoopDone = make(chan struct{})
 		go func() {
@@ -622,7 +697,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		oauthService, err = oauth.NewService(oauth.ServiceConfig{DB: db, Vault: vaultStore, UnsealCapability: brokerUnsealCap, Audit: auditLog, HostResolver: egress.NewStdHostResolver(), RedirectURI: redirectURI, AllowLoopbackHTTP: allowHermeticHTTP})
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize OAuth coordinator: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize OAuth coordinator: %w", err)
 		}
 	}
 	lockfile := envOr("TANPOPO_LOCK_FILE", filepath.Join(dataDir, "tanpopo.lock"))
@@ -639,12 +714,12 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	})
 	if err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("initialize extension installer: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize extension installer: %w", err)
 	}
 	registryStore, err := registry.NewSQLStore(db, time.Now)
 	if err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("initialize marketplace registry store: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize marketplace registry store: %w", err)
 	}
 	marketplaceDone = startMarketplaceRuntime(runtimeCtx, registryStore, installerService, snaps, auditLog)
 	brokerResolver := planeBrokerResolver{provider: catalogRepo, mcp: mcphub.BrokerResolver{DB: db}, a2a: a2a.BrokerResolver{DB: db}}
@@ -654,7 +729,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	})
 	if err != nil {
 		cleanup()
-		return nil, nil, fmt.Errorf("initialize credential broker: %w", err)
+		return nil, nil, nil, fmt.Errorf("initialize credential broker: %w", err)
 	}
 	a2aEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("TANPOPO_A2A_ENABLED")), "true")
 	sidecarEnabled := strings.EqualFold(strings.TrimSpace(os.Getenv("TANPOPO_RUNTIME_SIDECAR_ENABLED")), "true")
@@ -664,16 +739,22 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		sidecarCA, caErr := sidecar.NewEphemeralCA(sidecar.DefaultCACertTTL, nil)
 		if caErr != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize sidecar ephemeral CA: %w", caErr)
+			return nil, nil, nil, fmt.Errorf("initialize sidecar ephemeral CA: %w", caErr)
 		}
 		sidecarClientCert, certErr := sidecar.NewRotatingCertSource(sidecarCA, "spiffe://"+sidecar.SPIFFETenantDomain+"/core/gateway", false, sidecar.DefaultLeafCertTTL)
 		if certErr != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize sidecar client certificate: %w", certErr)
+			return nil, nil, nil, fmt.Errorf("initialize sidecar client certificate: %w", certErr)
 		}
 		sidecarFactory = newProductionSidecarFactory(sidecarSocketDir, sidecarCA, sidecarClientCert, auditLog)
 	}
 	mux := http.NewServeMux()
+	telemetryPipeline, err = telemetry.NewPipeline(buildTelemetryPipelineConfig(runtimeCfg, version, db, vaultStore))
+	if err != nil {
+		cleanup()
+		return nil, nil, nil, fmt.Errorf("initialize telemetry pipeline: %w", err)
+	}
+	mux.Handle("/metrics", telemetryPipeline.Metrics)
 	var a2aCoordinator *a2a.TaskCoordinator
 	if role == "all" || role == "data-plane" {
 		mcpServer, serverErr := mcphub.NewServer(mcphub.Config{
@@ -690,7 +771,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		})
 		if serverErr != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize MCP Governance Hub: %w", serverErr)
+			return nil, nil, nil, fmt.Errorf("initialize MCP Governance Hub: %w", serverErr)
 		}
 		approvalMaintenanceDone = make(chan struct{})
 		go func() {
@@ -711,7 +792,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		})
 		if a2aErr != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize A2A Task Coordinator: %w", a2aErr)
+			return nil, nil, nil, fmt.Errorf("initialize A2A Task Coordinator: %w", a2aErr)
 		}
 		a2aHandler := a2aCoordinator.Handler()
 		if role != "data-plane" {
@@ -754,29 +835,23 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 	})
 	var dataServer *ingresshttp.Server
 	if role == "all" || role == "data-plane" {
-		telemetryPipeline, err = telemetry.NewPipeline(telemetry.PipelineConfig{
-			ServiceName: "tanpopo", ServiceVersion: version, DB: db, Vault: vaultStore,
-		})
-		if err != nil {
-			cleanup()
-			return nil, nil, fmt.Errorf("initialize telemetry pipeline: %w", err)
-		}
 		responseCache, err := cache.NewExactCache(cache.Config{DB: db, Vault: vaultStore})
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize response cache: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize response cache: %w", err)
 		}
 		var maxNodeStreams int64
 		if rawMax := strings.TrimSpace(os.Getenv("TANPOPO_MAX_CONCURRENT_STREAMS")); rawMax != "" {
 			parsedMax, parseErr := strconv.ParseInt(rawMax, 10, 64)
 			if parseErr != nil || parsedMax < 0 {
 				cleanup()
-				return nil, nil, fmt.Errorf("invalid TANPOPO_MAX_CONCURRENT_STREAMS %q", rawMax)
+				return nil, nil, nil, fmt.Errorf("invalid TANPOPO_MAX_CONCURRENT_STREAMS %q", rawMax)
 			}
 			maxNodeStreams = parsedMax
 		}
 		dataServer, err = ingresshttp.NewServer(ingresshttp.ServerConfig{
 			Snapshots: snaps, Broker: blindBroker, KillSwitch: killSwitch, PluginsDir: pluginsDir, Audit: auditLog, IdempotencyDB: db,
+			ExtensionQuarantine:      installerService.QuarantineInstallation,
 			RateLimiter:              vkRateLimiter,
 			BudgetLedger:             ledgerService,
 			Telemetry:                telemetryPipeline,
@@ -788,7 +863,7 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		})
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize Data Plane: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize Data Plane: %w", err)
 		}
 		closeDataServer = func() error {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -799,7 +874,20 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		mux.Handle("/v1/", dataServer)
 		mux.Handle("/native", dataServer)
 		mux.Handle("/native/", dataServer)
-		mux.Handle("/metrics", dataServer.MetricsHandler())
+	}
+	if telemetryPipeline != nil && telemetryPipeline.Metrics != nil {
+		snapSource := "db_poll"
+		if clusterSync != nil {
+			if vkClient != nil && !parseEnvBool("TANPOPO_DISABLE_VALKEY_PUBSUB", false) {
+				snapSource = "valkey_pubsub"
+			} else if isPostgres {
+				snapSource = "pg_notify"
+			}
+		}
+		telemetryPipeline.Metrics.SetConfigSnapshotAgeProvider(func() (string, time.Duration, bool) {
+			age, ok := snaps.SnapshotAge()
+			return snapSource, age, ok
+		})
 	}
 	if role == "all" || role == "control-plane" {
 		bootstrapManager, err := bootstrap.NewManager(bootstrap.ManagerConfig{
@@ -807,24 +895,46 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		})
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize bootstrap service: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize bootstrap service: %w", err)
 		}
 		if _, err := bootstrapManager.EnsureToken(ctx); err != nil && !errors.Is(err, bootstrap.ErrBootstrapAlreadyCompleted) {
 			cleanup()
-			return nil, nil, fmt.Errorf("ensure bootstrap token: %w", err)
+			return nil, nil, nil, fmt.Errorf("ensure bootstrap token: %w", err)
 		}
 		authService, err := auth.NewLocalService(auth.ServiceConfig{DB: db, AuditSink: auditLog, AllowedOrigins: allowedOrigins(listen)})
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize local authentication: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize local authentication: %w", err)
 		}
 		vkeys, err := vkey.NewService(vkey.ServiceConfig{
 			DB: db, Snapshots: snaps, AuditSink: auditLog, OnChange: publishChangeFn,
 		})
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize virtual keys: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize virtual keys: %w", err)
 		}
+		vkeyReapInterval := 2 * time.Second
+		if rawInterval := strings.TrimSpace(os.Getenv("TANPOPO_VKEY_ROTATION_REAP_INTERVAL")); rawInterval != "" {
+			if parsedInterval, pErr := time.ParseDuration(rawInterval); pErr == nil && parsedInterval > 0 {
+				vkeyReapInterval = parsedInterval
+			}
+		}
+		vkeyReaperDone = make(chan struct{})
+		go func() {
+			defer close(vkeyReaperDone)
+			ticker := time.NewTicker(vkeyReapInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-runtimeCtx.Done():
+					return
+				case <-ticker.C:
+					if _, rErr := vkeys.FinalizeExpiredRotations(runtimeCtx); rErr != nil && !errors.Is(rErr, context.Canceled) {
+						slog.Warn("virtual key expired rotation sweep failed", "error", rErr)
+					}
+				}
+			}
+		}()
 		var providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 		if dataServer != nil {
 			providerRuntimeFactory = dataServer.AcquireProviderRuntime
@@ -900,6 +1010,11 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 				return enqueueErr
 			},
 			OnConfigChange: publishChangeFn,
+			OnExtensionUnquarantined: func(installationID string) {
+				if dataServer != nil {
+					dataServer.FaultGuard().Reset(installationID)
+				}
+			},
 			Broker:         blindBroker, OAuth: oauthService, A2ACoordinator: a2aCoordinator, ProviderRuntimeFactory: providerRuntimeFactory, Audit: auditLog,
 			OfflineMode: offlineMode, MultiOrgDisabled: multiOrgDisabled,
 			TrustedProxyCIDRs: parseEnvCSV("TANPOPO_TRUSTED_PROXY_CIDRS"),
@@ -907,15 +1022,20 @@ func buildRuntimeWithConfig(ctx context.Context, role, listen string, beforeSQLi
 		})
 		if err != nil {
 			cleanup()
-			return nil, nil, fmt.Errorf("initialize Admin API: %w", err)
+			return nil, nil, nil, fmt.Errorf("initialize Admin API: %w", err)
 		}
 		if recErr := adminServer.ResumePendingOrgDeletions(ctx); recErr != nil {
 			fmt.Fprintf(os.Stderr, "tanpopo: warning: pending organization erasure recovery incomplete: %v\n", recErr)
 		}
-		mux.Handle("/admin/v1/", adminServer)
+		mux.Handle("/admin/v1/", withTelemetryRequestLogger(adminServer, telemetryPipeline, "admin_api", "admin_request"))
 		mux.Handle("/", webui.Handler())
 	}
-	return mux, cleanup, nil
+	clusterNodesDone = startClusterNodeHeartbeat(runtimeCtx, db, dialect, nodeID, role, listen, isPostgres, sqliteDBPath, snaps, clusterSync, vaultStore, dataServerReady)
+	var metricsHandler http.Handler
+	if telemetryPipeline != nil && telemetryPipeline.Metrics != nil {
+		metricsHandler = telemetryPipeline.Metrics
+	}
+	return mux, metricsHandler, cleanup, nil
 }
 
 func recordExtensionWebhookOutbox(ctx context.Context, tx *sql.Tx, dialect port.Dialect, dispatcher *webhook.Dispatcher, installationID, eventKey, eventType string, payload []byte) error {
@@ -1130,4 +1250,246 @@ func envOr(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func optionalBoolEnv(name string) *bool {
+	raw := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	switch raw {
+	case "1", "true", "yes", "on":
+		v := true
+		return &v
+	case "0", "false", "no", "off":
+		v := false
+		return &v
+	default:
+		return nil
+	}
+}
+
+func resolveRuntimeNodeID() string {
+	if nodeID := strings.TrimSpace(os.Getenv("TANPOPO_NODE_ID")); nodeID != "" {
+		return nodeID
+	}
+	if hn, err := os.Hostname(); err == nil && strings.TrimSpace(hn) != "" {
+		return fmt.Sprintf("%s-%d", strings.TrimSpace(hn), os.Getpid())
+	}
+	return fmt.Sprintf("tanpopo-%d", os.Getpid())
+}
+
+func buildTelemetryPipelineConfig(runtimeCfg serveRuntimeConfig, svcVersion string, db *sql.DB, vaultStore *vault.Store) telemetry.PipelineConfig {
+	var logOut io.Writer = os.Stdout
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("TANPOPO_LOG_OUT"))) {
+	case "discard", "none", "off":
+		logOut = io.Discard
+	case "stderr":
+		logOut = os.Stderr
+	}
+	otlpEndpoint := strings.TrimSpace(runtimeCfg.OTLPEndpoint)
+	if otlpEndpoint == "" {
+		otlpEndpoint = envOr("TANPOPO_OTLP_ENDPOINT", strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")))
+	}
+	otlpAllowPrivate := parseEnvBool("TANPOPO_OTLP_ALLOW_PRIVATE_IP", false)
+	if runtimeCfg.HasOTLPAllowPrivate {
+		otlpAllowPrivate = runtimeCfg.OTLPAllowPrivateIP
+	}
+	var metricsInterval time.Duration
+	if rawInt := strings.TrimSpace(os.Getenv("TANPOPO_OTLP_METRICS_EXPORT_INTERVAL")); rawInt != "" {
+		if d, err := time.ParseDuration(rawInt); err == nil && d > 0 {
+			metricsInterval = d
+		}
+	}
+	return telemetry.PipelineConfig{
+		ServiceName:                "tanpopo",
+		ServiceVersion:             svcVersion,
+		IncludeTenantLabels:        optionalBoolEnv("TANPOPO_METRICS_INCLUDE_TENANT_LABELS"),
+		MetricsScrapeToken:         strings.TrimSpace(os.Getenv("TANPOPO_METRICS_SCRAPE_TOKEN")),
+		AllowUnauthenticatedScrape: parseEnvBool("TANPOPO_METRICS_ALLOW_UNAUTHENTICATED", false),
+		OTLPEndpoint:               otlpEndpoint,
+		OTLPTracesEndpoint:         envOr("TANPOPO_OTLP_TRACES_ENDPOINT", strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"))),
+		OTLPMetricsEndpoint:        envOr("TANPOPO_OTLP_METRICS_ENDPOINT", strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT"))),
+		OTLPLogsEndpoint:           envOr("TANPOPO_OTLP_LOGS_ENDPOINT", strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"))),
+		OTLPAllowPrivateIP:         otlpAllowPrivate,
+		OTLPAllowedCIDRs:           parseEnvCSV("TANPOPO_OTLP_ALLOWED_CIDRS"),
+		MetricsExportInterval:      metricsInterval,
+		CapturePayloads:            false,
+		DB:                         db,
+		Vault:                      vaultStore,
+		LogOut:                     logOut,
+	}
+}
+
+type statusResponseRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusResponseRecorder) WriteHeader(code int) {
+	if r.status == 0 {
+		r.status = code
+	}
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusResponseRecorder) Write(p []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	return r.ResponseWriter.Write(p)
+}
+
+func (r *statusResponseRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
+
+func withTelemetryRequestLogger(next http.Handler, pipeline *telemetry.Pipeline, entryPoint, event string) http.Handler {
+	if next == nil || pipeline == nil || pipeline.Logger == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusResponseRecorder{ResponseWriter: w}
+		next.ServeHTTP(rec, r)
+		status := rec.status
+		if status == 0 {
+			status = http.StatusOK
+		}
+		level := "INFO"
+		if status >= 500 {
+			level = "ERROR"
+		} else if status >= 400 {
+			level = "WARN"
+		}
+		reqID := strings.TrimSpace(rec.Header().Get("X-Tanpopo-Request-Id"))
+		if reqID == "" {
+			reqID = strings.TrimSpace(r.Header.Get("X-Tanpopo-Request-Id"))
+		}
+		pathOnly := ""
+		if r.URL != nil {
+			pathOnly = r.URL.Path
+		}
+		_ = pipeline.Logger.Log(privacy.LogRecord{
+			Level:      level,
+			Event:      event,
+			EntryPoint: entryPoint,
+			RequestID:  reqID,
+			Fields: map[string]any{
+				"method":            r.Method,
+				"path":              pathOnly,
+				"http_status":       status,
+				"total_duration_ms": time.Since(start).Milliseconds(),
+			},
+		})
+	})
+}
+
+func startClusterNodeHeartbeat(
+	runtimeCtx context.Context,
+	db *sql.DB,
+	dialect port.Dialect,
+	nodeID, role, listen string,
+	isPostgres bool,
+	sqliteDBPath string,
+	snaps *snapshot.Manager,
+	clusterSync *snapshot.ClusterSync,
+	vaultStore *vault.Store,
+	dataServerReady func(context.Context) error,
+) chan struct{} {
+	done := make(chan struct{})
+	if db == nil {
+		close(done)
+		return done
+	}
+	startedAtMs := time.Now().UTC().UnixMilli()
+	storageEngine := "sqlite_wal"
+	if isPostgres {
+		storageEngine = "postgres"
+	}
+	interval := 2 * time.Second
+	if rawInt := strings.TrimSpace(os.Getenv("TANPOPO_NODE_HEARTBEAT_INTERVAL")); rawInt != "" {
+		if d, err := time.ParseDuration(rawInt); err == nil && d > 0 {
+			interval = d
+		}
+	}
+	upsert := func(opCtx context.Context) {
+		hbCtx, cancel := context.WithTimeout(opCtx, 2*time.Second)
+		defer cancel()
+		var configEpoch int64
+		if snaps != nil {
+			if cur := snaps.Current(); cur != nil {
+				configEpoch = cur.Epoch
+			}
+		}
+		var snapAgeMs int64
+		if snaps != nil {
+			if age, ok := snaps.SnapshotAge(); ok && age > 0 {
+				snapAgeMs = age.Milliseconds()
+			}
+		}
+		health := "ok"
+		if snaps == nil || snaps.CheckServingReady() != nil {
+			health = "unhealthy"
+		} else if clusterSync != nil && clusterSync.CheckServingReady() != nil {
+			health = "unhealthy"
+		} else if vaultStore == nil || vaultStore.CheckServingReady(hbCtx) != nil {
+			health = "unhealthy"
+		} else if dataServerReady != nil && dataServerReady(hbCtx) != nil {
+			health = "unhealthy"
+		}
+		var walBytes int64
+		if !isPostgres && sqliteDBPath != "" {
+			if fi, err := os.Stat(sqliteDBPath + "-wal"); err == nil && fi.Size() >= 0 {
+				walBytes = fi.Size()
+			}
+		}
+		kekIDsJSON := "[]"
+		if vaultStore != nil {
+			if ids := vaultStore.LoadedKeyIDs(hbCtx); len(ids) > 0 {
+				if raw, merr := json.Marshal(ids); merr == nil {
+					kekIDsJSON = string(raw)
+				}
+			}
+		}
+		nowMs := time.Now().UTC().UnixMilli()
+		query := port.Rebind(dialect, `
+			INSERT INTO cluster_nodes (
+				node_id, role, listen_addr, config_epoch, snapshot_age_ms,
+				health, storage_engine, wal_bytes, loaded_kek_ids_json,
+				last_heartbeat_ms, started_at_ms
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(node_id) DO UPDATE SET
+				role = excluded.role,
+				listen_addr = excluded.listen_addr,
+				config_epoch = excluded.config_epoch,
+				snapshot_age_ms = excluded.snapshot_age_ms,
+				health = excluded.health,
+				storage_engine = excluded.storage_engine,
+				wal_bytes = excluded.wal_bytes,
+				loaded_kek_ids_json = excluded.loaded_kek_ids_json,
+				last_heartbeat_ms = excluded.last_heartbeat_ms
+		`)
+		if _, err := db.ExecContext(hbCtx, query,
+			nodeID, role, listen, configEpoch, snapAgeMs,
+			health, storageEngine, walBytes, kekIDsJSON,
+			nowMs, startedAtMs,
+		); err != nil && !errors.Is(err, context.Canceled) {
+			slog.Warn("cluster_nodes heartbeat upsert failed", "node_id", nodeID, "error", err)
+		}
+	}
+	if runtimeCtx.Err() == nil {
+		upsert(runtimeCtx)
+	}
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-runtimeCtx.Done():
+				return
+			case <-ticker.C:
+				upsert(runtimeCtx)
+			}
+		}
+	}()
+	return done
 }

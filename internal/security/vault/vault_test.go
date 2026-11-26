@@ -3462,3 +3462,70 @@ func TestVaultRotateSecretTxChangesCiphertextOnlyAfterCommit(t *testing.T) {
 		t.Fatalf("committed value=%q version=%d", after.Plaintext, after.Version)
 	}
 }
+
+type nonRetirableKEKStub struct {
+	KEKProvider
+}
+
+func TestVaultLoadedKeyIDsAndRetireKEKBranches(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	var nilStore *Store
+	if got := nilStore.LoadedKeyIDs(ctx); got != nil {
+		t.Fatalf("nil Store.LoadedKeyIDs = %v, want nil", got)
+	}
+	if err := nilStore.RetireKEK(ctx, "kek_v1"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("nil Store.RetireKEK err = %v, want ErrInvalidInput", err)
+	}
+	emptyKEK := &StaticKEKProvider{}
+	if got := emptyKEK.LoadedKeyIDs(); got != nil {
+		t.Fatalf("empty StaticKEKProvider.LoadedKeyIDs = %v, want nil", got)
+	}
+
+	env := newVaultTestEnv(t, time.Minute)
+	initialIDs := env.vault.LoadedKeyIDs(ctx)
+	if len(initialIDs) != 1 {
+		t.Fatalf("expected 1 initial key, got %v", initialIDs)
+	}
+	oldKeyID := initialIDs[0]
+
+	keyV2 := bytes.Repeat([]byte{0x42}, KeySizeBytes)
+	if err := env.kek.RegisterKey("kek_z2", keyV2, true); err != nil {
+		t.Fatalf("RegisterKey: %v", err)
+	}
+	bothIDs := env.vault.LoadedKeyIDs(ctx)
+	if len(bothIDs) != 2 || bothIDs[0] > bothIDs[1] {
+		t.Fatalf("expected sorted 2 KEK IDs, got %v", bothIDs)
+	}
+
+	// Cannot retire active Master KEK.
+	if err := env.vault.RetireKEK(ctx, "kek_z2"); !errors.Is(err, ErrInvalidMasterKey) {
+		t.Fatalf("retiring active KEK err = %v, want ErrInvalidMasterKey", err)
+	}
+	// Can retire previous inactive Master KEK cleanly.
+	if err := env.vault.RetireKEK(ctx, oldKeyID); err != nil {
+		t.Fatalf("retire inactive KEK %s: %v", oldKeyID, err)
+	}
+	afterRetire := env.vault.LoadedKeyIDs(ctx)
+	if len(afterRetire) != 1 || afterRetire[0] != "kek_z2" {
+		t.Fatalf("expected only kek_z2 after retirement, got %v", afterRetire)
+	}
+
+	// Non-retirable KEKProvider falls back to ActiveKeyID in LoadedKeyIDs and rejects RetireKEK cleanly.
+	stubStore, err := NewStore(Config{
+		DB:            env.sqlite.RawDB(),
+		KEK:           nonRetirableKEKStub{KEKProvider: env.kek},
+		PostShredHook: func(context.Context) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("NewStore with nonRetirableKEKStub: %v", err)
+	}
+	if ids := stubStore.LoadedKeyIDs(ctx); len(ids) != 1 || ids[0] != "kek_z2" {
+		t.Fatalf("stubStore.LoadedKeyIDs = %v, want [kek_z2]", ids)
+	}
+	if err := stubStore.RetireKEK(ctx, "kek_z2"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("stubStore.RetireKEK err = %v, want ErrInvalidInput", err)
+	}
+}
+

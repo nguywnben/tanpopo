@@ -133,6 +133,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		"TANPOPO_MASTER_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"TANPOPO_MASTER_KEY_FILE=",
 		"TANPOPO_MARKETPLACE_ARCHIVE_ROOT="+marketplaceDir,
+		"TANPOPO_METRICS_LISTEN=127.0.0.1:0",
 		"TANPOPO_TEST_HERMETIC=1",
 	)
 	server.Stdout, server.Stderr = serverLog, serverLog
@@ -403,7 +404,7 @@ func TestEXTAccept01_LiveEURoutingAndSettlement(t *testing.T) {
 		resp := liveJSONRequest(t, client, http.MethodPost, baseURL+"/admin/v1/deployments", map[string]any{
 			"env_id": bootResult.EnvID, "logical_model_id": modelResult.ID, "connection_id": connID,
 			"upstream_model_name": "accept-chat", "data_region": region,
-			"rate_card": map[string]any{"input_token_nano_usd": 13012000000000, "output_token_nano_usd": 12864000000000},
+			"rate_card": map[string]any{"input_token_nano_usd": 13012000, "output_token_nano_usd": 12864000},
 		}, []*http.Cookie{cookie}, baseURL, loginResult.CSRFToken)
 		if resp.Code != http.StatusCreated {
 			t.Fatalf("create %s deployment: got %d: %s", region, resp.Code, resp.Body)

@@ -40,7 +40,7 @@ type Connection = components['schemas']['ProviderConnection'];
 type SecretMetadata = components['schemas']['SecretMetadata'];
 type Adapter = components['schemas']['ProviderAdapterSummary'];
 
-const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
+const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 
 export function ProvidersPage({pathname, projectId, roles}: {pathname: string; projectId: string; roles: Role[]}) {
   const {navigate, search} = useRouter();
@@ -152,17 +152,32 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
   const reloadSeqRef = useRef(0);
 
   const canManage = roles.some(role => manageRoles.includes(role));
+  const canReadConnections = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER'].includes(role));
+  const canReadSecrets = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER'].includes(role));
+  const hasOrgWideSecretRead = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'SECURITY_REVIEWER'].includes(role));
 
   const reload = useCallback(async () => {
     const seq = ++reloadSeqRef.current;
     setLoading(true);
+    setError('');
     try {
-      const [connRows, secretRows, adapterRows] = await Promise.all([
-        listConnections(),
-        listSecretMetadata(),
-        listProviderAdapters(),
+      const [connRes, secretRes, adapterRes] = await Promise.allSettled([
+        canReadConnections ? listConnections() : Promise.resolve([] as Connection[]),
+        canReadSecrets && (hasOrgWideSecretRead || Boolean(projectId))
+          ? listSecretMetadata(projectId || undefined)
+          : Promise.resolve([] as SecretMetadata[]),
+        canReadConnections ? listProviderAdapters() : Promise.resolve([] as Adapter[]),
       ]);
       if (reloadSeqRef.current !== seq) return;
+      const connRows = connRes.status === 'fulfilled' ? connRes.value : [];
+      const secretRows = secretRes.status === 'fulfilled' ? secretRes.value : [];
+      const adapterRows = adapterRes.status === 'fulfilled' ? adapterRes.value : [];
+      if (canReadConnections) {
+        const primaryFail = connRes.status === 'rejected' ? connRes : adapterRes.status === 'rejected' ? adapterRes : null;
+        if (primaryFail && primaryFail.status === 'rejected') {
+          setError(errText(primaryFail.reason, t));
+        }
+      }
       setConnections(connRows);
       setSecrets(secretRows);
       setAdapters(adapterRows);
@@ -180,7 +195,7 @@ export function ProvidersPage({pathname, projectId, roles}: {pathname: string; p
     } finally {
       if (reloadSeqRef.current === seq) setLoading(false);
     }
-  }, [applyAdapterDefaults, t]);
+  }, [applyAdapterDefaults, projectId, canReadConnections, canReadSecrets, hasOrgWideSecretRead, t]);
 
   useEffect(() => { void reload(); }, [reload]);
 

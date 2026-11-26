@@ -133,9 +133,10 @@ type ServerConfig struct {
 	ProviderRuntimeFactory  func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	MarketplaceCatalog      []MarketplaceCatalogEntry
 	ArchiveResolver         ExtensionArchiveResolver
-	WebhookEnqueue          WebhookEnqueue
-	OnConfigChange          func(context.Context, snapshot.ChangeEvent)
-	LockfilePath            string
+	WebhookEnqueue           WebhookEnqueue
+	OnConfigChange           func(context.Context, snapshot.ChangeEvent)
+	OnExtensionUnquarantined func(installationID string)
+	LockfilePath             string
 	ConfigPath              string
 	ProbeRateLimitPerMinute int
 	Audit                   port.AuditSink
@@ -259,9 +260,10 @@ type Server struct {
 	providerRuntimeFactory func(context.Context, string, string) (extport.ProviderRuntime, func(), error)
 	marketplace            []MarketplaceCatalogEntry
 	archiveResolver        ExtensionArchiveResolver
-	webhookEnqueue         WebhookEnqueue
-	onConfigChange         func(context.Context, snapshot.ChangeEvent)
-	lockfilePath           string
+	webhookEnqueue           WebhookEnqueue
+	onConfigChange           func(context.Context, snapshot.ChangeEvent)
+	onExtensionUnquarantined func(installationID string)
+	lockfilePath             string
 	configPath             string
 	probeLimiter           *slidingWindowLimiter
 	audit                  port.AuditSink
@@ -449,9 +451,10 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		providerRuntimeFactory: cfg.ProviderRuntimeFactory,
 		marketplace:            marketplace,
 		archiveResolver:        cfg.ArchiveResolver,
-		webhookEnqueue:         cfg.WebhookEnqueue,
-		onConfigChange:         cfg.OnConfigChange,
-		lockfilePath:           strings.TrimSpace(cfg.LockfilePath),
+		webhookEnqueue:           cfg.WebhookEnqueue,
+		onConfigChange:           cfg.OnConfigChange,
+		onExtensionUnquarantined: cfg.OnExtensionUnquarantined,
+		lockfilePath:             strings.TrimSpace(cfg.LockfilePath),
 		configPath:             strings.TrimSpace(cfg.ConfigPath),
 		probeLimiter:           newSlidingWindowLimiter(cfg.ProbeRateLimitPerMinute, time.Minute),
 		audit:                  auditSink,
@@ -535,6 +538,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		{Method: http.MethodGet, Path: "/admin/v1/extensions/{installationId}/permission-diff", Action: rbac.ActionExtensionRead, Handler: s.handleGetExtensionPermissionDiff},
 		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/approve-permissions", Action: rbac.ActionExtensionApprove, Handler: s.handleApproveExtensionPermissions},
 		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/quarantine", Action: rbac.ActionExtensionQuarantine, Handler: s.handleQuarantineExtension},
+		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/unquarantine", Action: rbac.ActionExtensionQuarantine, Handler: s.handleUnquarantineExtension},
 		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/upgrade", Action: rbac.ActionExtensionStage, Handler: s.handleUpgradeExtension},
 		{Method: http.MethodPost, Path: "/admin/v1/extensions/{installationId}/rollback", Action: rbac.ActionExtensionApprove, Handler: s.handleRollbackExtension},
 		{Method: http.MethodDelete, Path: "/admin/v1/extensions/{installationId}", Action: rbac.ActionExtensionApprove, Handler: s.handleUninstallOrDiscardExtension},
@@ -597,6 +601,7 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		// Group L: Minimum reusable Unit 32 lifecycle core required by Unit 30 Operations.
 		{Method: http.MethodGet, Path: "/admin/v1/ops/cluster-status", Action: rbac.ActionOpsRead, Handler: s.handleGetClusterOpsStatus},
 		{Method: http.MethodPost, Path: "/admin/v1/ops/backups", Action: rbac.ActionOpsWrite, Handler: s.handleCreateEncryptedBackup},
+		{Method: http.MethodPost, Path: "/admin/v1/ops/keys/retire", Action: rbac.ActionOpsWrite, Handler: s.handleRetireMasterKEK},
 		{Method: http.MethodPost, Path: "/admin/v1/ops/upgrades/preflight", Action: rbac.ActionOpsWrite, Handler: s.handleRunUpgradePreflight},
 		{Method: http.MethodPost, Path: "/admin/v1/playground/sessions", Action: rbac.ActionPlaygroundCreate, Handler: s.handleCreatePlaygroundSession},
 	}

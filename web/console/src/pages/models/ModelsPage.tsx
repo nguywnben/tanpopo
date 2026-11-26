@@ -82,7 +82,7 @@ const emptyCapabilities: components['schemas']['CapabilityProfile'] = {
   rerank: false,
 };
 
-const manageRoles: Role[] = ['ORG_OWNER', 'TEAM_ADMIN'];
+const manageRoles: Role[] = ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN'];
 
 export function ModelsPage({
   projectId = '',
@@ -134,6 +134,7 @@ export function ModelsPage({
   const reloadSeqRef = useRef(0);
 
   const canManage = roles.some(role => manageRoles.includes(role));
+  const canReadConnections = roles.some(role => ['OPERATOR', 'ORG_OWNER', 'TEAM_ADMIN', 'SECURITY_REVIEWER', 'FINOPS_VIEWER'].includes(role));
   const fallbackEnvId = environments[0]?.id ?? '';
 
   useEffect(() => {
@@ -145,14 +146,21 @@ export function ModelsPage({
     setLoading(true);
     setError('');
     try {
-      const [modelRows, depRows, connRows] = await Promise.all([
+      const [modelsRes, depsRes, connsRes] = await Promise.allSettled([
         listAdminModels(),
         environmentId || (projectId && environments.length > 0)
           ? listDeployments(environmentId || undefined, projectId || undefined)
           : Promise.resolve([] as Deployment[]),
-        listConnections(),
+        canReadConnections ? listConnections() : Promise.resolve([] as Connection[]),
       ]);
       if (reloadSeqRef.current !== seq) return;
+      const modelRows = modelsRes.status === 'fulfilled' ? modelsRes.value : [];
+      const depRows = depsRes.status === 'fulfilled' ? depsRes.value : [];
+      const connRows = connsRes.status === 'fulfilled' ? connsRes.value : [];
+      const primaryFail = modelsRes.status === 'rejected' ? modelsRes : depsRes.status === 'rejected' ? depsRes : null;
+      if (primaryFail && primaryFail.status === 'rejected') {
+        setError(errText(primaryFail.reason, t));
+      }
       setModels(modelRows);
       setDeployments(depRows);
       setConnections(connRows);
@@ -164,7 +172,7 @@ export function ModelsPage({
     } finally {
       if (reloadSeqRef.current === seq) setLoading(false);
     }
-  }, [projectId, environmentId, environments.length, t]);
+  }, [projectId, environmentId, environments.length, canReadConnections, t]);
 
   useEffect(() => { void reload(); }, [reload]);
 
@@ -210,6 +218,7 @@ export function ModelsPage({
         id: slug.trim(),
         slug: slug.trim(),
         display_name: displayName.trim(),
+        project_id: projectId || undefined,
         context_window: Number(contextWindow),
         max_output_tokens: Number(maxOutput),
         assurance_tier: 'DECLARED',
@@ -483,9 +492,14 @@ export function ModelsPage({
                 header: t('models.col.rates'),
                 width: '17%',
                 render: row => (
-                  <span className="mono">
-                    {formatNumber(row.rate_card.input_token_nano_usd)} / {formatNumber(row.rate_card.output_token_nano_usd)}
-                  </span>
+                  <div className="tp-stack-sm">
+                    <span className="mono">
+                      {formatNumber(row.rate_card.input_token_nano_usd)} / {formatNumber(row.rate_card.output_token_nano_usd)}
+                    </span>
+                    {row.rate_card.token_rate_unit === 'LEGACY_NANO_USD_PER_1M' ? (
+                      <span className="tp-muted">{t('models.legacyRateUnitNote')}</span>
+                    ) : null}
+                  </div>
                 ),
               },
               {
@@ -656,7 +670,15 @@ export function ModelsPage({
         footer={
           <>
             <Button variant="secondary" onClick={() => setDepDrawerOpen(false)}>{t('common.cancel')}</Button>
-            <Button type="submit" form="tp-add-deployment-form" variant="primary" loading={busy}>{t('models.saveDeployment')}</Button>
+            <Button
+              type="submit"
+              form="tp-add-deployment-form"
+              variant="primary"
+              loading={busy}
+              disabled={!(deployEnvId || environmentId).trim()}
+            >
+              {t('models.saveDeployment')}
+            </Button>
           </>
         }
       >
@@ -670,6 +692,8 @@ export function ModelsPage({
               onChange={setDeployEnvId}
               options={environments.map(env => ({value: env.id, label: `${env.name} (${env.slug})`}))}
             />
+          ) : !environmentId ? (
+            <Banner tone="warn">{t('models.noEnvironmentsHint')}</Banner>
           ) : null}
           <SelectField
             label={t('models.logicalModel')}
@@ -698,6 +722,15 @@ export function ModelsPage({
               />
             ))}
           </div>
+          <p className="tp-muted">
+            {t('models.rateExample', {
+              inPer1M: `$${((Number(rates.input_token_nano_usd) || 0) / 1000).toFixed(3)}`,
+              outPer1M: `$${((Number(rates.output_token_nano_usd) || 0) / 1000).toFixed(3)}`,
+              sampleMicros: formatNumber(
+                Math.ceil(((Number(rates.input_token_nano_usd) || 0) * 1000 + (Number(rates.output_token_nano_usd) || 0) * 500 + (Number(rates.image_unit_nano_usd) || 0)) / 1000),
+              ),
+            })}
+          </p>
           <CheckboxField
             label={t('models.selfHostedZero')}
             description={t('models.selfHostedZeroDesc')}

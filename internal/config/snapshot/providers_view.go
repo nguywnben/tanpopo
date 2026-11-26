@@ -48,6 +48,7 @@ type ProviderAdapterView struct {
 	ExtensionKind           string
 	ExecutionTier           string
 	ExtensionState          string
+	ExtensionVersion        int64
 	ActiveVersionID         string
 	BundleSHA256            string
 	ManifestJSON            string
@@ -97,6 +98,7 @@ type ProviderConnectionView struct {
 	SharedProjectIDs              []string
 	sharedProjectSet              map[string]struct{}
 	AdapterInstallUsable          bool
+	AdapterQuarantined            bool
 	DerivedPublicTrust            string
 	DerivedEnterpriseSigned       bool
 	ChildProjectBlockedByOrgTrust bool
@@ -134,21 +136,13 @@ func (c *ProviderConnectionView) clone() *ProviderConnectionView {
 	return &cp
 }
 
-// VisibleToProject reports whether projectID inside orgID can access
-// this connection according to owner_project_id and downward shared_project_ids.
-func (c *ProviderConnectionView) VisibleToProject(orgID, projectID string) bool {
-	if c == nil || c.OrgID != orgID || !c.AdapterInstallUsable || c.DisabledByOrgPolicy || c.BlockedByOrgTrustPolicy {
-		return false
-	}
-	// TP-BR-0202: Unsigned unverified_external extensions are unavailable to child Project
-	// scopes unless explicitly enabled by ORG_OWNER via org_extension_policies (enabled=1, org_owner_opt_in=1),
-	// even when owner_project_id IS NULL and shared_project_ids is empty.
-	if projectID != "" && c.ChildProjectBlockedByOrgTrust {
+// VisibleToProjectScopeOnly reports whether projectID inside orgID satisfies tenancy
+// ownership/sharing rules (independent of extension quarantine/trust activation status).
+func (c *ProviderConnectionView) VisibleToProjectScopeOnly(orgID, projectID string) bool {
+	if c == nil || c.OrgID != orgID {
 		return false
 	}
 	if c.OwnerProjectID == nil {
-		// Org-owned connection: accessible organization-wide when shared_project_ids is empty;
-		// otherwise strictly limited to projects in shared_project_ids.
 		if len(c.sharedProjectSet) == 0 {
 			return true
 		}
@@ -166,6 +160,22 @@ func (c *ProviderConnectionView) VisibleToProject(orgID, projectID string) bool 
 	}
 	_, ok := c.sharedProjectSet[projectID]
 	return ok
+}
+
+// VisibleToProject reports whether projectID inside orgID can access
+// this connection according to owner_project_id, downward shared_project_ids,
+// extension activation, and org trust/policy checks.
+func (c *ProviderConnectionView) VisibleToProject(orgID, projectID string) bool {
+	if c == nil || c.OrgID != orgID || !c.AdapterInstallUsable || c.DisabledByOrgPolicy || c.BlockedByOrgTrustPolicy {
+		return false
+	}
+	// TP-BR-0202: Unsigned unverified_external extensions are unavailable to child Project
+	// scopes unless explicitly enabled by ORG_OWNER via org_extension_policies (enabled=1, org_owner_opt_in=1),
+	// even when owner_project_id IS NULL and shared_project_ids is empty.
+	if projectID != "" && c.ChildProjectBlockedByOrgTrust {
+		return false
+	}
+	return c.VisibleToProjectScopeOnly(orgID, projectID)
 }
 
 // LogicalModelView is an immutable O(1) snapshot record of logical_models.
@@ -192,20 +202,40 @@ func (m *LogicalModelView) clone() *LogicalModelView {
 	return &cp
 }
 
-// PricingNanoUSD holds strict integer nano-USD pricing rates per 1M units or media unit (zero floats).
+// PricingNanoUSD holds strict integer nano-USD pricing rates per token (canonical schema v2)
+// or per 1M tokens (legacy v1 rows) plus media units (zero floats).
 type PricingNanoUSD struct {
-	InputPer1MNanoUSD        int64 `json:"input_per_1m_nano_usd"`
-	OutputPer1MNanoUSD       int64 `json:"output_per_1m_nano_usd"`
-	CacheReadPer1MNanoUSD    int64 `json:"cache_read_per_1m_nano_usd,omitempty"`
-	CacheWritePer1MNanoUSD   int64 `json:"cache_write_per_1m_nano_usd,omitempty"`
-	ReasoningPer1MNanoUSD    int64 `json:"reasoning_per_1m_nano_usd,omitempty"`
-	ImagePerUnitNanoUSD      int64 `json:"image_per_unit_nano_usd,omitempty"`
-	ImagePer1MPixelsNanoUSD  int64 `json:"image_per_1m_pixels_nano_usd,omitempty"`
-	AudioInputPerSecNanoUSD  int64 `json:"audio_input_per_sec_nano_usd,omitempty"`
-	AudioOutputPerSecNanoUSD int64 `json:"audio_output_per_sec_nano_usd,omitempty"`
-	DocumentPageNanoUSD      int64 `json:"document_page_nano_usd,omitempty"`
-	RerankUnitNanoUSD        int64 `json:"rerank_unit_nano_usd,omitempty"`
-	SelfHostedZeroRate       bool  `json:"self_hosted_zero_rate,omitempty"`
+	PricingSchemaVersion     int    `json:"pricing_schema_version,omitempty"`
+	TokenRateUnit            string `json:"token_rate_unit,omitempty"`
+	InputTokenNanoUSD        int64  `json:"input_token_nano_usd,omitempty"`
+	OutputTokenNanoUSD       int64  `json:"output_token_nano_usd,omitempty"`
+	CacheReadTokenNanoUSD    int64  `json:"cache_read_token_nano_usd,omitempty"`
+	CacheWriteTokenNanoUSD   int64  `json:"cache_write_token_nano_usd,omitempty"`
+	ReasoningTokenNanoUSD    int64  `json:"reasoning_token_nano_usd,omitempty"`
+	InputPer1MNanoUSD        int64  `json:"input_per_1m_nano_usd,omitempty"`
+	OutputPer1MNanoUSD       int64  `json:"output_per_1m_nano_usd,omitempty"`
+	CacheReadPer1MNanoUSD    int64  `json:"cache_read_per_1m_nano_usd,omitempty"`
+	CacheWritePer1MNanoUSD   int64  `json:"cache_write_per_1m_nano_usd,omitempty"`
+	ReasoningPer1MNanoUSD    int64  `json:"reasoning_per_1m_nano_usd,omitempty"`
+	ImagePerUnitNanoUSD      int64  `json:"image_per_unit_nano_usd,omitempty"`
+	ImagePer1MPixelsNanoUSD  int64  `json:"image_per_1m_pixels_nano_usd,omitempty"`
+	AudioInputPerSecNanoUSD  int64  `json:"audio_input_per_sec_nano_usd,omitempty"`
+	AudioOutputPerSecNanoUSD int64  `json:"audio_output_per_sec_nano_usd,omitempty"`
+	DocumentPageNanoUSD      int64  `json:"document_page_nano_usd,omitempty"`
+	RerankUnitNanoUSD        int64  `json:"rerank_unit_nano_usd,omitempty"`
+	SelfHostedZeroRate       bool   `json:"self_hosted_zero_rate,omitempty"`
+}
+
+// IsCanonicalPerToken reports whether token rates are expressed canonically per token (nano-USD/token).
+func (p PricingNanoUSD) IsCanonicalPerToken() bool {
+	if p.PricingSchemaVersion >= 2 || strings.EqualFold(strings.TrimSpace(p.TokenRateUnit), "nano_usd_per_token") {
+		return true
+	}
+	hasPer1M := p.InputPer1MNanoUSD > 0 || p.OutputPer1MNanoUSD > 0 ||
+		p.CacheReadPer1MNanoUSD > 0 || p.CacheWritePer1MNanoUSD > 0 || p.ReasoningPer1MNanoUSD > 0
+	hasPerTok := p.InputTokenNanoUSD > 0 || p.OutputTokenNanoUSD > 0 ||
+		p.CacheReadTokenNanoUSD > 0 || p.CacheWriteTokenNanoUSD > 0 || p.ReasoningTokenNanoUSD > 0
+	return hasPerTok && !hasPer1M
 }
 
 // ModelDeploymentView is an immutable O(1) snapshot record of model_deployments.
@@ -265,6 +295,19 @@ func (s *ConfigSnapshot) LookupProviderAdapter(adapterID string) (*ProviderAdapt
 		return nil, false
 	}
 	return v.clone(), true
+}
+
+// LookupProviderAdapterByInstallationID returns the adapter view bound to installationID, if present.
+func (s *ConfigSnapshot) LookupProviderAdapterByInstallationID(installationID string) (*ProviderAdapterView, bool) {
+	if s == nil || s.providers == nil || installationID == "" {
+		return nil, false
+	}
+	for _, v := range s.providers.adaptersByID {
+		if v != nil && v.InstallationID == installationID {
+			return v.clone(), true
+		}
+	}
+	return nil, false
 }
 
 // LookupProviderConnection performs an O(1) tenant-isolated lookup of a ProviderConnection.
@@ -678,6 +721,7 @@ func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView)
 		       COALESCE(ep.canonical_name, ''),
 		       COALESCE(ep.extension_kind, ''),
 		       COALESCE(ei.state, ''),
+		       COALESCE(ei.version, 0),
 		       COALESCE(ei.active_version_id, ''),
 		       COALESCE(ei.approved_permissions_json, '{}'),
 		       COALESCE(ev.execution_tier, ''),
@@ -703,7 +747,7 @@ func loadAdaptersSQL(ctx context.Context, tx *sql.Tx, view *ProviderCatalogView)
 		if err := rows.Scan(
 			&a.ID, &a.InstallationID, &a.AdapterSlug, &nativePrefix,
 			&dialectsJSON, &hostsJSON, &a.Version, &a.CreatedAtMs,
-			&a.CanonicalName, &a.ExtensionKind, &a.ExtensionState, &a.ActiveVersionID,
+			&a.CanonicalName, &a.ExtensionKind, &a.ExtensionState, &a.ExtensionVersion, &a.ActiveVersionID,
 			&a.ApprovedPermissionsJSON, &a.ExecutionTier, &a.BundleSHA256, &a.ManifestJSON,
 		); err != nil {
 			return fmt.Errorf("snapshot: scan provider_adapters: %w", err)
@@ -830,6 +874,7 @@ func loadConnectionsSQL(ctx context.Context, tx *sql.Tx, d port.Dialect, view *P
 			OrgOwnerOptIn:            bool(orgOwnerOptIn),
 		})
 		c.AdapterInstallUsable = trust.IsUsableExtensionState(installState)
+		c.AdapterQuarantined = strings.EqualFold(strings.TrimSpace(installState), "QUARANTINED")
 		c.DerivedPublicTrust = verdict.DerivedPublicTrust
 		c.DerivedEnterpriseSigned = verdict.DerivedEnterpriseSigned
 		c.DisabledByOrgPolicy = verdict.DisabledByOrgPolicy
@@ -1008,7 +1053,10 @@ func parsePricingNanoUSDStrict(raw string, out *PricingNanoUSD) error {
 	if err := json.Unmarshal([]byte(trimmed), out); err != nil {
 		return err
 	}
-	if out.InputPer1MNanoUSD < 0 || out.OutputPer1MNanoUSD < 0 ||
+	if out.InputTokenNanoUSD < 0 || out.OutputTokenNanoUSD < 0 ||
+		out.CacheReadTokenNanoUSD < 0 || out.CacheWriteTokenNanoUSD < 0 ||
+		out.ReasoningTokenNanoUSD < 0 ||
+		out.InputPer1MNanoUSD < 0 || out.OutputPer1MNanoUSD < 0 ||
 		out.CacheReadPer1MNanoUSD < 0 || out.CacheWritePer1MNanoUSD < 0 ||
 		out.ReasoningPer1MNanoUSD < 0 || out.ImagePerUnitNanoUSD < 0 ||
 		out.ImagePer1MPixelsNanoUSD < 0 || out.AudioInputPerSecNanoUSD < 0 ||

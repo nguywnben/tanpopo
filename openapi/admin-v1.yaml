@@ -669,6 +669,7 @@ components:
         id: { type: string }
         slug: { type: string }
         display_name: { type: string }
+        project_id: { type: string }
         context_window: { type: integer, minimum: 1 }
         max_output_tokens: { type: integer, minimum: 1 }
         assurance_tier: { type: string, enum: [DECLARED, TESTED, VERIFIED] }
@@ -677,17 +678,19 @@ components:
 
     RateCardNanoUsd:
       type: object
+      description: "Integer nano-USD rate card. Token rates are strictly per single token (10^-9 USD / token, e.g., $1.00 / 1M tokens = 1,000 nano-USD / token; $0.015 / 1M tokens = 15 nano-USD / token)."
       required: [input_token_nano_usd, output_token_nano_usd]
       properties:
-        input_token_nano_usd: { type: integer, minimum: 0 }
-        output_token_nano_usd: { type: integer, minimum: 0 }
-        cache_read_token_nano_usd: { type: integer, minimum: 0, default: 0 }
-        cache_write_token_nano_usd: { type: integer, minimum: 0, default: 0 }
-        reasoning_token_nano_usd: { type: integer, minimum: 0, default: 0 }
-        image_unit_nano_usd: { type: integer, minimum: 0, default: 0 }
-        audio_sec_nano_usd: { type: integer, minimum: 0, default: 0 }
-        document_page_nano_usd: { type: integer, minimum: 0, default: 0 }
+        input_token_nano_usd: { type: integer, minimum: 0, description: "Nano-USD per input token (1,000 = $1.00 / 1M tokens)." }
+        output_token_nano_usd: { type: integer, minimum: 0, description: "Nano-USD per output token (1,000 = $1.00 / 1M tokens)." }
+        cache_read_token_nano_usd: { type: integer, minimum: 0, default: 0, description: "Nano-USD per cached input token." }
+        cache_write_token_nano_usd: { type: integer, minimum: 0, default: 0, description: "Nano-USD per cache-write input token." }
+        reasoning_token_nano_usd: { type: integer, minimum: 0, default: 0, description: "Nano-USD per reasoning output token." }
+        image_unit_nano_usd: { type: integer, minimum: 0, default: 0, description: "Nano-USD per image unit (1,000,000 = $0.001 / image)." }
+        audio_sec_nano_usd: { type: integer, minimum: 0, default: 0, description: "Nano-USD per second of audio." }
+        document_page_nano_usd: { type: integer, minimum: 0, default: 0, description: "Nano-USD per document page." }
         self_hosted_zero_rate: { type: boolean, default: false }
+        token_rate_unit: { type: string, enum: [NANO_USD_PER_TOKEN, LEGACY_NANO_USD_PER_1M], description: "Canonical unit marker. New/updated deployments are always NANO_USD_PER_TOKEN." }
 
     ModelDeployment:
       type: object
@@ -1070,7 +1073,7 @@ components:
         data_region: { type: ["string", "null"] }
         status_code: { type: integer }
         error_code: { type: ["string", "null"] }
-        usage_accuracy: { type: string, enum: [EXACT, ESTIMATED, UNMETERED_FLAGGED] }
+        usage_accuracy: { type: string, enum: [EXACT, ESTIMATED, UNMETERED_FLAGGED, UNSETTLED] }
         total_cost_micros: { type: integer }
         ttft_ms: { type: ["number", "null"] }
         duration_ms: { type: number }
@@ -1094,6 +1097,8 @@ components:
         scope_tier: { type: string, enum: [ORGANIZATION, PROJECT, ENVIRONMENT, VIRTUAL_KEY] }
         scope_id: { type: string }
         period: { type: string, enum: [DAILY, MONTHLY, TOTAL_LIFETIME] }
+        period_start: { type: string, format: date-time }
+        period_end: { type: string, format: date-time }
         hard_limit_micros: { type: integer, minimum: 0 }
         soft_warning_percents:
           type: array
@@ -1109,7 +1114,9 @@ components:
       type: object
       required: [group_key, exact_micro_usd, estimated_micro_usd, exact_request_count, estimated_request_count, unmetered_request_count]
       properties:
+        group_id: { type: string, description: "Stable non-secret identifier for the group (e.g., virtual_key_id, project_id, env_id, or logical_model)." }
         group_key: { type: string }
+        key_prefix: { type: string, description: "Non-secret masked Virtual Key identifier prefix and last four characters when grouped by key." }
         exact_micro_usd: { type: integer }
         estimated_micro_usd: { type: integer }
         exact_request_count: { type: integer, minimum: 0 }
@@ -2772,6 +2779,51 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
 
+  /admin/v1/extensions/{installationId}/unquarantine:
+    post:
+      tags: [ExtensionsAndMarketplace]
+      operationId: unquarantineExtension
+      summary: Audited transition from QUARANTINED to INSTALLED_DISABLED after forensic review (DEF-058)
+      parameters:
+        - name: installationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatchHeader"
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 5 }
+      responses:
+        "200":
+          description: Extension restored to INSTALLED_DISABLED (traffic stays blocked until explicitly re-enabled)
+          headers:
+            ETag: { $ref: "#/components/headers/ETag" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExtensionInstallation" }
+        "403":
+          description: Caller lacks extension unquarantine permission
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "404":
+          description: Extension installation not found
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+        "409":
+          description: Optimistic lock conflict or invalid state transition
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CanonicalErrorEnvelope" }
+
   /admin/v1/extensions/{installationId}/rollback:
     post:
       tags: [ExtensionsAndMarketplace]
@@ -4176,10 +4228,14 @@ paths:
                       required: [wal_bytes]
                       properties:
                         id: { type: string }
+                        role: { type: string }
+                        listen_addr: { type: string }
                         config_epoch: { type: integer }
                         snapshot_age_ms: { type: integer }
                         health: { type: string }
                         wal_bytes: { type: integer, minimum: 0 }
+                        last_heartbeat_ms: { type: integer }
+                        stale: { type: boolean }
 
   /admin/v1/ops/backups:
     post:
@@ -4204,6 +4260,42 @@ paths:
                   sha256_hex: { type: string, pattern: "^[a-f0-9]{64}$" }
                   size_bytes: { type: integer }
                   created_at: { type: string, format: date-time }
+
+  /admin/v1/ops/keys/retire:
+    post:
+      tags: [DevToolsAndOps]
+      operationId: retireMasterKEK
+      summary: Retire superseded Master KEK after verifying all cluster nodes synchronized post-rotation (DR-03, OPERATOR only)
+      parameters:
+        - $ref: "#/components/parameters/CsrfTokenHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key_id]
+              properties:
+                key_id: { type: string }
+      responses:
+        "200":
+          description: Superseded Master KEK retired after 100%-node verification
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [retired_key_id, verified_nodes]
+                properties:
+                  retired_key_id: { type: string }
+                  verified_nodes:
+                    type: array
+                    items: { type: string }
+        "409":
+          description: Cluster nodes have not synchronized or DEKs still reference key_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CanonicalErrorEnvelope"
 
   /admin/v1/ops/upgrades/preflight:
     post:

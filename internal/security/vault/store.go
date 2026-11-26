@@ -283,6 +283,39 @@ func NewStore(cfg Config) (*Store, error) {
 	}, nil
 }
 
+// LoadedKeyIDs returns the identifiers of Master KEKs currently resident in the KEK provider.
+func (s *Store) LoadedKeyIDs(ctx context.Context) []string {
+	if s == nil || s.kek == nil {
+		return nil
+	}
+	type loadedKeysProvider interface {
+		LoadedKeyIDs() []string
+	}
+	if lk, ok := s.kek.(loadedKeysProvider); ok {
+		return lk.LoadedKeyIDs()
+	}
+	if active, err := s.kek.ActiveKeyID(ctx); err == nil && strings.TrimSpace(active) != "" {
+		return []string{active}
+	}
+	return nil
+}
+
+// RetireKEK evicts cached Org DEKs wrapped under keyID and removes keyID from the KEK provider (DR-03).
+func (s *Store) RetireKEK(_ context.Context, keyID string) error {
+	if s == nil || s.kek == nil {
+		return fmt.Errorf("%w: vault KEK provider unavailable", ErrInvalidInput)
+	}
+	type retirableKEK interface {
+		RetireKey(string) error
+	}
+	rk, ok := s.kek.(retirableKEK)
+	if !ok {
+		return fmt.Errorf("%w: active KEK provider does not support explicit in-memory retirement", ErrInvalidInput)
+	}
+	s.cache.evictByKEKID(keyID)
+	return rk.RetireKey(keyID)
+}
+
 func orgPendingShredKey(orgID string) string {
 	return "org:" + orgID
 }

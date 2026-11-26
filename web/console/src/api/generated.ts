@@ -801,6 +801,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/extensions/{installationId}/unquarantine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Audited transition from QUARANTINED to INSTALLED_DISABLED after forensic review (DEF-058) */
+        post: operations["unquarantineExtension"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/extensions/{installationId}/rollback": {
         parameters: {
             query?: never;
@@ -1510,6 +1527,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/ops/keys/retire": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retire superseded Master KEK after verifying all cluster nodes synchronized post-rotation (DR-03, OPERATOR only) */
+        post: operations["retireMasterKEK"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/ops/upgrades/preflight": {
         parameters: {
             query?: never;
@@ -1917,29 +1951,56 @@ export interface components {
             id: string;
             slug: string;
             display_name: string;
+            project_id?: string;
             context_window: number;
             max_output_tokens: number;
             /** @enum {string} */
             assurance_tier: "DECLARED" | "TESTED" | "VERIFIED";
             capabilities: components["schemas"]["CapabilityProfile"];
         };
+        /** @description Integer nano-USD rate card. Token rates are strictly per single token (10^-9 USD / token, e.g., $1.00 / 1M tokens = 1,000 nano-USD / token; $0.015 / 1M tokens = 15 nano-USD / token). */
         RateCardNanoUsd: {
+            /** @description Nano-USD per input token (1,000 = $1.00 / 1M tokens). */
             input_token_nano_usd: number;
+            /** @description Nano-USD per output token (1,000 = $1.00 / 1M tokens). */
             output_token_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per cached input token.
+             * @default 0
+             */
             cache_read_token_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per cache-write input token.
+             * @default 0
+             */
             cache_write_token_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per reasoning output token.
+             * @default 0
+             */
             reasoning_token_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per image unit (1,000,000 = $0.001 / image).
+             * @default 0
+             */
             image_unit_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per second of audio.
+             * @default 0
+             */
             audio_sec_nano_usd: number;
-            /** @default 0 */
+            /**
+             * @description Nano-USD per document page.
+             * @default 0
+             */
             document_page_nano_usd: number;
             /** @default false */
             self_hosted_zero_rate: boolean;
+            /**
+             * @description Canonical unit marker. New/updated deployments are always NANO_USD_PER_TOKEN.
+             * @enum {string}
+             */
+            token_rate_unit?: "NANO_USD_PER_TOKEN" | "LEGACY_NANO_USD_PER_1M";
         };
         ModelDeployment: {
             id: string;
@@ -2222,7 +2283,7 @@ export interface components {
             status_code: number;
             error_code: string | null;
             /** @enum {string} */
-            usage_accuracy: "EXACT" | "ESTIMATED" | "UNMETERED_FLAGGED";
+            usage_accuracy: "EXACT" | "ESTIMATED" | "UNMETERED_FLAGGED" | "UNSETTLED";
             total_cost_micros: number;
             ttft_ms?: number | null;
             duration_ms: number;
@@ -2242,6 +2303,10 @@ export interface components {
             scope_id: string;
             /** @enum {string} */
             period: "DAILY" | "MONTHLY" | "TOTAL_LIFETIME";
+            /** Format: date-time */
+            period_start?: string;
+            /** Format: date-time */
+            period_end?: string;
             hard_limit_micros: number;
             soft_warning_percents?: number[];
             settled_exact_micros: number;
@@ -2252,7 +2317,11 @@ export interface components {
             version: number;
         };
         UsageChargebackRow: {
+            /** @description Stable non-secret identifier for the group (e.g., virtual_key_id, project_id, env_id, or logical_model). */
+            group_id?: string;
             group_key: string;
+            /** @description Non-secret masked Virtual Key identifier prefix and last four characters when grouped by key. */
+            key_prefix?: string;
             exact_micro_usd: number;
             estimated_micro_usd: number;
             exact_request_count: number;
@@ -4462,6 +4531,67 @@ export interface operations {
             };
         };
     };
+    unquarantineExtension: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Optimistic concurrency revision ETag (e.g., '"v3"'). Stale values return 409 optimistic_lock_conflict. */
+                "If-Match": components["parameters"]["IfMatchHeader"];
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path: {
+                installationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    reason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Extension restored to INSTALLED_DISABLED (traffic stays blocked until explicitly re-enabled) */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtensionInstallation"];
+                };
+            };
+            /** @description Caller lacks extension unquarantine permission */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Extension installation not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+            /** @description Optimistic lock conflict or invalid state transition */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
+                };
+            };
+        };
+    };
     rollbackExtension: {
         parameters: {
             query?: never;
@@ -6264,10 +6394,14 @@ export interface operations {
                         backup_unavailable_reason: string;
                         nodes: {
                             id?: string;
+                            role?: string;
+                            listen_addr?: string;
                             config_epoch?: number;
                             snapshot_age_ms?: number;
                             health?: string;
                             wal_bytes: number;
+                            last_heartbeat_ms?: number;
+                            stale?: boolean;
                         }[];
                     };
                 };
@@ -6302,6 +6436,47 @@ export interface operations {
                         /** Format: date-time */
                         created_at: string;
                     };
+                };
+            };
+        };
+    };
+    retireMasterKEK: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Mandatory on all POST/PUT/PATCH/DELETE requests authenticated via AdminSessionCookie (AUTH-03). */
+                "X-CSRF-Token"?: components["parameters"]["CsrfTokenHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    key_id: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Superseded Master KEK retired after 100%-node verification */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        retired_key_id: string;
+                        verified_nodes: string[];
+                    };
+                };
+            };
+            /** @description Cluster nodes have not synchronized or DEKs still reference key_id */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CanonicalErrorEnvelope"];
                 };
             };
         };

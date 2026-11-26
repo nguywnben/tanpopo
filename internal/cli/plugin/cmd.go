@@ -53,6 +53,8 @@ func NewCommand(opts Options) *cobra.Command {
 		newTestCmd(opts),
 		newPackCmd(opts),
 		newMigrateCheckCmd(opts),
+		newReleaseSignCmd(opts),
+		newReleaseVerifyCmd(opts),
 	)
 	return pluginCmd
 }

@@ -417,7 +417,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, loc i18n.Locale, orgID
 				AlertCode:        "ALT-BUDGET-80",
 				Severity:         "TICKET",
 				Summary:          i18n.AlertSummary(loc, "ALT-BUDGET-80", fmt.Sprintf("%s budget %s exceeded 80%% utilization", b.scopeType, b.id), "scope", b.scopeType, "id", b.id),
-				RemediationRoute: "/budgets",
+				RemediationRoute: "/finops/budgets",
 				TriggeredAt:      formatTimeRFC3339Ms(b.updMs),
 			})
 		}
@@ -462,7 +462,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, loc i18n.Locale, orgID
 				AlertCode:        "ALT-UNMETERED-SPEND",
 				Severity:         "TICKET",
 				Summary:          i18n.AlertSummary(loc, "ALT-UNMETERED-SPEND", fmt.Sprintf("%d unmetered request(s) flagged in the past 24h", unmeteredCnt), "count", unmeteredCnt),
-				RemediationRoute: "/usage",
+				RemediationRoute: "/finops/chargeback",
 				TriggeredAt:      formatTimeRFC3339Ms(trigMs),
 			})
 		}
@@ -502,7 +502,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, loc i18n.Locale, orgID
 					AlertCode:        "ALT-PLUGIN-TRAP",
 					Severity:         "PAGE",
 					Summary:          i18n.AlertSummary(loc, "ALT-PLUGIN-TRAP", fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID), "id", id, "package", pkgID),
-					RemediationRoute: "/extensions",
+					RemediationRoute: "/extensions/installed",
 					TriggeredAt:      formatTimeRFC3339Ms(updMs),
 				})
 			}
@@ -550,7 +550,7 @@ func (s *Server) collectActiveAlerts(ctx context.Context, loc i18n.Locale, orgID
 					AlertCode:        "ALT-PLUGIN-TRAP",
 					Severity:         "PAGE",
 					Summary:          i18n.AlertSummary(loc, "ALT-PLUGIN-TRAP", fmt.Sprintf("Extension installation %s (%s) is QUARANTINED", id, pkgID), "id", id, "package", pkgID),
-					RemediationRoute: "/extensions",
+					RemediationRoute: "/extensions/installed",
 					TriggeredAt:      formatTimeRFC3339Ms(updMs),
 				})
 			}

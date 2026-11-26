@@ -5,8 +5,10 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,8 +18,11 @@ import (
 	"github.com/nguywnben/tanpopo/internal/ops/backup"
 	"github.com/nguywnben/tanpopo/internal/ops/upgrade"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
+	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
+
+const clusterNodeStaleThresholdMs int64 = 15_000
 
 type sqliteWALReporter interface {
 	WALBytes() (int64, error)
@@ -37,6 +42,55 @@ func (s *Server) requireInstanceOperator(w http.ResponseWriter, r *http.Request,
 		return false
 	}
 	return true
+}
+
+func (s *Server) loadClusterNodes(ctx context.Context, currentEpoch int64) ([]map[string]any, error) {
+	nowMs := s.nowMs()
+	var nodes []map[string]any
+	err := s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
+		rows, qerr := q.QueryContext(ctx, s.rebind(`
+			SELECT node_id, role, listen_addr, config_epoch, snapshot_age_ms, health, wal_bytes, last_heartbeat_ms
+			FROM cluster_nodes
+			ORDER BY last_heartbeat_ms DESC, node_id ASC`))
+		if qerr != nil {
+			// Backward-compatible fallback if running on a test fixture schema without 0024_cluster_nodes.
+			if strings.Contains(strings.ToLower(qerr.Error()), "no such table") || strings.Contains(strings.ToLower(qerr.Error()), "does not exist") {
+				return nil
+			}
+			return qerr
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var (
+				nodeID, role, listenAddr, health string
+				nodeEpoch, snapAgeMs, walBytes   int64
+				lastHeartbeatMs                  int64
+			)
+			if serr := rows.Scan(&nodeID, &role, &listenAddr, &nodeEpoch, &snapAgeMs, &health, &walBytes, &lastHeartbeatMs); serr != nil {
+				return serr
+			}
+			stale := nowMs-lastHeartbeatMs > clusterNodeStaleThresholdMs
+			effectiveHealth := health
+			if stale {
+				effectiveHealth = "stale"
+			} else if currentEpoch > 0 && nodeEpoch < currentEpoch {
+				effectiveHealth = "lagging"
+			}
+			nodes = append(nodes, map[string]any{
+				"id":                nodeID,
+				"role":              role,
+				"listen_addr":       listenAddr,
+				"config_epoch":      nodeEpoch,
+				"snapshot_age_ms":   snapAgeMs,
+				"health":            effectiveHealth,
+				"wal_bytes":         walBytes,
+				"last_heartbeat_ms": lastHeartbeatMs,
+				"stale":             stale,
+			})
+		}
+		return rows.Err()
+	})
+	return nodes, err
 }
 
 func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Request) {
@@ -61,36 +115,139 @@ func (s *Server) handleGetClusterOpsStatus(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	var epoch int64
+	var dbEpoch int64
 	if err := s.withOperatorReadTx(r.Context(), func(q adminDBQuerier) error {
-		return q.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(config_epoch), 0) FROM config_changelog`).Scan(&epoch)
+		return q.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(config_epoch), 0) FROM config_changelog`).Scan(&dbEpoch)
 	}); err != nil {
 		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed reading current configuration epoch", true, nil)
 		return
 	}
+	epoch := dbEpoch
+	var selfSnapAgeMs int64
+	health := "unknown"
 	if s.snapshots != nil {
 		if current := s.snapshots.Current(); current != nil {
 			epoch = current.Epoch
 		}
-	}
-	health := "unknown"
-	if s.snapshots != nil {
 		health = "ok"
 		if readinessErr := s.snapshots.CheckServingReady(); readinessErr != nil {
 			health = "unhealthy"
+		} else if age, ok := s.snapshots.SnapshotAge(); ok && age > 0 {
+			selfSnapAgeMs = age.Milliseconds()
 		}
 	}
 	backupSupported, backupReason := s.backupAvailability()
-	nodeID := "standalone"
-	if s.dialect == port.DialectPostgres {
-		nodeID = "primary"
+	nodes, err := s.loadClusterNodes(r.Context(), dbEpoch)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed loading cluster node inventory", true, nil)
+		return
+	}
+	if len(nodes) == 0 {
+		nodeID := "standalone"
+		if s.dialect == port.DialectPostgres {
+			nodeID = "primary"
+		}
+		nodes = []map[string]any{{
+			"id":              nodeID,
+			"role":            "all",
+			"config_epoch":    epoch,
+			"snapshot_age_ms": selfSnapAgeMs,
+			"health":          health,
+			"wal_bytes":       walBytes,
+			"stale":           false,
+		}}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"current_epoch":             epoch,
 		"storage_engine":            storageEngine,
 		"backup_supported":          backupSupported,
 		"backup_unavailable_reason": backupReason,
-		"nodes":                     []map[string]any{{"id": nodeID, "config_epoch": epoch, "health": health, "wal_bytes": walBytes}},
+		"nodes":                     nodes,
+	})
+}
+
+func (s *Server) handleRetireMasterKEK(w http.ResponseWriter, r *http.Request) {
+	sc, ok := s.authenticate(w, r)
+	if !ok || !s.requireInstanceOperator(w, r, sc, rbac.ActionOpsWrite) {
+		return
+	}
+	var req struct {
+		KeyID string `json:"key_id"`
+	}
+	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
+		return
+	}
+	keyID := strings.TrimSpace(req.KeyID)
+	if keyID == "" {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "key_id is required", false, nil)
+		return
+	}
+	if s.vault == nil {
+		writeErrorEnvelope(w, r, http.StatusServiceUnavailable, "ops_backend_unavailable", "upstream_error", "vault is not initialized", true, nil)
+		return
+	}
+
+	var currentEpoch int64
+	var remainingDEKs int
+	if err := s.withOperatorReadTx(r.Context(), func(q adminDBQuerier) error {
+		if err := q.QueryRowContext(r.Context(), `SELECT COALESCE(MAX(config_epoch), 0) FROM config_changelog`).Scan(&currentEpoch); err != nil {
+			return err
+		}
+		err := q.QueryRowContext(r.Context(), s.rebind(`SELECT COUNT(*) FROM org_encryption_keys WHERE kek_key_id = ?`), keyID).Scan(&remainingDEKs)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		return err
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed checking remaining encrypted org DEKs", true, nil)
+		return
+	}
+	if remainingDEKs > 0 {
+		writeErrorEnvelope(w, r, http.StatusConflict, "org_deks_not_rewrapped", "conflict_error", fmt.Sprintf("cannot retire Master KEK %q while %d organization DEK(s) remain wrapped under it", keyID, remainingDEKs), false, nil)
+		return
+	}
+
+	nodes, err := s.loadClusterNodes(r.Context(), currentEpoch)
+	if err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed inspecting cluster nodes before KEK retirement", true, nil)
+		return
+	}
+	verifiedNodes := make([]string, 0, len(nodes))
+	var laggingNodes []string
+	for _, node := range nodes {
+		id, _ := node["id"].(string)
+		health, _ := node["health"].(string)
+		stale, _ := node["stale"].(bool)
+		nodeEpoch, _ := node["config_epoch"].(int64)
+		if stale || health != "ok" || nodeEpoch < currentEpoch {
+			laggingNodes = append(laggingNodes, fmt.Sprintf("%s(%s@%d)", id, health, nodeEpoch))
+			continue
+		}
+		verifiedNodes = append(verifiedNodes, id)
+	}
+	if len(laggingNodes) > 0 {
+		writeErrorEnvelope(w, r, http.StatusConflict, "cluster_node_sync_incomplete", "conflict_error", fmt.Sprintf("cannot retire Master KEK %q until 100%% of cluster nodes synchronize to epoch %d: %s", keyID, currentEpoch, strings.Join(laggingNodes, ", ")), true, map[string]any{"incomplete_nodes": laggingNodes, "required_epoch": currentEpoch})
+		return
+	}
+
+	if err := s.vault.RetireKEK(r.Context(), keyID); err != nil {
+		if errors.Is(err, vault.ErrInvalidMasterKey) {
+			writeErrorEnvelope(w, r, http.StatusConflict, "cannot_retire_active_key", "conflict_error", "cannot retire active or invalid Master KEK", false, nil)
+			return
+		}
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed retiring Master KEK", true, nil)
+		return
+	}
+	if err := s.appendOpsAudit(r, sc.Actor.PrincipalID, "ops.kek_retired", keyID, map[string]any{
+		"verified_nodes": verifiedNodes,
+		"required_epoch": currentEpoch,
+	}); err != nil {
+		writeErrorEnvelope(w, r, http.StatusInternalServerError, "audit_failed", "upstream_error", "failed recording KEK retirement audit event", true, nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"retired_key_id": keyID,
+		"verified_nodes": verifiedNodes,
 	})
 }
 

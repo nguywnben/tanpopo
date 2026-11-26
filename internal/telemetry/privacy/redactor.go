@@ -741,6 +741,8 @@ type JSONLogger struct {
 	out      io.Writer
 	redactor *Redactor
 	nowFn    func() time.Time
+	hookMu   sync.RWMutex
+	hook     func(line []byte, payload map[string]any)
 }
 
 // NewJSONLogger constructs a thread-safe flat JSON structured logger writing to out.
@@ -759,6 +761,17 @@ func NewJSONLogger(out io.Writer, redactor *Redactor, nowFn func() time.Time) *J
 		redactor: redactor,
 		nowFn:    nowFn,
 	}
+}
+
+// SetHook registers a secondary sink callback invoked after every record is redacted
+// and formatted (e.g., non-blocking OTLP Logs ring-buffer export).
+func (l *JSONLogger) SetHook(fn func(line []byte, payload map[string]any)) {
+	if l == nil {
+		return
+	}
+	l.hookMu.Lock()
+	l.hook = fn
+	l.hookMu.Unlock()
 }
 
 // Log writes a single flat JSON line with strictly snake_case top-level keys.
@@ -803,11 +816,22 @@ func (l *JSONLogger) Log(rec LogRecord) error {
 	if err != nil {
 		return err
 	}
-	line = append(line, '\n')
+	lineWithNL := append(append([]byte(nil), line...), '\n')
 
 	l.mu.Lock()
-	_, werr := l.out.Write(line)
+	_, werr := l.out.Write(lineWithNL)
 	l.mu.Unlock()
+
+	l.hookMu.RLock()
+	hookFn := l.hook
+	l.hookMu.RUnlock()
+	if hookFn != nil {
+		cloned := make(map[string]any, len(payload))
+		for k, v := range payload {
+			cloned[k] = v
+		}
+		hookFn(line, cloned)
+	}
 	return werr
 }
 

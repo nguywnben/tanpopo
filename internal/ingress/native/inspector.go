@@ -229,7 +229,7 @@ func NewSSEUsageAccumulator(rt port.ProviderRuntime, reqID string, rawReqBody []
 	}
 }
 
-// Feed inspects complete newline-delimited SSE bytes non-destructively.
+// Feed inspects complete newline-delimited SSE or NDJSON bytes non-destructively.
 func (a *SSEUsageAccumulator) Feed(ctx context.Context, complete []byte) {
 	if a == nil || len(complete) == 0 {
 		return
@@ -246,11 +246,21 @@ func (a *SSEUsageAccumulator) Feed(ctx context.Context, complete []byte) {
 			pos += nl + 1
 		}
 		trimmed := bytes.TrimSpace(line)
-		if !bytes.HasPrefix(trimmed, []byte("data:")) {
+		if len(trimmed) == 0 || trimmed[0] == ':' {
 			continue
 		}
-		payload := bytes.TrimSpace(bytes.TrimPrefix(trimmed, []byte("data:")))
-		if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+		var payload []byte
+		var rawFrame []byte
+		if bytes.HasPrefix(trimmed, []byte("data:")) {
+			payload = bytes.TrimSpace(bytes.TrimPrefix(trimmed, []byte("data:")))
+			if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+				continue
+			}
+			rawFrame = trimmed
+		} else if trimmed[0] == '{' {
+			payload = trimmed
+			rawFrame = trimmed
+		} else {
 			continue
 		}
 		a.outputBytes += int64(len(payload))
@@ -258,12 +268,12 @@ func (a *SSEUsageAccumulator) Feed(ctx context.Context, complete []byte) {
 			continue
 		}
 		if payload[0] == '{' {
-			a.lastData = append(a.lastData[:0], trimmed...)
+			a.lastData = append(a.lastData[:0], rawFrame...)
 			if hasUsageCandidateKey(payload) {
 				u, err := a.rt.ExtractUsage(ctx, port.ExtractUsageInput{
 					RequestID:                 a.reqID,
 					Modality:                  "NATIVE",
-					RawResponseOrTrailerBytes: trimmed,
+					RawResponseOrTrailerBytes: rawFrame,
 					FallbackUTF8InputBytes:    a.inputBytes,
 					FallbackUTF8OutputBytes:   a.outputBytes,
 				})

@@ -1759,6 +1759,182 @@ func (s *LifecycleService) quarantineInstallation(ctx context.Context, installat
 	return nil
 }
 
+// UnquarantineInstallationIfVersion performs an audited transition from QUARANTINED to
+// INSTALLED_DISABLED without reactivating serving or clearing forensic evidence (DEF-058).
+func (s *LifecycleService) UnquarantineInstallationIfVersion(ctx context.Context, installationID string, expectedVersion int64, reason, actorID string) error {
+	trimmedReason := strings.TrimSpace(reason)
+	if strings.TrimSpace(installationID) == "" || trimmedReason == "" || expectedVersion < 1 || strings.TrimSpace(actorID) == "" {
+		return fmt.Errorf("%w: installation_id, actor_id, expected_version >= 1, and recovery reason are required", port.ErrInvalidInput)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := s.nowMs()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
+	if err != nil {
+		return err
+	}
+	if rowData.version != expectedVersion {
+		return port.ErrVersionConflict
+	}
+	if rowData.state != StateQuarantined || !IsValidSM01Transition(rowData.state, StateInstalledDisabled) {
+		return fmt.Errorf("%w: cannot unquarantine installation in state %s", ErrInvalidStateTransition, rowData.state)
+	}
+
+	res, err := tx.ExecContext(ctx, s.rebind(`
+		UPDATE extension_installations
+		SET state = ?, version = version + 1, updated_at_ms = ?
+		WHERE id = ? AND version = ? AND state = ?`),
+		StateInstalledDisabled, now, installationID, rowData.version, StateQuarantined,
+	)
+	if err != nil {
+		return err
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return port.ErrVersionConflict
+	}
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
+		return err
+	}
+	if _, aerr := s.emitAuditTx(ctx, tx, "", actorID, "", "extension.unquarantined", "extension_installation", installationID, map[string]any{
+		"canonical_name":  rowData.canonicalName,
+		"previous_state":  rowData.state,
+		"new_state":       StateInstalledDisabled,
+		"recovery_reason": trimmedReason,
+	}, now); aerr != nil {
+		return aerr
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
+}
+
+// EnableDisabledInstallation explicitly transitions an INSTALLED_DISABLED installation with
+// a pinned active version back to ENABLED_ACTIVE after revocation, policy, and manifest checks (DEF-058).
+func (s *LifecycleService) EnableDisabledInstallation(ctx context.Context, installationID string, expectedVersion int64, actorID, orgID, requestID string) (*InstallationRecord, error) {
+	if strings.TrimSpace(installationID) == "" || strings.TrimSpace(actorID) == "" || expectedVersion < 1 {
+		return nil, fmt.Errorf("%w: installation_id, actor_id, and expected_version >= 1 required", port.ErrInvalidInput)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := s.nowMs()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
+	if err != nil {
+		return nil, err
+	}
+	if rowData.version != expectedVersion {
+		return nil, port.ErrVersionConflict
+	}
+	if rowData.state != StateInstalledDisabled || !IsValidSM01Transition(rowData.state, StateEnabledActive) {
+		return nil, fmt.Errorf("%w: cannot enable installation from state %s", ErrInvalidStateTransition, rowData.state)
+	}
+	if rowData.activeVerID == nil {
+		return nil, fmt.Errorf("%w: disabled installation has no pinned active version", ErrInvalidStateTransition)
+	}
+
+	actInfo, err := s.loadVersionInfoTx(ctx, tx, *rowData.activeVerID)
+	if err != nil {
+		return nil, err
+	}
+	if rerr := s.checkRevocationsTx(ctx, tx, rowData.canonicalName, actInfo.semver, actInfo.bundleSHA256); rerr != nil {
+		_ = tx.Rollback()
+		s.emitAudit(ctx, orgID, actorID, requestID, "extension.activation_blocked_revoked", "extension_installation", installationID, map[string]any{
+			"canonical_name":    rowData.canonicalName,
+			"candidate_version": actInfo.semver,
+			"candidate_sha256":  actInfo.bundleSHA256,
+		})
+		return nil, rerr
+	}
+	actTrustTier := deriveTrustTierFromVersion(rowData.canonicalName, actInfo, s.keyring)
+	actEntSigned := deriveEnterpriseSignedFromVersion(actInfo, s.keyring)
+	if perr := s.checkEnabledOrgPoliciesForPackageTx(ctx, tx, rowData.packageID, actTrustTier, actEntSigned); perr != nil {
+		_ = tx.Rollback()
+		s.emitAudit(ctx, orgID, actorID, requestID, "extension.org_trust_policy_denied", "extension_installation", installationID, map[string]any{
+			"canonical_name":    rowData.canonicalName,
+			"origin_trust_tier": actTrustTier,
+			"enterprise_signed": actEntSigned,
+		})
+		return nil, perr
+	}
+	vm, err := ValidateManifestStruct(actInfo.manifest, s.valPolicy, nil)
+	if err != nil {
+		return nil, err
+	}
+	permsJSON, err := json.Marshal(vm.Permissions)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := tx.ExecContext(ctx, s.rebind(`
+		UPDATE extension_installations
+		SET state = ?, approved_permissions_json = ?, approved_by_principal_id = ?, approved_at_ms = ?,
+		    version = version + 1, updated_at_ms = ?
+		WHERE id = ? AND version = ? AND state = ?`),
+		StateEnabledActive, string(permsJSON), actorID, now, now,
+		installationID, expectedVersion, StateInstalledDisabled,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("installer: update installation on enable: %w", err)
+	}
+	if affected, _ := res.RowsAffected(); affected == 0 {
+		return nil, port.ErrVersionConflict
+	}
+	if _, err := tx.ExecContext(ctx, s.rebind(`UPDATE extension_packages SET origin_trust_tier = ? WHERE id = ?`), actTrustTier, rowData.packageID); err != nil {
+		return nil, fmt.Errorf("installer: sync package origin_trust_tier on enable: %w", err)
+	}
+	if _, err := s.appendExtensionChangelogTx(ctx, tx, "extension_installation", installationID, port.MutationUpsert, false, now); err != nil {
+		return nil, err
+	}
+	if err := s.preflightLockfile(); err != nil {
+		return nil, err
+	}
+	if _, aerr := s.emitAuditTx(ctx, tx, orgID, actorID, requestID, "extension.enabled", "extension_installation", installationID, map[string]any{
+		"canonical_name":    rowData.canonicalName,
+		"activated_version": actInfo.semver,
+		"new_state":         StateEnabledActive,
+	}, now); aerr != nil {
+		return nil, aerr
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("installer: commit EnableDisabledInstallation: %w", err)
+	}
+	committed = true
+
+	if lerr := s.syncLockfileEntry(rowData.canonicalName, actTrustTier, actInfo, vm.Permissions, actorID, now, nil); lerr != nil {
+		s.emitAudit(ctx, orgID, actorID, requestID, "extension.lockfile_sync_failed", "extension_installation", installationID, map[string]any{
+			"canonical_name": rowData.canonicalName,
+			"reason":         lerr.Error(),
+		})
+		return nil, fmt.Errorf("%w: %v", ErrLockfileSyncFailed, lerr)
+	}
+	return s.GetInstallation(ctx, installationID)
+}
+
 // VerifyPinnedArchiveOnLoad verifies an archive SHA-256 against tanpopo.lock and records
 // a high-severity security AuditEvent if tampered by even 1 byte (CT-03).
 func (s *LifecycleService) VerifyPinnedArchiveOnLoad(ctx context.Context, packageName, actualBundleSHA256, actorID string) error {

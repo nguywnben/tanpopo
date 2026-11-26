@@ -26,6 +26,7 @@ import (
 	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/broker"
 	"github.com/nguywnben/tanpopo/internal/security/egress"
+	"github.com/nguywnben/tanpopo/internal/security/vault"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
 )
 
@@ -1564,23 +1565,37 @@ func (s *Server) ensureSecretBindingsAuthorizedForCaller(
 	ownerProjPtr *string,
 	bindings []catalog.SecretBindingInput,
 ) bool {
-	if len(bindings) == 0 || rbac.Authorize(sc.Actor, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID}) == nil {
+	if len(bindings) == 0 {
 		return true
 	}
+	hasOrgConnectionWrite := rbac.Authorize(sc.Actor, rbac.ActionConnectionWrite, rbac.TargetScope{OrgID: orgID}) == nil
 	for _, b := range bindings {
-		var secretProj sql.NullString
+		var (
+			secretProj sql.NullString
+			secretKind string
+		)
 		err := s.withOrgReadTx(r.Context(), orgID, func(q adminDBQuerier) error {
 			return q.QueryRowContext(r.Context(), s.rebind(`
-				SELECT owner_project_id FROM secret_credentials WHERE org_id = ? AND id = ?`),
+				SELECT owner_project_id, secret_kind FROM secret_credentials WHERE org_id = ? AND id = ?`),
 				orgID, b.CredentialID,
-			).Scan(&secretProj)
+			).Scan(&secretProj, &secretKind)
 		})
-		if errors.Is(err, sql.ErrNoRows) || (err == nil && (!secretProj.Valid || ownerProjPtr == nil || secretProj.String != *ownerProjPtr)) {
+		if errors.Is(err, sql.ErrNoRows) {
 			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "secret credential not found", false, nil)
 			return false
 		}
 		if err != nil {
 			writeErrorEnvelope(w, r, http.StatusInternalServerError, "internal_error", "upstream_error", "failed validating secret credential scope", true, nil)
+			return false
+		}
+		switch strings.ToUpper(strings.TrimSpace(secretKind)) {
+		case vault.SecretKindAPIKey, vault.SecretKindOAuth2TokenSet, vault.SecretKindHMACSecret, vault.SecretKindAWSSigV4Key, vault.SecretKindMTLSClientCert:
+		default:
+			writeErrorEnvelope(w, r, http.StatusBadRequest, "credential_kind_mismatch", "invalid_request_error", "secret kind is not permitted for provider connection bindings", false, nil)
+			return false
+		}
+		if !hasOrgConnectionWrite && (!secretProj.Valid || ownerProjPtr == nil || secretProj.String != *ownerProjPtr) {
+			writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "secret credential not found", false, nil)
 			return false
 		}
 	}

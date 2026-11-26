@@ -46,7 +46,7 @@ export const navigationGroups: NavigationGroup[] = [
     routes: [
       {path: '/overview', label: 'Overview', labelKey: 'nav.route.overview', roles: everyRole, icon: 'overview', enabled: true},
       {path: '/observability/traces', aliases: ['/traces'], label: 'Traces', labelKey: 'nav.route.traces', roles: traceRoles, icon: 'traces', enabled: true},
-      {path: '/finops/budgets', aliases: ['/finops/chargeback'], label: 'FinOps', labelKey: 'nav.route.finops', roles: everyRole, icon: 'finops', enabled: true},
+      {path: '/finops/budgets', aliases: ['/finops/chargeback', '/budgets', '/usage'], label: 'FinOps', labelKey: 'nav.route.finops', roles: everyRole, icon: 'finops', enabled: true},
     ],
   },
   {
@@ -80,7 +80,7 @@ export const navigationGroups: NavigationGroup[] = [
     routes: [
       {
         path: '/extensions/installed',
-        aliases: ['/extensions/marketplace', '/extensions/lockfile'],
+        aliases: ['/extensions/marketplace', '/extensions/lockfile', '/extensions'],
         label: 'Extensions',
         labelKey: 'nav.route.extensions',
         roles: everyRole,

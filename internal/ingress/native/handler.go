@@ -543,7 +543,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	outboundBody := append([]byte(nil), rawBody...)
 	defer clear(outboundBody)
 
-	budgetSess := h.newNativeBudgetSession(match.Key, reqID, rawBody, estBaseIn, estMaxOut, completionCount)
+	budgetSess := h.newNativeBudgetSession(r.Context(), match.Key, reqID, rawBody, estBaseIn, estMaxOut, completionCount)
 	if !budgetSess.reserveInitial(r.Context(), w, candidates) {
 		return
 	}
@@ -913,7 +913,7 @@ func (h *Handler) executeNativeHop(
 			admLease.streamLease = lease
 			w.Header().Set("X-RateLimit-Remaining-Streams", strconv.FormatInt(sRes.RemainingStreams, 10))
 		}
-		return h.executeStreamingNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, hopModel, key, rt, egressReq, constraint, target, rawBody, admLease, budgetSess)
+		return h.executeStreamingNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, r.Header.Get("Accept"), hopModel, key, rt, egressReq, constraint, target, rawBody, admLease, budgetSess)
 	}
 	return h.executeSyncNativeAttempt(w, clientCtx, hopCtx, streamCtx, reqID, dialect, hopModel, key, rt, egressReq, constraint, target, rawBody, idemClaim, admLease, budgetSess)
 }
@@ -1044,6 +1044,7 @@ func (h *Handler) executeStreamingNativeAttempt(
 	streamCtx context.Context,
 	reqID string,
 	dialect string,
+	acceptHdr string,
 	model string,
 	key *snapshot.VirtualKeyView,
 	rt port.ProviderRuntime,
@@ -1114,7 +1115,11 @@ func (h *Handler) executeStreamingNativeAttempt(
 		}
 		budgetSess.markStreaming(hopCtx)
 	}
-	pumpRes, pumpErr := pumpNativeSSE(eCtx, w, reqID, upStream.Body, cancelUp, h.heartbeatInterval, idleChunkTimeout, acc, onStreamStarted, onChunkRelayed)
+	upstreamCT := ""
+	if upStream.SanitizedHeaders != nil {
+		upstreamCT = upStream.SanitizedHeaders.Get("Content-Type")
+	}
+	pumpRes, pumpErr := pumpNativeSSE(eCtx, w, reqID, dialect, acceptHdr, upstreamCT, upStream.Body, cancelUp, h.heartbeatInterval, idleChunkTimeout, acc, onStreamStarted, onChunkRelayed)
 	totalDur := time.Since(egressStart)
 	reqTel.addUpstreamDuration(totalDur)
 	if h.telemetry != nil && h.telemetry.Metrics != nil {
@@ -1400,6 +1405,9 @@ func pumpNativeSSE(
 	ctx context.Context,
 	w http.ResponseWriter,
 	reqID string,
+	dialect string,
+	acceptHdr string,
+	upstreamCT string,
 	upstream io.ReadCloser,
 	cancelUp context.CancelFunc,
 	hbInterval time.Duration,
@@ -1409,6 +1417,7 @@ func pumpNativeSSE(
 	onChunkRelayed func(time.Duration),
 ) (nativePumpRes, error) {
 	var res nativePumpRes
+	var isNDJSON bool
 	rc := http.NewResponseController(w)
 
 	msgCh := make(chan nativeReadMsg, 4)
@@ -1538,11 +1547,11 @@ pumpLoop:
 			if !res.streamStarted {
 				return res, sse.ErrIdleChunkTimeout
 			}
-			writeMidStreamAbort(w, rc, reqID, "upstream native SSE stream idle timeout")
+			writeMidStreamAbort(w, rc, reqID, "upstream native SSE stream idle timeout", isNDJSON)
 			return res, fmt.Errorf("%w: %w", sse.ErrMidStreamAbort, sse.ErrIdleChunkTimeout)
 
 		case <-hbCh:
-			if res.streamStarted {
+			if res.streamStarted && !isNDJSON {
 				if _, werr := w.Write([]byte(": ping\n\n")); werr != nil {
 					res.clientDisconnected = true
 					abortUpstream()
@@ -1573,12 +1582,24 @@ pumpLoop:
 					acc.Feed(ctx, msg.data)
 				}
 				if !res.streamStarted {
-					writeNativeSSEHeaders(w)
+					trimmed := bytes.TrimSpace(msg.data)
+					frameIsSSE := bytes.HasPrefix(trimmed, []byte("data:")) ||
+						bytes.HasPrefix(trimmed, []byte("event:")) ||
+						bytes.HasPrefix(trimmed, []byte("id:")) ||
+						bytes.HasPrefix(trimmed, []byte("retry:")) ||
+						bytes.HasPrefix(trimmed, []byte(":"))
+					isNDJSON = strings.EqualFold(dialect, "ollama") && !frameIsSSE &&
+						(bytes.HasPrefix(trimmed, []byte("{")) ||
+							strings.Contains(strings.ToLower(upstreamCT), "ndjson") ||
+							strings.Contains(strings.ToLower(acceptHdr), "ndjson"))
+					writeNativeSSEHeaders(w, isNDJSON)
 					res.streamStarted = true
 					if onStreamStarted != nil {
 						onStreamStarted()
 					}
-					startHeartbeat()
+					if !isNDJSON {
+						startHeartbeat()
+					}
 				}
 				if _, werr := w.Write(msg.data); werr != nil {
 					res.clientDisconnected = true
@@ -1619,14 +1640,14 @@ pumpLoop:
 		if !res.streamStarted {
 			return res, upstreamErr
 		}
-		writeMidStreamAbort(w, rc, reqID, "upstream native stream interrupted mid-stream")
+		writeMidStreamAbort(w, rc, reqID, "upstream native stream interrupted mid-stream", isNDJSON)
 		return res, fmt.Errorf("%w: %w", sse.ErrMidStreamAbort, upstreamErr)
 	}
 	if !sawEOF || res.framesEmitted == 0 {
 		if !res.streamStarted {
 			return res, sse.ErrMidStreamAbort
 		}
-		writeMidStreamAbort(w, rc, reqID, "upstream native stream closed unexpectedly")
+		writeMidStreamAbort(w, rc, reqID, "upstream native stream closed unexpectedly", isNDJSON)
 		return res, sse.ErrMidStreamAbort
 	}
 	return res, nil
@@ -2507,15 +2528,19 @@ func mapUpstreamHTTPStatus(status int) int {
 	}
 }
 
-func writeNativeSSEHeaders(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+func writeNativeSSEHeaders(w http.ResponseWriter, isNDJSON bool) {
+	if isNDJSON {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+	} else {
+		w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
+	}
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
 }
 
-func writeMidStreamAbort(w http.ResponseWriter, rc *http.ResponseController, requestID, message string) {
+func writeMidStreamAbort(w http.ResponseWriter, rc *http.ResponseController, requestID, message string, isNDJSON bool) {
 	envelope := map[string]any{
 		"error": map[string]any{
 			"code":       "mid_stream_abort",
@@ -2529,9 +2554,14 @@ func writeMidStreamAbort(w http.ResponseWriter, rc *http.ResponseController, req
 	if err != nil {
 		payload = []byte(`{"error":{"code":"mid_stream_abort","type":"upstream_error","message":"upstream stream interrupted","retryable":false}}`)
 	}
-	_, _ = w.Write([]byte("event: error\ndata: "))
-	_, _ = w.Write(payload)
-	_, _ = w.Write([]byte("\n\n"))
+	if isNDJSON {
+		_, _ = w.Write(payload)
+		_, _ = w.Write([]byte("\n"))
+	} else {
+		_, _ = w.Write([]byte("event: error\ndata: "))
+		_, _ = w.Write(payload)
+		_, _ = w.Write([]byte("\n\n"))
+	}
 	_ = rc.Flush()
 }
 
@@ -3346,7 +3376,7 @@ func estimateNativeTokensAndCountFromJSON(raw []byte) (estTotal, baseIn, maxOut,
 }
 
 func isNativeMultimodalRootKey(key string) bool {
-	return key == "messages" || key == "input" || key == "contents"
+	return key == "messages" || key == "input" || key == "contents" || key == "images"
 }
 
 func finalizeNativeEstTokens(rawLen, excessMediaBytes, maxOut, completionCount int64) (estTotal, baseIn, outCap, count int64) {
@@ -3514,6 +3544,13 @@ func nativeMediaBlobExcessBytes(inMediaRoot bool, parentObjKey, key, s string) (
 			if isStrictNativeBase64Payload(s) {
 				return 0, int64(len(s) - cappedBlobBytes)
 			}
+		}
+	case "images":
+		if isStrictNativeMultimodalBase64DataURI(s) {
+			return int64(len(s) - cappedBlobBytes), 0
+		}
+		if isStrictNativeBase64Payload(s) {
+			return 0, int64(len(s) - cappedBlobBytes)
 		}
 	case "data":
 		if isNativeMediaContainerKey(pk) {

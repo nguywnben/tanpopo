@@ -2277,3 +2277,79 @@ func TestInstallerNewLifecycleServiceRejectsMissingOrNonTxAuditSink(t *testing.T
 		t.Fatalf("expected NewLifecycleService non-TxAuditSink to fail ErrInvalidLifecycleConfig, got %v", err)
 	}
 }
+
+func TestDEF058_071_ReservedNamespaceAndUnquarantineLifecycle(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	h := newInstallerHarness(t, port.MinTrustAnyApproved)
+
+	wasmBytes := wasmfixtures.EchoTransformWASM()
+	wasmSHA := shaHex(wasmBytes)
+
+	// DEF-071: Multi-hyphen variations under @tanpopo-*/ must be blocked without a root signature.
+	for _, spoofID := range []string{
+		"@tanpopo-qa004-spoof/canary",
+		"@tanpopo-official-v2/canary",
+		"@tanpopo/canary",
+	} {
+		spoofYAML := makeWasmManifestYAML(spoofID, "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, nil, 16)
+		spoofTPKG, _ := buildTPKGBytes(t, []archiveEntrySpec{
+			{name: "manifest.yaml", body: spoofYAML},
+			{name: "dist/adapter.wasm", body: wasmBytes},
+		})
+		_, err := h.svc.StageFreshInstall(ctx, StageInstallRequest{
+			ArchiveReader: bytes.NewReader(spoofTPKG),
+			Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./spoof.tpkg"},
+			ActorID:       h.opID,
+			RequestID:     "req_spoof_" + spoofID,
+		})
+		if !errors.Is(err, ErrReservedNamespaceSpoof) {
+			t.Fatalf("DEF-071: expected ErrReservedNamespaceSpoof for %q, got %v", spoofID, err)
+		}
+	}
+
+	// DEF-058: QUARANTINED -> INSTALLED_DISABLED (unquarantine) -> ENABLED_ACTIVE (explicit re-enable).
+	okYAML := makeWasmManifestYAML("@acme/unq-unit", "1.0.0", "0.1", ">=0.1.0", wasmSHA, []string{"api.example.com"}, nil, 16)
+	okTPKG, _ := buildTPKGBytes(t, []archiveEntrySpec{
+		{name: "manifest.yaml", body: okYAML},
+		{name: "dist/adapter.wasm", body: wasmBytes},
+	})
+	staged, err := h.svc.StageFreshInstall(ctx, StageInstallRequest{
+		ArchiveReader: bytes.NewReader(okTPKG),
+		Source:        SourceSpec{Kind: SourceKindLocalArchive, URI: "./unq.tpkg"},
+		ActorID:       h.opID,
+		RequestID:     "req_stage_unq",
+	})
+	if err != nil {
+		t.Fatalf("StageFreshInstall: %v", err)
+	}
+	active, err := h.svc.ApproveAndActivate(ctx, ApproveInstallRequest{
+		InstallationID:      staged.Installation.InstallationID,
+		ExpectedVersion:     staged.Installation.Version,
+		ApproverPrincipalID: h.opID,
+		ActivateImmediately: true,
+		RequestID:           "req_act_unq",
+	})
+	if err != nil {
+		t.Fatalf("ApproveAndActivate: %v", err)
+	}
+	if err := h.svc.QuarantineInstallationIfVersion(ctx, active.InstallationID, active.Version, "fault triage", h.opID); err != nil {
+		t.Fatalf("QuarantineInstallationIfVersion: %v", err)
+	}
+	quar, err := h.svc.GetInstallation(ctx, active.InstallationID)
+	if err != nil || quar.State != StateQuarantined {
+		t.Fatalf("GetInstallation after quarantine: err=%v rec=%+v", err, quar)
+	}
+	if err := h.svc.UnquarantineInstallationIfVersion(ctx, quar.InstallationID, quar.Version, "cleared after inspection", h.opID); err != nil {
+		t.Fatalf("DEF-058 UnquarantineInstallationIfVersion: %v", err)
+	}
+	unq, err := h.svc.GetInstallation(ctx, quar.InstallationID)
+	if err != nil || unq.State != StateInstalledDisabled {
+		t.Fatalf("DEF-058 GetInstallation after unquarantine: err=%v rec=%+v", err, unq)
+	}
+	reactivated, err := h.svc.EnableDisabledInstallation(ctx, unq.InstallationID, unq.Version, h.opID, "", "req_reenable_unq")
+	if err != nil || reactivated.State != StateEnabledActive {
+		t.Fatalf("DEF-058 EnableDisabledInstallation: err=%v rec=%+v", err, reactivated)
+	}
+}
+
