@@ -1,0 +1,17 @@
+{
+  "key": {
+    "id": "vky_01m8amqqh9e00aq1k1da5f6pg5",
+    "state": "REVOKED",
+    "version": 3,
+    "allowed_planes": [
+      "A2A"
+    ],
+    "allowed_routes": [
+      "/a2a/*"
+    ]
+  },
+  "revoked_replay": {
+    "status": 401,
+    "body": "{\"error\":{\"code\":\"invalid_virtual_key\",\"message\":\"Invalid or inactive Virtual Key.\",\"request_id\":\"trc_01m8an0jn4e00bgj79a7er4q1k\",\"type\":\"authentication_error\"}}\n"
+  }
+}

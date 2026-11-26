@@ -1,0 +1,48 @@
+{
+  "filtered_ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n4\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#489\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8amvzkte00agf9rf2pfehf9\n\t12:43:33 AM\t\nInspect\n\n#405\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8agq31ke009j8th0r3wgbgw\n\t11:30:09 PM\t\nInspect\n\n#401\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8agn3vve00ans12367zqrw6\n\t11:29:04 PM\t\nInspect\n\n#256\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8a7g52be008vs8ct6hsh8pa\n\t8:49:07 PM\t\nInspect",
+  "target_events": [
+    {
+      "seq_no": 489,
+      "action": "a2a.task.canceled_by_admin",
+      "target_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+      "metadata": {
+        "from_state": "input-required",
+        "spent_micros": 0,
+        "to_state": "canceled"
+      }
+    },
+    {
+      "seq_no": 488,
+      "action": "a2a.task.transitioned",
+      "target_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+      "metadata": {
+        "from_state": "working",
+        "spent_micros": 0,
+        "to_state": "input-required"
+      }
+    },
+    {
+      "seq_no": 487,
+      "action": "a2a.task.transitioned",
+      "target_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+      "metadata": {
+        "from_state": "submitted",
+        "spent_micros": 0,
+        "to_state": "working"
+      }
+    },
+    {
+      "seq_no": 486,
+      "action": "a2a.task.submitted",
+      "target_id": "tsk_01m8amvzkte00agf9rf2pfehf9",
+      "metadata": {
+        "enforced_region": "US",
+        "hop_count": 1,
+        "sub_budget_hold_micros": 0,
+        "target_agent_id": "agt_01m8amh0jje00avb1w5j0f2p3v",
+        "trace_root_id": "trc_01m8amvzkte00aggtxm7wnv142"
+      }
+    }
+  ],
+  "chain_verification_ui": " Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 489 events.\nImmutable audit events\n4\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#489\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8amvzkte00agf9rf2pfehf9\n\t12:43:33 AM\t\nInspect\n\n#405\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8agq31ke009j8th0r3wgbgw\n\t11:30:09 PM\t\nInspect\n\n#401\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8agn3vve00ans12367zqrw6\n\t11:29:04 PM\t\nInspect\n\n#256\ta2a.task.canceled_by_admin\tprc_01m895k8pee008b6m9nq76z1ab\t\na2a_task\ntsk_01m8a7g52be008vs8ct6hsh8pa\n\t8:49:07 PM\t\nInspect"
+}

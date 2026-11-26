@@ -93,6 +93,8 @@ QA-004 is an independent campaign. Historical QA-001/002/003 results are preserv
 - [CP87 native Ollama Generate streaming](checkpoints/CP87-native-ollama-generate-stream.md)
 - [CP88 reserved extension namespace spoofing](checkpoints/CP88-reserved-extension-namespace-spoof.md)
 - [CP89 Console backup verify/restore](checkpoints/CP89-console-backup-verify-restore-and-tamper.md)
+- [CP90 A2A input-required cancellation](checkpoints/CP90-a2a-input-required-cancellation.md)
+- [CP91 A2A mobile task cards](checkpoints/CP91-a2a-mobile-task-cards.md)
 - [DEF-025 engineering report](reports/DEF-025-model-deployment-no-environment-scope.md)
 - [Historical defect register](HISTORICAL-DEFECT-REGISTER.md)
 - [Coverage matrix](COVERAGE-MATRIX.md)
@@ -190,3 +192,9 @@ CP88 tested the reserved extension namespace boundary through the real Extension
 
 
 CP89 completed one exact-artifact backup journey on the isolated SQLite runtime: the real Console created a backup (201), its file SHA-256 and size matched the immutable SYSTEM receipt, CLI verify returned 0 for nine files, restore with secret-envelope trial-decrypt returned 0 and passed SQLite integrity with 57 application tables, and an encrypted-frame mutation was rejected with GCM authentication failure. Screenshots of the initial empty state and created receipt were visually inspected. Temporary archive, tampered copy and restored database were removed; no backup artifact or DB was committed. This is a scoped PASS and does not resolve CP79’s separate archive, PostgreSQL/Valkey, interruption, concurrency or disaster-recovery coverage. No defect was assigned; QA continues and GATE-REL-07 remains BLOCKED.
+
+
+CP90 exercised a distinct A2A input-required cancellation path in a loopback-only exact-RC6 runtime. The final A2A-only key discovered its authorized agent; a real task returned `input-required`, appeared in the Console after refresh, and the Owner canceled it. Readback stayed Canceled v4 with zero hold/cost, resume replay returned 409, and the synthetic endpoint received no second call. The key was revoked and replay returned 401. Audit events #486–489 linked the lifecycle, and the visually inspected Audit Log verified the JCS chain across 491 events. The first setup key retained the default Provider plane and was revoked before use; the replacement was verified A2A-only and `/a2a/*` restricted. One initial browser request included the Admin cookie and correctly received 401; it was retried cookie-free. These were setup/security-boundary checks, not defects. Existing DEF-067 and DEF-069 remain open; no new defect was assigned. QA continues and GATE-REL-07 remains BLOCKED.
+
+
+CP91 opened the persisted CP90 canceled A2A task on the real Chromium Console at 390×844 and expanded its detail card. The canceled state, 1/5 hops, zero sub-budget hold and zero settled cost remained readable; viewport, document, body and main widths stayed 390 before and after expansion. Both actual screenshots were visually inspected. This is a scoped responsive PASS only; more widths, roles, browsers, keyboard/text scaling and task states remain unverified. No defect was added. QA continues and GATE-REL-07 remains BLOCKED.
