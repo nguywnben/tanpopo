@@ -957,7 +957,8 @@ func TestDEF063_064_065_072_InternalMetricsListenerOTLPAndClusterNodes(t *testin
 		t.Fatalf("expected non-empty main and internal metrics listeners, got %+v", addrs)
 	}
 
-	client := &http.Client{Timeout: 3 * time.Second}
+	client := collector.Client()
+	client.Timeout = 3 * time.Second
 
 	// 1. DEF-064: Unauthenticated or invalid Bearer on internal /metrics returns 401; valid Bearer returns 200 without tenant labels.
 	respUnauth, err := client.Get("http://" + addrs.metrics + "/metrics")
