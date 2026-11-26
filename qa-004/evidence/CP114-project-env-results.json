@@ -1,0 +1,16 @@
+{
+  "organization_project_status": 200,
+  "project": {
+    "id": "prj_01m8b0aeeve00a8dv36ffqgbck",
+    "name": "QA004 CP114 Canary Project",
+    "slug": "qa004-cp114-canary"
+  },
+  "environment_status": 200,
+  "environments": [
+    {
+      "id": "env_01m8b0ddn9e009sc0z0dewfyfm",
+      "name": "qa004-cp114-synthetic",
+      "slug": "qa004-cp114-synthetic"
+    }
+  ]
+}

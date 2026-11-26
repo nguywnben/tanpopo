@@ -56,3 +56,7 @@ Operators often use descriptive environment names to distinguish production, sta
 ## Coverage still open
 
 Only a small number of synthetic environments in isolated projects were exercised across SQLite and PostgreSQL. Rename/update/delete behavior, duplicate and invalid names/slugs, migration of preexisting environments, localization of long labels, cross-project scope changes, async switching races, and route/key/budget isolation across two populated environments remain UNVERIFIED.
+
+## Independent QA-004 CP114 PostgreSQL observation
+
+During a fresh synthetic PostgreSQL crypto-shred journey, the real environment form contained the distinct values `QA004 CP114 Synthetic Environment` and `qa004-cp114-synthetic`. The subsequent authenticated project environment list returned both `name` and `slug` as `qa004-cp114-synthetic`; the actual workspace picker also displayed the slug. The form, sanitized list readback, and selected-scope screenshot are [CP114 evidence](../checkpoints/CP114-postgresql-crypto-shred-and-def068.md). This is an additional data point for the existing cross-backend finding, not a new defect ID. The 201 create response was not captured in this CP114 readback artifact, so this observation establishes the distinct submitted form values versus persisted list/picker values; the earlier CP19/CP55/CP107 evidence remains the source for the full request/response discrepancy.

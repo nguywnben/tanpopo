@@ -1,0 +1,106 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "artifact_run": "45581179274",
+  "runtime": "exact frozen RC6 against isolated restored PostgreSQL database qa004_cp111_restore_20261126; control plane 127.0.0.1:18135; offline mode; no provider connection or inference request",
+  "synthetic_canary": {
+    "organization_id": "org_01m8b09bt7e00bs9e9hqzn2a88",
+    "organization_slug": "qa004-cp114-pg-crypto-shred",
+    "project_id": "prj_01m8b0aeeve00a8dv36ffqgbck",
+    "environment_id": "env_01m8b0ddn9e009sc0z0dewfyfm",
+    "environment_form_name": "QA004 CP114 Synthetic Environment",
+    "environment_form_slug": "qa004-cp114-synthetic",
+    "environment_list_readback_name": "qa004-cp114-synthetic",
+    "environment_list_readback_slug": "qa004-cp114-synthetic",
+    "credential_id": "sec_01m8b0ra92e00ad7t9najj1xq2",
+    "creation_http_status": 201
+  },
+  "secret": {
+    "created_through_real_console": true,
+    "kind": "API_KEY",
+    "project_scoped": true,
+    "plaintext": "redacted; synthetic-only non-routable test value; never included in branch evidence",
+    "metadata_readback_http_status": 200,
+    "returned_metadata_fields": ["credential_id", "project_id", "name", "secret_kind", "trailing_fingerprint", "version", "created_at"],
+    "plaintext_field_present": false,
+    "refresh_preserved_metadata": true,
+    "postgres_pre_shred": {
+      "secret_metadata_rows": 1,
+      "ciphertext_bytes": 57,
+      "synthetic_plaintext_byte_match": false,
+      "organization_dek_rows": 1,
+      "project_dek_rows": 1
+    },
+    "no_provider_connection_or_inference": true
+  },
+  "active_organization_shred": {
+    "initiated_through_real_operations_console": true,
+    "confirmation_slug_matched": true,
+    "http_status": 200,
+    "target_id": "org_01m8b09bt7e00bs9e9hqzn2a88",
+    "destroyed_dek_id": "org_01m8b09bt7e00bs9e9hqzn2a88:v1:g1",
+    "revoked_virtual_keys_count": 0,
+    "shredded_at": "2026-11-26T04:12:27.906Z",
+    "console_switched_to_surviving_organization": true,
+    "visible_success_receipt_after_scope_switch": false,
+    "postgres_after_shred": {
+      "organization_rows": 0,
+      "organization_dek_rows": 0,
+      "project_rows": 0,
+      "environment_rows": 0,
+      "project_dek_rows": 0,
+      "secret_metadata_rows": 0,
+      "target_crypto_shred_audit_rows": 1,
+      "target_audit_partition_events": 5,
+      "unrelated_root_organization_rows": 1
+    },
+    "tenant_audit_chain_verification": {
+      "http_status": 200,
+      "intact": true,
+      "checked_events_count": 5
+    }
+  },
+  "post_shred_external_postgres_restore": {
+    "pg_dump_format": "custom",
+    "archive_bytes": 330378,
+    "archive_sha256": "8a9733b551d7f3615049d9a59bb48aa27fe411eb1c7e0299e5174d8be678ac62",
+    "archive_mode": "0600",
+    "archive_storage": "/tmp only; excluded from Git",
+    "restore_database": "qa004_cp114_postshred_restore",
+    "restore_exit_code": 0,
+    "initial_harness_attempt": "A first restore attempt used the application role without granting CREATE/USAGE on the new database public schema and failed before table creation. The disposable restore DB was dropped and recreated; schema privileges were corrected only in the isolated test DB and the restore then completed successfully.",
+    "restored_organization_count": 1,
+    "target_organization_rows": 0,
+    "target_secret_metadata_rows": 0,
+    "target_shred_audit_rows": 1,
+    "target_audit_partition_events": 5,
+    "exact_rc6_runtime_ready_http_status": 200,
+    "owner_login_http_status": 200,
+    "restored_target_audit_verify": {
+      "http_status": 200,
+      "intact": true,
+      "checked_events_count": 5
+    },
+    "real_operations_ui": "showed only the surviving synthetic root tenant after restore"
+  },
+  "screenshots_visually_inspected": [
+    "CP114-org-created.png",
+    "CP114-canary-project-environment-scope.png",
+    "CP114-seal-secret-dialog.png",
+    "CP114-vault-secret-sealed.png",
+    "CP114-vault-secret-after-refresh.png",
+    "CP114-crypto-shred-confirmation.png",
+    "CP114-crypto-shred-confirmation-filled.png",
+    "CP114-active-organization-shred-result.png",
+    "CP114-audit-ui-surviving-scope.png",
+    "CP114-postshred-restore-overview.png",
+    "CP114-postshred-restore-organizations.png"
+  ],
+  "classification": "DEF-068 reproduced on PostgreSQL; DEF-055 name/slug readback discrepancy observed again. No new defect ID assigned. Shred persistence and audit integrity pass in this slice; visible active-org success feedback fails.",
+  "limitations": [
+    "Historical pre-shred cold-backup recovery was not tested in this checkpoint.",
+    "The documented less-than-60-second erasure SLA was not instrumented.",
+    "No production tenant, provider, real credential, or upstream egress was used."
+  ],
+  "product_source_modified": false,
+  "gate_rel_07": "BLOCKED"
+}
