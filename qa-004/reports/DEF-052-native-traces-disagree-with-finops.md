@@ -79,3 +79,8 @@ CP103 repeated the synchronous and standards-correct SSE lifecycle using the doc
 ### Native multimodal image retest (CP119)
 
 The successful instrumented `/native/ollama/api/chat` image request has a persistent trace marked `EXACT` with `$0`. The real Chargeback screen grouped by each temporary VKEY instead showed zero Exact and one Estimated request, at `$0` because the synthetic self-hosted deployment was zero-rate. Thus accuracy disagrees across the same native image workflow, further reproducing DEF-052. The second trace is from the earlier fixture misconfiguration attempt; it is not used to claim verified image forwarding. See [CP119](../checkpoints/CP119-ollama-native-multimodal-image.md), `../evidence/CP119-vision-traces.png`, and `../evidence/CP119-vision-chargeback-vkey.png`.
+
+
+### Multiple-image success and malformed-image rejection retest (CP120)
+
+Through the authorized native Ollama route, a synthetic two-image request returned 200 and a separate malformed-base64 request reached the local fixture, which returned 400; Tanpopo surfaced `upstream_bad_request`. Persistent Traces labeled both the successful and rejected requests Exact/$0. This adds a successful multiple-image request and an upstream-error row to the same trace-projection pattern. The zero-rate test does not establish nonzero settlement behavior. See [CP120](../checkpoints/CP120-ollama-multiple-and-malformed-images.md), `../evidence/CP120-native-image-boundary-results.json`, and the visually inspected Traces screenshot.

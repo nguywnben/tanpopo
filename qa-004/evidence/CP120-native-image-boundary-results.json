@@ -1,0 +1,71 @@
+{
+  "checkpoint": "CP120",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "127.0.0.1:18128",
+  "scope": "default/dev; local synthetic Ollama only",
+  "key": {
+    "name": "QA004 CP120 Ollama Multi-image Boundary",
+    "id": "vky_01m8b52x87e00bwd4htb2f7g9b",
+    "plane": "PROVIDER",
+    "route_grant": "/native/ollama/*",
+    "allowed_model": "qa004-cp119-vision-canary",
+    "final_state": "REVOKED",
+    "version": 2
+  },
+  "fixture": {
+    "host": "127.0.0.1:18125",
+    "original_qa_fixture_restored": true,
+    "restored_tags_http_status": 200,
+    "sanitized_records": [
+      {
+        "path": "/api/chat",
+        "model": "qa004-cp119-vision-canary",
+        "message_count": 1,
+        "image_count": 2,
+        "image_sha256_ordered": [
+          "b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640",
+          "9d9e18e597b11d30abba0dcc7f27ca50b050fe431596f06da7d6f9524208cc00"
+        ],
+        "invalid_image_count": 0,
+        "authorization_header_present": false
+      },
+      {
+        "path": "/api/chat",
+        "model": "qa004-cp119-vision-canary",
+        "message_count": 1,
+        "image_count": 1,
+        "image_sha256_ordered": [],
+        "invalid_image_count": 1,
+        "authorization_header_present": false
+      }
+    ],
+    "prompt_and_image_bytes_stored": false
+  },
+  "authenticated_trace_readback": {
+    "http_status": 200,
+    "requests": [
+      {
+        "request_id": "trc_01m8b52xvwe008t7fscxfywnwz",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "request_id": "trc_01m8b52xwhe00bkft0zfaz9n5j",
+        "status_code": 400,
+        "error_code": "upstream_bad_request",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      }
+    ],
+    "real_ui_screenshot_visually_inspected": true
+  },
+  "status": {
+    "two_image_forwarding": "PASS (scoped)",
+    "synthetic_malformed_input_error_propagation": "PASS (scoped)",
+    "trace_exact_label_for_upstream_error": "DEF-052 additional evidence",
+    "new_defect_created": false,
+    "release_gate": "BLOCKED"
+  }
+}
