@@ -27,6 +27,10 @@ The same discrepancy was reproduced again on frozen RC6 artifact `45581179274` t
 
 In a separate project-scoped Owner session, the real workspace selector opened a new environment form. I entered `QA004 CP59 MCP Test` and `qa004-cp59-mcp-test`; the POST returned 201 and echoed the distinct values. A subsequent authenticated GET returned `name: qa004-cp59-mcp-test`, `slug: qa004-cp59-mcp-test`, and the refreshed top-bar scope picker displayed the slug. The environment was created to support an authorized isolated MCP lifecycle, and remains scoped to the QA project. Sanitized evidence: [CP59 result](../evidence/CP59-mcp-authorized-lifecycle.json), [create form](../evidence/CP59-mcp-environment-create-form.png), and [post-create scope](../evidence/CP59-mcp-environment-created.png). This is another independent reproduction of DEF-055, not a new finding.
 
+## Independent QA-004 CP107 PostgreSQL retest
+
+On a separate PostgreSQL 16-backed RC6 runtime, the synthetic Org Owner created `QA004 CP107 PostgreSQL Scope` / `qa004-cp107-pg-scope` and then `QA004 CP107 Quality Assurance` / `qa004-cp107-qa` through the real Console. The project list retained the human-readable project name. The environment POST returned HTTP 201 with the requested display name and slug; the subsequent project-scoped GET returned HTTP 200 with `name == slug`, and after browser reload the actual scope picker showed only `qa004-cp107-qa`. The Audit Log showed targeted `project.created` and `environment.created` events and verified the chain intact across 12 events. Screenshots and sanitized API evidence are in [CP107](../checkpoints/CP107-def055-postgres-backend-retest.md). This confirms the same existing defect across PostgreSQL as well as SQLite; it does not add a defect ID.
+
 ## Facts and root cause
 
 The Create form has separate required name and slug fields in `web/console/src/shell/ConsoleShell.tsx`. The frozen API request type accepts `name`. `handleCreateProjectEnvironment` validates both values and returns the input name in its create response, but passes only `Slug` to storage. `handleListProjectEnvironments` then populates DTO `Name` from `e.Slug`. This explains the observed 201-versus-GET discrepancy; no root-cause speculation is needed for this behavior.
@@ -51,4 +55,4 @@ Operators often use descriptive environment names to distinguish production, sta
 
 ## Coverage still open
 
-Only two synthetic environments in one isolated project were exercised. Rename/update/delete behavior, duplicate and invalid names/slugs, migration of preexisting environments, localization of long labels, cross-project scope changes, async switching races, and route/key/budget isolation across two populated environments remain UNVERIFIED.
+Only a small number of synthetic environments in isolated projects were exercised across SQLite and PostgreSQL. Rename/update/delete behavior, duplicate and invalid names/slugs, migration of preexisting environments, localization of long labels, cross-project scope changes, async switching races, and route/key/budget isolation across two populated environments remain UNVERIFIED.
