@@ -23,10 +23,16 @@ CP40 repeated Owner model creation in the configured test-root runtime as part o
 
 ## Evidence
 
+CP99 independently reproduced the same behavior in healthy isolated runtime 18128: the real form accepted `QA004 CP99 Embedding Batch`, but authenticated list readback returned `qa004-cp99-embedding-batch` as `display_name`. After navigation/refresh, the actual Logical Models screen showed the slug in both visible name lines. This is an independent RC6 reproduction of the existing finding, not a new defect. See `evidence/CP99-embeddings-model-readback.json`, `evidence/CP99-cleanup-readback.json`, `evidence/CP99-embeddings-model-form.png`, and visually inspected `evidence/CP99-embeddings-model-readback-ui.png`.
+
 - `evidence/CP39-owner-model-results.json` — role, HTTP 201 creation, persisted model fields, and after-refresh UI/API values.
 - `evidence/CP39-owner-model-form.png` — distinct display name submitted.
 - `evidence/CP39-owner-model-readback.png` — immediate UI state after creation.
 - `evidence/CP39-owner-model-after-refresh.png` — real refreshed page showing the label replaced by the slug.
+
+- `evidence/CP99-embeddings-model-readback.json` — CP99 model create and list readback.
+- `evidence/CP99-cleanup-readback.json` — final model field values and confirmation that route/deployment were removed.
+- `evidence/CP99-embeddings-model-form.png` and `evidence/CP99-embeddings-model-readback-ui.png` — actual form input and refreshed model catalog.
 
 ## Expected and actual behavior
 

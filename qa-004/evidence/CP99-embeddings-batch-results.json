@@ -1,0 +1,150 @@
+{
+  "runtime_port": 18128,
+  "scope": "QA004 Test Root Org / default / dev (Active workspace scope)",
+  "key": {
+    "id": "vky_01m8asv1kse0099zk7gwa63pv2",
+    "name": "QA004 CP99 embeddings batch final",
+    "state": "CREATED_ACTIVE",
+    "allowed_routes": [
+      "/v1/embeddings"
+    ],
+    "project_id": "prj_01m895k8pee008b440xk2ef12p",
+    "env_id": "env_01m895k8pee008b5ah423mhysr"
+  },
+  "fixture_requests_before": 0,
+  "fixture_requests_after": 1,
+  "requests": {
+    "invalid": {
+      "label": "empty_batch",
+      "status": 400,
+      "content_type": "application/json; charset=utf-8",
+      "request_id": "req_01m8asv1t7e009sh123dr7qmfw",
+      "usage_accuracy": null,
+      "body": {
+        "error": {
+          "code": "invalid_request_error",
+          "type": "invalid_request_error",
+          "message": "Both 'model' and valid non-empty 'input' (string, string array, or token array) are required.",
+          "request_id": "req_01m8asv1t7e009sh123dr7qmfw",
+          "retryable": false
+        }
+      }
+    },
+    "batch": {
+      "label": "three_item_batch",
+      "status": 200,
+      "content_type": "application/json; charset=utf-8",
+      "request_id": "req_01m8asv1tae00an4t1wkd4qx2w",
+      "usage_accuracy": "EXACT",
+      "body": {
+        "data": [
+          {
+            "embedding": [
+              0.01,
+              0.02,
+              0.03
+            ],
+            "index": 0,
+            "object": "embedding"
+          },
+          {
+            "embedding": [
+              0.02,
+              0.04,
+              0.06
+            ],
+            "index": 1,
+            "object": "embedding"
+          },
+          {
+            "embedding": [
+              0.03,
+              0.06,
+              0.09
+            ],
+            "index": 2,
+            "object": "embedding"
+          }
+        ],
+        "model": "qa004-embedding-vectors",
+        "object": "list",
+        "usage": {
+          "prompt_tokens": 15,
+          "total_tokens": 15
+        }
+      }
+    }
+  },
+  "fixtureLog": [
+    {
+      "path": "/v1/embeddings",
+      "model": "qa004-embedding-vectors",
+      "input_count": 3,
+      "input_type": "array",
+      "auth_present": false,
+      "encoding_format": null,
+      "dimensions": null
+    }
+  ],
+  "readback": {
+    "traces": [
+      {
+        "request_id": "trc_01m8asv1tae00an55fgrgt77g3",
+        "status_code": 200,
+        "error_code": null,
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "route_slug": "qa004-cp99-embedding-batch"
+      },
+      {
+        "request_id": "trc_01m8asv1t7e009sj7jk51gvp3b",
+        "status_code": 400,
+        "error_code": "invalid_request_error",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0,
+        "route_slug": "/v1/embeddings"
+      }
+    ],
+    "chargeback": [
+      {
+        "group_key": "QA004 CP99 embeddings batch final",
+        "exact_micro_usd": 0,
+        "estimated_micro_usd": 0,
+        "exact_request_count": 1,
+        "estimated_request_count": 0,
+        "unmetered_request_count": 0
+      }
+    ]
+  },
+  "shape": {
+    "embedding_count": 3,
+    "indexes": [
+      0,
+      1,
+      2
+    ],
+    "vector_lengths": [
+      3,
+      3,
+      3
+    ],
+    "distinct_vectors": 3
+  },
+  "postRevocationReplay": {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": "invalid_virtual_key",
+        "type": "authentication_error",
+        "message": "Virtual Key is invalid, expired, or revoked.",
+        "request_id": "req_01m8asv61ne008g5m79me07jjy",
+        "retryable": false
+      }
+    }
+  },
+  "fixture_requests_after_revoked_replay": 1,
+  "finalKey": {
+    "state": "REVOKED",
+    "version": 2
+  }
+}
