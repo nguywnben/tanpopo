@@ -140,3 +140,12 @@ Evidence: [CP98 checkpoint](checkpoints/CP98-def050-route-capability-warning.md)
 | MCP and A2A private registration with malformed / wildcard CIDR at mobile width | PASS (scoped UI validation and feedback) | Exact RC7 SQLite, real Owner Console in Chromium 156 at 375×844. MCP `127.0.0.1/33` and A2A `0.0.0.0/0` each showed inline feedback inside the open drawer, emitted zero registration POSTs, and had zero matching rows in HTTP 200 list readback. Screenshots visually inspected. | Server-side rejection of those exact values; host bits, empty, broad and IPv6 ranges; valid correction retry; keyboard-only, desktop and non-Chromium browser behavior; other roles/backends; DNS rebinding, redirects and data-plane SSRF. |
 
 Evidence: [CP99 checkpoint](checkpoints/CP99-def031-mobile-invalid-cidr-feedback.md), [sanitized JSON](evidence/CP99-def031-mobile-invalid-cidr-feedback.json), and visually inspected MCP/A2A screenshots.
+
+
+## CP100 — DEF-027 route target identity
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Route target selection and selected target identity | PARTIAL | Exact RC7 Owner Console, SQLite, Chromium 156 at 1440×1000. Picker options included provider-connection display name, model, short deployment ID, region and health. Two same-model `qa005-native:latest` candidates had distinct IDs; selecting one preserved the identifier in the target card. Real screenshots inspected, drawer canceled, zero route writes and zero provider calls. | Historical 3-connection, same-model, healthy failover case; saved multi-target route summary; actual 503→200 failover and trace ordering; edit/reorder; other roles, scopes, backends and browsers. |
+
+Evidence: [CP100 checkpoint](checkpoints/CP100-def027-route-target-identity.md), [sanitized JSON](evidence/CP100-def027-route-target-identity.json), and three visually inspected screenshots.
