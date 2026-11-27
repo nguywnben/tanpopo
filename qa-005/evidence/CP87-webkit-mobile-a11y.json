@@ -1,0 +1,45 @@
+{
+  "checkpoint": "CP87",
+  "scope": "Owner Access & Keys \u2192 Members & Roles at 320\u00d7844 CSS px",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source isolated SQLite at 127.0.0.1:18162 through temporary loopback TLS proxy",
+  "browser": "Playwright WebKit/WPE 26.5 build 2336",
+  "axe_core": "4.14.1",
+  "tags": [
+    "wcag2a",
+    "wcag2aa",
+    "wcag21a",
+    "wcag21aa",
+    "wcag22aa"
+  ],
+  "violations": [],
+  "tablist_accessibility_snapshot": "- tablist \"Access management views\":\n  - tab \"Virtual Keys 12\"\n  - tab \"Members & Roles 12\" [selected]",
+  "horizontal_scroll_control": {
+    "html_role": "button",
+    "aria_hidden": true,
+    "tabindex": -1,
+    "accessible_name": "intentionally excluded from accessibility tree as decorative scroll affordance",
+    "visual_function": "clicking the left affordance changed tablist scrollLeft from 15 to 0 without changing selected tab; the first tab became fully visible; right affordance appeared"
+  },
+  "keyboard_focus": {
+    "unnamed_scroll_button_in_tab_order": false,
+    "evidence": "DOM tabindex=-1 and aria-hidden=true; named tab controls remain in the tablist accessibility snapshot"
+  },
+  "document_width": 320,
+  "page_errors": [],
+  "visual_inspection": "The inspected screenshot shows the stacked member rows, selected Members & Roles tab, scroll affordance and 320px content without horizontal page overflow.",
+  "evidence": [
+    "evidence/screenshots/CP87-webkit-members-accessibility-320px.png",
+    "evidence/screenshots/CP86-webkit-tab-arrow-click.png"
+  ],
+  "classification": "PASS (scoped accessibility check)",
+  "limitations": [
+    "Only one WebKit screen and viewport; no whole-app Axe sweep",
+    "No exhaustive keyboard/screen-reader session",
+    "Chromium/Firefox/Safari engines and physical devices remain open",
+    "A separate addScriptTag attempt was blocked by the page CSP; the successful Axe run used a Playwright init script and did not change application CSP or source"
+  ],
+  "product_code_modified": false,
+  "gate_rel_07": "BLOCKED"
+}

@@ -1,0 +1,54 @@
+{
+  "checkpoint": "CP86",
+  "workflow": "Owner Console \u2192 Access & Keys \u2192 Members & Roles \u2192 Add member form, no submission",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source isolated SQLite on 127.0.0.1:18162, reached through loopback TLS proxy on 127.0.0.1:19443 using an ephemeral self-signed test certificate",
+  "browser": "Playwright WebKit/WPE 26.5 build 2336",
+  "secure_session_http": 200,
+  "at_320px": {
+    "viewport": 320,
+    "document_width": 320,
+    "body_width": 320,
+    "main_width": 320,
+    "main_scroll_width": 320,
+    "rows": 12,
+    "tablist_scroll_left": 15,
+    "tablist_scroll_width": 311,
+    "tablist_client_width": 296,
+    "result": "stacked member rows render without page-level horizontal overflow; tab strip displays a visual scroll affordance"
+  },
+  "at_375px": {
+    "viewport": 375,
+    "document_width": 375,
+    "rows": 12,
+    "result": "stacked rows and main content fit viewport without page-level horizontal overflow"
+  },
+  "add_member_drawer_320px": {
+    "left": 56,
+    "width": 264,
+    "right": 320,
+    "client_width": 263,
+    "scroll_width": 263,
+    "email_role_project_cancel_submit_visible": true,
+    "submitted": false
+  },
+  "page_errors": [],
+  "visual_inspection": "Owner login, 320px and 375px member lists, and the 320px drawer were visually inspected. The temporary TLS certificate and key remained in /dev/shm and were not committed.",
+  "evidence": [
+    "evidence/screenshots/CP86-webkit-members-320px.png",
+    "evidence/screenshots/CP86-webkit-members-375px.png",
+    "evidence/screenshots/CP86-webkit-add-member-320px.png",
+    "evidence/screenshots/CP86-webkit-tab-arrow-click.png"
+  ],
+  "classification": "PASS (scoped WebKit responsive workflow)",
+  "limitations": [
+    "WPE WebKit only; not branded Safari/macOS/iOS",
+    "One Owner role and one Members & Roles screen",
+    "No submit, touch device, keyboard-only full flow, localization or additional locale tested",
+    "Other browser versions and pages remain open"
+  ],
+  "product_code_modified": false,
+  "paid_provider_calls": 0,
+  "gate_rel_07": "BLOCKED"
+}

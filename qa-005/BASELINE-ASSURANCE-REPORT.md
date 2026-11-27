@@ -186,3 +186,12 @@ The real Owner row action issued a synthetic enrollment token (HTTP 201). First 
 ## CP85 update — responsive Members & Roles workflow
 
 At 320×844 and 375×844 in Chromium 156, the Owner Console rendered all 12 synthetic member rows without page-level horizontal overflow. At 320px the horizontal tab strip was recoverable with a horizontal wheel gesture; the Add member drawer and its fields/actions fit within the viewport. Four screenshots were visually inspected, and no browser page errors occurred. This does not certify other screens, roles, touch/a11y behavior, engines, locales or devices. See [CP85](checkpoints/CP85-mobile-members-responsive.md).
+
+
+## CP86 update — WebKit responsive Members workflow
+
+Reused the existing QA-only WPE WebKit 26.5 binary and extracted library bundle; no system package or product files were changed. A temporary self-signed localhost TLS proxy preserved the Admin Secure-cookie contract while forwarding only to the exact-source SQLite runtime. At 320×844 and 375×844, the Owner Members & Roles screen rendered 12 rows without page-level horizontal overflow; the 320px Add member drawer and controls fit in the viewport. Screenshots were visually inspected. See [CP86](checkpoints/CP86-webkit-mobile-members.md).
+
+## CP87 update — scoped Axe and tablist accessibility
+
+Axe Core 4.14.1 scanned the actual 320px WebKit Members page against WCAG 2.0/2.1 A/AA and WCAG 2.2 AA tags and found zero violations. The tablist exposes named “Virtual Keys 12” and “Members & Roles 12” tabs. The visible scroll chevron is deliberately `aria-hidden` and `tabindex=-1`; clicking it scrolls the tablist without changing selection. No accessibility defect was assigned. This is one screen/viewport only; full app keyboard, screen reader, locale, theme and device coverage is still open. See [CP87](checkpoints/CP87-webkit-mobile-a11y.md).
