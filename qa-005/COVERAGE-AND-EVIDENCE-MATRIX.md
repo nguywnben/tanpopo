@@ -113,3 +113,12 @@ Evidence: [CP95 checkpoint](checkpoints/CP95-def030-held-route-response.md), [sa
 | Initial tool discovery, unchanged resync, schema drift, and first schema pin | PASS (scoped) | Exact RC7 Owner/SQLite/Chromium and explicitly consented 127.0.0.1/32 synthetic MCP fixture. Initial and unchanged sync kept the newly discovered tool locked and showed the matching one-tool-pending-review message; drift produced one drift count and remained locked; first-review read-only pin returned 200 and changed the actual UI/API state to Pinned/ACTIVE. | Active-key grant denial/invocation denial before pin; other roles, backends and browsers; multiple tools, pagination and concurrent sync. No key was granted and no tool called in this run. |
 
 Evidence: [CP96 checkpoint](checkpoints/CP96-def026-mcp-first-review-state.md), [sanitized API/UI JSON](evidence/CP96-def026-mcp-first-review-state.json), and six visually inspected screenshots.
+
+
+## CP97 — DEF-044 active extension action state
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Active adapter action menu in Extensions → Installed | PARTIAL | Exact RC7 Owner/SQLite/Chromium. The two active official adapter rows matched HTTP 200 installation readback. Active Ollama actions no longer include Uninstall; Quarantine remains available and Rollback is disabled with no-previous-pin guidance. | Whether quarantine is clearly identified as required for uninstall, post-quarantine uninstall/persistent audit state, kill-switch cleanup, other lifecycle states, roles, backends and browsers. No writes performed. |
+
+Evidence: [CP97 checkpoint](checkpoints/CP97-def044-active-extension-actions.md), [sanitized JSON](evidence/CP97-def044-active-extension-actions.json), and visually inspected inventory/action-menu screenshots.

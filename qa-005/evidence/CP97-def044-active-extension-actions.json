@@ -1,0 +1,33 @@
+{
+  "checkpoint": "CP97",
+  "finding": "DEF-044",
+  "classification": "PARTIAL (fresh read-only active-state retest)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER (qa005-owner@example.invalid)",
+  "api": {
+    "method": "GET",
+    "path": "/admin/v1/extensions/installations",
+    "http": 200,
+    "rows": [
+      {"canonical_name": "@tanpopo/openai-compatible", "state": "ENABLED_ACTIVE", "version": "0.1.0", "execution_tier": "declarative", "signature_verified": true},
+      {"canonical_name": "@tanpopo/ollama", "state": "ENABLED_ACTIVE", "version": "0.1.0", "execution_tier": "declarative", "signature_verified": true}
+    ]
+  },
+  "actual_active_ollama_actions": [
+    "Review permissions",
+    "Upgrade package",
+    "Rollback version (disabled: No previous pin exists. Use Quarantine for emergency cutoff.)",
+    "Quarantine package"
+  ],
+  "uninstall_action_present": false,
+  "product_writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "remaining_scope": ["message explaining quarantine prerequisite before removal", "post-quarantine uninstall", "audit and kill-switch reconciliation", "staged/failed/quarantined states", "other roles", "PostgreSQL/Valkey", "other browsers"],
+  "clone_blocker": "container overlay full; isolated clone startup failed with ENOSPC",
+  "historical_qa003_defect_preserved": true,
+  "gate_rel_07": "BLOCKED"
+}
