@@ -1,0 +1,222 @@
+{
+  "api": {
+    "default_projects": {
+      "code": null,
+      "count": 1,
+      "http": 200,
+      "ids": [
+        "prj_01m8d6dbtxe008w7fphkgp2e24"
+      ],
+      "keys": [
+        "data",
+        "has_more"
+      ],
+      "names": [
+        "QA005 No Budget Project"
+      ]
+    },
+    "orgs_default": {
+      "code": "insufficient_role_permission",
+      "count": null,
+      "http": 403,
+      "ids": null,
+      "keys": [
+        "error"
+      ],
+      "names": null
+    },
+    "orgs_secondary": {
+      "code": "insufficient_role_permission",
+      "count": null,
+      "http": 403,
+      "ids": null,
+      "keys": [
+        "error"
+      ],
+      "names": null
+    },
+    "own_project_members": {
+      "code": null,
+      "count": 7,
+      "http": 200,
+      "ids": [
+        "prc_01m8dps81ee008shnnj72h2daj",
+        "prc_01m8dprpjfe00bh4m6vk7b3zrh",
+        "prc_01m8dpjzwfe009zff0xfmp799d",
+        "prc_01m8dph5qde00bpt388rcbd1c1",
+        "prc_01m8dmj9vhe00a7zkcbtkrkbrb",
+        "prc_01m8dk996ze009hhejrggqc4ah",
+        "prc_01m8d961d6e0086cdjgksjnj8g"
+      ],
+      "keys": [
+        "data",
+        "has_more"
+      ],
+      "names": [
+        "qa005-cp84d-def021-replay@example.invalid",
+        "qa005-cp84c-def021-replay@example.invalid",
+        "qa005-cp84b-def021-replay@example.invalid",
+        "qa005-cp84-def021-replay@example.invalid",
+        "qa005-cp80-reviewer3@example.invalid",
+        "qa005-cp79-def021@example.invalid",
+        "qa005-teamadmin-def056@example.invalid"
+      ]
+    },
+    "primary_projects": {
+      "code": null,
+      "count": 1,
+      "http": 200,
+      "ids": [
+        "prj_01m8d6dbtxe008w7fphkgp2e24"
+      ],
+      "keys": [
+        "data",
+        "has_more"
+      ],
+      "names": [
+        "QA005 No Budget Project"
+      ]
+    },
+    "secondary_projects": {
+      "code": "resource_not_found",
+      "count": null,
+      "http": 404,
+      "ids": null,
+      "keys": [
+        "error"
+      ],
+      "names": null
+    },
+    "sibling_project_members": {
+      "code": "insufficient_role_permission",
+      "count": null,
+      "http": 403,
+      "ids": null,
+      "keys": [
+        "error"
+      ],
+      "names": null
+    },
+    "unscoped_members": {
+      "code": "insufficient_role_permission",
+      "count": null,
+      "http": 403,
+      "ids": null,
+      "keys": [
+        "error"
+      ],
+      "names": null
+    }
+  },
+  "authorization_summary": {
+    "assigned_project_list": {
+      "count": 1,
+      "http": 200
+    },
+    "assigned_project_members": {
+      "count": 7,
+      "http": 200
+    },
+    "cross_organization_project_list": {
+      "code": "resource_not_found",
+      "http": 404
+    },
+    "organizations_collection": {
+      "code": "insufficient_role_permission",
+      "http": 403
+    },
+    "sibling_project_members": {
+      "code": "insufficient_role_permission",
+      "http": 403
+    },
+    "unscoped_members": {
+      "code": "insufficient_role_permission",
+      "http": 403
+    }
+  },
+  "browser": "Chromium 156",
+  "classification": "PASS (scoped authorization boundary); PG-011 PRODUCT_GAP observation; no new defect assigned",
+  "login_http": 200,
+  "mutations": 0,
+  "page_errors": [],
+  "paid_provider_calls": 0,
+  "principal": {
+    "email": "qa005-teamadmin-def056@example.invalid",
+    "project_binding": "prj_01m8d6dbtxe008w7fphkgp2e24",
+    "role": "TEAM_ADMIN"
+  },
+  "product_code_modified": false,
+  "runtime": "exact-source SQLite 127.0.0.1:18162 via ephemeral localhost HTTPS 19443",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "scope_transition": {
+    "from": "assigned project and environment",
+    "interpretation": "Previously loaded authorized project list remained visible after picker scope changed. No fresh member request was observed; this does not establish out-of-scope disclosure. See PG-011 for contract/UX observation.",
+    "no_project_member_requests_observed_during_transition": 0,
+    "no_project_screen_screenshot": "CP88-teamadmin-no-project-members.png",
+    "no_project_ui_heading": "Organization members",
+    "no_project_visible_member_rows": 7,
+    "restored_member_rows": 7,
+    "restored_scope_screenshot": "CP88-teamadmin-bound-restored.png",
+    "selected_scope_screenshot": "CP88-teamadmin-scope-menu.png",
+    "to": "No project / No env"
+  },
+  "session": {
+    "http": 200,
+    "principal_kind": null,
+    "roles": [
+      "TEAM_ADMIN"
+    ]
+  },
+  "side_effects": {
+    "paid_provider_calls": 0,
+    "product_writes": 0,
+    "source_or_specification_changes": 0
+  },
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "ui": {
+    "member_screen_screenshot": "CP88-teamadmin-members-bound-project.png",
+    "scope_buttons": [
+      {
+        "aria": null,
+        "text": "QA005 No Budget Project\n/\nQA005 Budgetless Dev\n(Active workspace scope)",
+        "title": "QA005 No Budget Project / QA005 Budgetless Dev"
+      },
+      {
+        "aria": "Actions for qa005-cp84d-def021-replay@example.invalid",
+        "text": "",
+        "title": ""
+      },
+      {
+        "aria": "Actions for qa005-cp84c-def021-replay@example.invalid",
+        "text": "",
+        "title": ""
+      },
+      {
+        "aria": "Actions for qa005-cp84b-def021-replay@example.invalid",
+        "text": "",
+        "title": ""
+      },
+      {
+        "aria": "Actions for qa005-cp84-def021-replay@example.invalid",
+        "text": "",
+        "title": ""
+      },
+      {
+        "aria": "Actions for qa005-cp80-reviewer3@example.invalid",
+        "text": "",
+        "title": ""
+      },
+      {
+        "aria": "Actions for qa005-cp79-def021@example.invalid",
+        "text": "",
+        "title": ""
+      },
+      {
+        "aria": "Actions for qa005-teamadmin-def056@example.invalid",
+        "text": "",
+        "title": ""
+      }
+    ],
+    "scope_menu_options": []
+  }
+}

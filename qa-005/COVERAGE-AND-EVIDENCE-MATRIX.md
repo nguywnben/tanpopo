@@ -33,3 +33,12 @@
 
 | DEF-028 Route Explain ingress dialect | PARTIAL | Exact-RC7 SQLite, Chromium 156, Owner, one healthy loopback route; default Unified normalized and explicit `ollama` dry runs both matched the same candidate with no rejection. | CP83; sanitized JSON and visually inspected screenshots | Live same-route positive control was not achieved; other adapters, roles and mismatch enforcement remain UNVERIFIED. |
 | DEF-037 Virtual Key audit vocabulary | PASS (scoped QA-005 retest) | RC7 specification lists `virtual_key.created`; real Console issue returned HTTP 201 and produced an exact-action seq 720 audit event; legacy `virtual_key.issued` query returned zero. Console graceful revoke produced matching seq 726 `virtual_key.revoked`; UI Verify hash chain returned HTTP 200/intact across 726 events. Test key revoked; no secret retained. | CP82; sanitized event-filter JSON and visually inspected form/list/revoke/chain screenshots | Other roles, PostgreSQL, pagination, integrations, atomicity/tamper, tenant partitions and remaining DEF-007 failure cases are UNVERIFIED; historical older-contract evidence remains preserved. |
+
+
+## CP88 — Supplemental tenant/RBAC and scope presentation evidence
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Pure Team Admin collection boundaries and workspace scope transition | PASS (scoped authorization); PRODUCT_GAP PG-011 | Exact RC7 SQLite, Chromium 156, one pure project-bound Team Admin. Assigned-project enumeration and membership returned 200; cross-organization project enumeration returned generic 404; organization collection, sibling-project members and unscoped members returned 403. Actual UI presented seven authorized project members. After selecting No project / No env, the previously loaded list remained, no new member request was observed, and the heading read “Organization members.” Bound scope restored and retained seven rows. | Nested item-ID substitution, writes, pagination, multiple project assignments, sibling and cross-tenant resource routes, other roles/backends/browser engines, and the intended picker-to-members contract. No cross-scope disclosure was demonstrated. |
+
+Evidence: [CP88 checkpoint](checkpoints/CP88-teamadmin-multiscope-isolation.md), [sanitized response and UI record](evidence/CP88-teamadmin-isolation.json), and visually inspected screenshots `CP88-teamadmin-members-bound-project.png`, `CP88-teamadmin-scope-menu.png`, `CP88-teamadmin-no-project-members.png`, `CP88-teamadmin-bound-restored.png`.
