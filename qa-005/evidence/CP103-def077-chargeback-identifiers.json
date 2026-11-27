@@ -1,0 +1,78 @@
+{
+  "checkpoint": "CP103",
+  "finding": "DEF-077",
+  "classification": "PARTIAL (fresh exact-RC7 UI/API/CSV/JSON retest)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite through TLS proxy https://127.0.0.1:19444",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER",
+  "scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+  "grouping": "Virtual Key",
+  "ui_chargeback_rows": 10,
+  "duplicate_display_name": "Playground session",
+  "duplicate_rows": [
+    {
+      "group_id": "vky_01m8ckeyfse008yfn8htwyv9ax",
+      "masked_key_prefix": "vk_tp_dev_...iueu",
+      "exact_micro_usd": 0,
+      "estimated_micro_usd": 0,
+      "exact_requests": 1
+    },
+    {
+      "group_id": "vky_01m8d8fs62e008teb429cajd88",
+      "masked_key_prefix": "vk_tp_qa005-budgetless_...BAtX",
+      "exact_micro_usd": 0,
+      "estimated_micro_usd": 0,
+      "exact_requests": 1
+    }
+  ],
+  "valid_ui_usage_summary_request": {
+    "path": "/admin/v1/usage/summary?group_by=key",
+    "status": 200,
+    "distinct_group_ids_for_duplicate_name": true
+  },
+  "csv_export": {
+    "filename": "tanpopo-chargeback-key.csv",
+    "status": 200,
+    "data_rows": 10,
+    "header": "group_key,exact_micro_usd,estimated_micro_usd,exact_request_count,estimated_request_count,unmetered_request_count,group_id,key_prefix",
+    "duplicate_names_have_distinct_group_id_and_key_prefix": true,
+    "sha256": "bc40e926a79d774a323d3b02122be07d3a2fc20dcf479f618426a9dcc9db95a6"
+  },
+  "json_export": {
+    "filename": "tanpopo-chargeback-key.json",
+    "status": 200,
+    "top_level": "array",
+    "data_rows": 10,
+    "row_fields": [
+      "group_id",
+      "group_key",
+      "key_prefix",
+      "exact_micro_usd",
+      "estimated_micro_usd",
+      "exact_request_count",
+      "estimated_request_count",
+      "unmetered_request_count"
+    ],
+    "all_rows_have_group_id_and_key_prefix": true,
+    "duplicate_names_have_distinct_group_id_and_key_prefix": true,
+    "sha256": "e130835ad1a7821887979164e47350c802113a8e6eb1936410182d1848e87a4e"
+  },
+  "visually_inspected_screenshots": [
+    "screenshots/CP103-chargeback-virtual-key.png",
+    "screenshots/CP103-chargeback-virtual-key-export-state.png"
+  ],
+  "plaintext_key_material_observed": false,
+  "exported_files_committed": false,
+  "controlled_same_name_different_usage_case_repeated": false,
+  "invalid_manual_group_by_virtual_key_probe": {
+    "status": 400,
+    "classification": "excluded harness parameter mistake; actual UI uses group_by=key and returned 200"
+  },
+  "writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "historical_qa004_failure_preserved": true,
+  "gate_rel_07": "BLOCKED"
+}

@@ -167,3 +167,12 @@ Evidence: [CP101 checkpoint](checkpoints/CP101-overview-mobile-alert-overflow.md
 | Monthly budget ledger versus same-project November Chargeback summary | PARTIAL | Exact RC7 Owner Console/SQLite/Chromium. For one existing synthetic project, monthly budget UI/API and Chargeback UI plus `usage/summary?from=2026-11-01` all agreed at 3,000,000 exact / 0 estimated micro-USD; APIs returned 200. No writes or provider calls. | QA-004 historical default-project mismatch remains unreconciled by this different fixture. Need fresh budget-active exact+estimated settlements, request-level attribution, boundary admission, concurrency, rollover and backend matrix. |
 
 Evidence: [CP102 checkpoint](checkpoints/CP102-def078-rc7-budget-chargeback-reconciliation.md), [sanitized API readback](evidence/CP102-def078-rc7-reconciliation.json), and visually inspected [Budget & Holds](evidence/screenshots/CP102-finops-initial.png) / [Chargeback](evidence/screenshots/CP102-finops-chargeback.png) screenshots.
+
+
+## CP103 — DEF-077 Virtual Key Chargeback identifiers
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Per-key Chargeback duplicate names in Console, CSV and JSON | PARTIAL | Exact RC7 Owner/SQLite/Chromium. Repeated `Playground session` rows visibly included masked prefixes and distinct `group_id`s. The real UI summary request used `group_by=key` and returned 200. CSV and JSON exports each returned 200 with `group_id` and `key_prefix` on rows. Ten rows per format; screenshots inspected; no writes/provider calls. | Controlled same-name keys with different usage, other roles/scopes/backends, broader export consistency and spreadsheet-open/import handling. Historical QA-004 failure remains. |
+
+Evidence: [CP103 checkpoint](checkpoints/CP103-def077-chargeback-key-identifiers.md), [sanitized schema/row/hash record](evidence/CP103-def077-chargeback-identifiers.json), and visually inspected screenshots.
