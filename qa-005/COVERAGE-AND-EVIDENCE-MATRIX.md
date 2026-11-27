@@ -240,3 +240,12 @@ Evidence: [CP109 checkpoint](checkpoints/CP109-def061-def062-extension-rejection
 | Reject archive content that does not match the operator’s pinned SHA-256 | PASS (scoped) | Exact RC7 SQLite clone / Owner / Chromium 156. One byte of a 362-byte synthetic manifest-only archive was flipped while the original digest was submitted. API returned HTTP 400 `hash_mismatch`; the Console showed specific digest mismatch and safe re-verification guidance, retained the URI/digest while the form remained open, and readback confirmed unchanged active 0.1.0 with no candidate or new installation. Screenshots visually inspected. | Git/OCI sources, alternate digest/signature/archive parser attacks, successful retry, other roles/backends/browsers and all error mappings. Historical RC6 FAIL remains preserved. |
 
 Evidence: [CP110 checkpoint](checkpoints/CP110-def073-tampered-archive-integrity-error.md), [sanitized result](evidence/CP110-def073-tampered-archive.json), and two visually inspected screenshots.
+
+
+## CP111 — DEF-049 fresh no-adapter first install
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Bootstrap fresh instance with no adapter and inspect route-readiness claims | PARTIAL | Exact RC7 fresh SQLite/Owner/Chromium 156. Setup headline accurately describes primary Org/Owner initialization; First connection explicitly says no adapters are enabled and instructs adapter activation before connection creation; Review says connection skipped. After actual completion, API showed zero routes and the Console displayed the matching Routes empty state. DB readback: one Org/Project/environment and zero provider connections/models/deployments/route policies/targets. No provider calls. | Adapter-enabled end-to-end setup with connection/model/deployment/route creation and persistent inference readiness; other browsers/platforms/locales and accessibility remain open. |
+
+Evidence: [CP111 checkpoint](checkpoints/CP111-def049-fresh-no-adapter-setup.md), [sanitized readback](evidence/CP111-def049-fresh-no-adapter-setup.json), and five visually inspected screenshots.

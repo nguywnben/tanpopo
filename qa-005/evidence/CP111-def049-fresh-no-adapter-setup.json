@@ -1,0 +1,80 @@
+{
+  "checkpoint": "CP111",
+  "finding": "DEF-049",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "database": "fresh empty SQLite data directory, exact-source runtime 127.0.0.1:18165",
+    "browser": "Chromium 156",
+    "provider_adapters_enabled": 0,
+    "provider_calls": 0
+  },
+  "reproduction": [
+    {
+      "step": "Open /setup on an uninitialized instance",
+      "headline": "Claim this self-hosted gateway and initialize its primary organization and owner account.",
+      "does_not_promise_route": true
+    },
+    {
+      "step": "Complete owner/org/project form and continue to First connection",
+      "visible_copy": "No provider adapters enabled yet. Finish setup first, then open Extensions → Marketplace to activate one of 8 bundled official adapters (or stage a package via CLI) before adding connections."
+    },
+    {
+      "step": "Continue with no adapter/connection, acknowledge key custody and inspect Review",
+      "review_heading": "Review and initialize",
+      "initial_connection": "Skipped"
+    },
+    {
+      "step": "Complete setup and inspect resulting workspace Routes & Policies",
+      "route_api_http": 200,
+      "route_count": 0,
+      "ui_state": "No routes in this environment",
+      "workspace_picker": "QA005 CP111 Fresh No Route / QA005 CP111 Initial Project / dev"
+    }
+  ],
+  "persistent_readback": {
+    "organizations": 1,
+    "projects": 1,
+    "environments": 1,
+    "provider_connections": 0,
+    "logical_models": 0,
+    "model_deployments": 0,
+    "route_policies": 0,
+    "route_targets": 0
+  },
+  "result": "PARTIAL",
+  "rationale": "The historical no-adapter route-promise mismatch is not reproduced: current setup explicitly describes tenant bootstrap, explains that no adapter is enabled and what to do next, and Review says the initial connection was skipped. The empty routes state agrees with the skipped prerequisites. The accepted adapter-enabled setup-and-route-readback path was not tested.",
+  "writes": "Fresh setup created one synthetic owner, organization, project, and environment in the disposable test data directory. No source or existing QA database was changed.",
+  "screenshots": [
+    {
+      "path": "screenshots/CP111-def049-fresh-setup-start.png",
+      "sha256": "26f00e7dcd985f0facb0ee0c12dd19287435f3b5b93b04603e08e434cc939307",
+      "inspection": "Initial uninitialized setup view; claim headline accurately says owner/organization setup and does not claim a route is provisioned."
+    },
+    {
+      "path": "screenshots/CP111-def049-first-connection.png",
+      "sha256": "4c1fb47e370daccc54cf82211f40e579a5ffba4dc6c47a0ebf90e6e2876b62cf",
+      "inspection": "Visually confirmed no-adapter state and instruction to finish setup, activate an official adapter, then add a connection."
+    },
+    {
+      "path": "screenshots/CP111-def049-key-custody.png",
+      "sha256": "3de35ea0b7204d71f2648eb59900b92e9678b9ed691d4a530e25bb93a890a9f4",
+      "inspection": "Visually confirmed key custody warning and explicit acknowledgement."
+    },
+    {
+      "path": "screenshots/CP111-def049-review.png",
+      "sha256": "8ce64ee9ba10a1ca17956146d822a26be3ca6f6dad802d6c02875f83b26f4a7f",
+      "inspection": "Review says Initialize instance and Initial connection: Skipped."
+    },
+    {
+      "path": "screenshots/CP111-def049-routes-empty.png",
+      "sha256": "9bb7ba5317d3ac69fce5223ce0e77d3e47b6c5bfe3b3b556aa7a2bc76138c12b",
+      "inspection": "Fresh workspace picker is QA005 test tenant/project/dev and Routes & Policies shows zero configured routes with an explicit empty state."
+    }
+  ],
+  "limitations": [
+    "Adapter-enabled setup and route creation/persistence acceptance remains UNVERIFIED.",
+    "Only fresh SQLite/Chromium Linux no-provider path; other operating systems/browsers and locale/responsive states remain untested.",
+    "The Create route form was not used; no route or provider connection was created."
+  ]
+}
