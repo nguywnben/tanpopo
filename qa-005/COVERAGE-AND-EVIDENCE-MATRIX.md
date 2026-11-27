@@ -221,3 +221,13 @@ Evidence: [CP107 checkpoint](checkpoints/CP107-def036-marketplace-installed-stat
 | Built-in Official provenance across Marketplace and Installed views | PARTIAL | Exact RC7 Owner/SQLite/Chromium 156. Existing `@tanpopo/ollama` v0.1.0 appeared Official and Signature verified with fingerprint prefix `d04e71ce017b` in both views. Catalog and installation API reads returned 200 and agreed on `signature_verified=true`, `enterprise_signed=false`, official trust tier, version and fingerprint. Frozen source verifies embedded signatures against configured release-root public keys; no instance-KEK signer is assigned in the server path inspected. Both screenshots were visually inspected. No write or provider call occurred. | Production root and release artifact identity, cross-runtime signer consistency, altered/unsigned/spoofed package behavior, stage/consent lifecycle, all other built-ins, browser/platform breadth and production signing remain UNVERIFIED/BLOCKED. |
 
 Evidence: [CP108 checkpoint](checkpoints/CP108-def043-rc7-builtin-provenance.md), [sanitized API/source result](evidence/CP108-def043-extension-provenance.json), and two visually inspected screenshots.
+
+
+## CP109 — DEF-061 discard escalated candidate / DEF-062 duplicate retry
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Reject permission-escalating upgrade from Installed Console | PASS (scoped) | Exact RC7 source clone / Owner / Chromium 156. A real 0.1.0 → 0.1.1 escalated host candidate stayed pending after “Close (keep pending)”; explicit row-action confirmation discarded it. HTTP 204; readback returned active 0.1.0 with no candidate. `extension.escalated_upgrade_rejected` was visible in Audit Log and hash chain verified intact across 601 events. | Other roles/backends/browsers, stale ETag and error recovery, concurrent upgrade/approval races. |
+| Retry identical rejected immutable extension candidate | PASS (scoped) | Same 0.1.1 archive and digest returned HTTP 409 `resource_already_exists`; active 0.1.0 remained unchanged. Real Console gave specific duplicate-version and new-SemVer/updated-digest guidance, visually captured with the full message unobscured. | Other conflict conditions, role/backend/browser matrix, generic versus package-version edge cases. |
+
+Evidence: [CP109 checkpoint](checkpoints/CP109-def061-def062-extension-rejection-retry.md), [sanitized workflow/audit record](evidence/CP109-def061-def062-extension-discard-and-retry.json), and seven visually inspected screenshots.
