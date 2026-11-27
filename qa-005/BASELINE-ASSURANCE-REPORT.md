@@ -333,3 +333,12 @@ The campaign remains incomplete; the TEEP-01 entry verdict remains NOT DETERMINE
 ### CP114 — model discovery identity control
 
 A temporary project/environment-scoped provider key in the exact-RC7 SQLite clone returned an authorized `/v1/models` list containing the logical public slug `qa005-playground-low`. Using that advertised slug with its route reached the local OpenAI-compatible fixture and returned HTTP 200; the upstream configured name `qa005-model` was not advertised and did not resolve as the public identifier. The key was revoked. This is one scoped identity/discovery control and not a complete OpenAI model-list or role/backend matrix. No new defect was established. See [CP114](checkpoints/CP114-v1-model-discovery-route-identity.md) and [sanitized evidence](evidence/CP114-model-discovery-routing.json).
+
+
+## CP115 update — A2A lifecycle and budget invariant
+
+DEF-011 advances from PARTIAL to PASS (scoped): an exact-RC7, delayed loopback task was resumed from the actual Console; concurrent task polling and persisted reads showed the same task `input-required` v3 → `working` v4 → `completed` v5, with one artifact and exact $0.002 settlement against a $0.010 hold. The visually inspected UI showed a pending action during the controlled delay and the completed result afterward. The temporary A2A key was revoked, replay denied, and the audit chains verified intact.
+
+CP115 adds DEF-085 (Major, FAIL): two zero-hold requests reached the authorized synthetic downstream endpoint before HTTP 403 spend rejection, producing failed rows and zero internal settlement. This contradicts the accepted SM-07 hold-before-dispatch boundary and AC-2’s settlement against allocated sub-budget. The local test proves ordering, not an actual external charge. Detailed reproduction and acceptance criteria are in [the standalone engineering handoff](reports/DEF-085-zero-hold-a2a-dispatch.md).
+
+**Current historical ledger:** 61 scoped PASS, 15 PARTIAL, three fresh FAIL (DEF-022, DEF-069, DEF-075), zero UNVERIFIED. **New findings:** DEF-080–085 are FAIL. **QA-005 campaign:** IN PROGRESS; TEEP-01 readiness NOT DETERMINED; no baseline-stable verdict. GATE-REL-07 remains BLOCKED.

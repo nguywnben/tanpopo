@@ -264,3 +264,14 @@ CP113 retested quarantine errors and the expired-key boundary on exact RC7: DEF-
 
 
 | Authorized `/v1/models` discovery and route identity | PASS (scoped) | One project/environment-scoped PROVIDER key in the real Console; `GET /v1/models` advertised authorized logical slug `qa005-playground-low`; route `qa005-playground-openai` accepted that slug and returned HTTP 200 through a deterministic OpenAI-compatible loopback fixture. The upstream-only name `qa005-model` was not advertised and did not resolve as the public model identifier. | CP114; sanitized status/model list and cleanup evidence | Other role/scope/backend/browser/model/route sets and provider SDK interoperability remain UNVERIFIED. |
+
+
+## CP115 — A2A task resumption and budget-before-dispatch control
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Same-task `input-required` follow-up, delayed resume, completion and exact settlement | PASS (scoped; DEF-011) | Exact RC7 SQLite clone, Owner, Chromium 156; live Console resume; authorized task polling captured `input-required` v3 and `working` v4; final persisted Completed v5, artifact and 2,000/10,000 micro-USD hold; audit chain verified intact; screenshots inspected. | Other roles, error/retry/timeouts, cross-tenant, A2A partner interoperability; CP48 supplies prior PG/Valkey completion without same-run intermediate-state capture. |
+| Zero-sub-budget synchronous A2A dispatch | FAIL (DEF-085) | Two requests reached local authorized fixture before 403; positive synthetic spend response; task rows failed at zero settlement/no reservation; audit evidence preserved. | PostgreSQL/Valkey, alternate dispatch/resume modes, mutating/slow endpoint behavior. No real third-party cost was incurred. |
+| Temporary key lifecycle / audit integrity | PASS (scoped) | A2A-only key revoked, state read back REVOKED v2; replay HTTP 401; audit verification HTTP 200, intact chains (5 and 691 events); test processes stopped. | Other roles/backends and full general key-lifecycle matrix remain open. |
+
+Evidence: [CP115 checkpoint](checkpoints/CP115-a2a-resume-and-zero-budget-dispatch.md), [sanitized lifecycle/audit JSON](evidence/CP115-a2a-lifecycle-zero-hold.json), and screenshots `CP115-a2a-input-required-ui.png`, `CP115-a2a-resume-dialog.png`, `CP115-a2a-resume-filled.png`, `CP115-a2a-resume-inflight.png`, `CP115-a2a-task-completed.png`.
