@@ -1,0 +1,58 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated SQLite 127.0.0.1:18162",
+  "browser": "Chromium 156",
+  "current_documented_create_action": "virtual_key.created",
+  "created_action_filter": {
+    "http": 200,
+    "count": 38,
+    "event": {
+      "action": "virtual_key.created",
+      "seq_no": 720,
+      "target_type": "virtual_key",
+      "target_id": "vky_01m8dnc6xwe009yd8wns4g68sn",
+      "actor_id": "prc_01m8cj8phze00a0v6ynkzvg13j",
+      "org_id": "org_01m8cj8phze00a0r8dfkqmmfn0",
+      "chain_partition": "org_01m8cj8phze00a0r8dfkqmmfn0",
+      "metadata": {
+        "allowed_planes": "PROVIDER",
+        "env_id": "env_01m8d6f78xe00a9w53vt41rnqg"
+      }
+    }
+  },
+  "legacy_issued_action_filter": {
+    "http": 200,
+    "count": 0,
+    "event": null
+  },
+  "revoked_action_filter": {
+    "http": 200,
+    "count": 32,
+    "event": {
+      "action": "virtual_key.revoked",
+      "seq_no": 726,
+      "target_type": "virtual_key",
+      "target_id": "vky_01m8dnc6xwe009yd8wns4g68sn",
+      "actor_id": "prc_01m8cj8phze00a0v6ynkzvg13j",
+      "org_id": "org_01m8cj8phze00a0r8dfkqmmfn0",
+      "chain_partition": "org_01m8cj8phze00a0r8dfkqmmfn0",
+      "metadata": {
+        "mode": "STANDARD",
+        "reason": "Graceful drain revocation"
+      }
+    }
+  },
+  "chain_verify": {
+    "http": 200,
+    "intact": true,
+    "checked_events_count": 726
+  },
+  "secret_value_saved": false,
+  "screenshots": [
+    "evidence/screenshots/CP82-def037-issue-key-form.png",
+    "evidence/screenshots/CP82-def037-created-key-list.png",
+    "evidence/screenshots/CP82-def037-revoked-key-list.png",
+    "evidence/screenshots/CP82-def037-audit-chain.png"
+  ]
+}
