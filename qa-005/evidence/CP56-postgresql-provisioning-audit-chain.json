@@ -1,0 +1,28 @@
+{
+  "checkpoint": "CP56",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": "Isolated fresh PostgreSQL 16 database, three-node Valkey 8.1 Cluster, exact-source split runtime; Owner Console on 127.0.0.1:18151; Chromium 1440x1000.",
+  "accepted_criterion": "DEF-007 successful organization/project/environment provisioning must append correctly targeted audit events, and the visible audit chain must verify intact (TP-IMP-0030 immutable RFC 8785 JCS audit requirement).",
+  "provisioning_events": [
+    {"query": "GET /admin/v1/audit-events?action=organization.created&limit=20", "http_status": 200, "count": 1, "seq_no": 1, "action": "organization.created", "target_type": "organization", "target_id": "org_01m8d3hs3se00accxwb75s90yf", "chain_partition": "org_01m8d3hs3se00accxwb75s90yf"},
+    {"query": "GET /admin/v1/audit-events?action=project.created&limit=20", "http_status": 200, "count": 1, "seq_no": 2, "action": "project.created", "target_type": "project", "target_id": "prj_01m8d3hs3se00acdpfac9zrf8f", "chain_partition": "org_01m8d3hs3se00accxwb75s90yf"},
+    {"query": "GET /admin/v1/audit-events?action=environment.created&limit=20", "http_status": 200, "count": 1, "seq_no": 3, "action": "environment.created", "target_type": "environment", "target_id": "env_01m8d3hs3se00acex64rpdygvn", "chain_partition": "org_01m8d3hs3se00accxwb75s90yf"}
+  ],
+  "verification": {
+    "interaction": "Owner opened Security > Audit Log and clicked Verify hash chain.",
+    "http_method": "POST",
+    "path": "/admin/v1/audit-events/verify",
+    "http_status": 200,
+    "intact": true,
+    "checked_events_count": 55,
+    "first_broken_seq_no": null,
+    "ui_message": "Hash chain verified; Cryptographic RFC 8785 JCS chain intact across 55 events."
+  },
+  "visual_evidence": "Screenshot CP56-postgres-audit-chain-verified.png was opened and visually inspected; the green verified result and 55-event count matched the API response.",
+  "classification": "PASS (scoped PostgreSQL provisioning-audit successful paths and JCS chain integrity; DEF-007 status remains scoped PASS)",
+  "limitations": ["No failed/partial provisioning, concurrent create race, update/delete audit event, event tampering, or database recovery scenario was exercised.", "This is not telemetry export coverage."],
+  "new_defect": false,
+  "historical_defect_counts_changed": false,
+  "release_gate": "GATE-REL-07 remains BLOCKED"
+}
