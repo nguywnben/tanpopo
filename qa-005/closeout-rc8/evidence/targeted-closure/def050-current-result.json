@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "route_id": "rte_01m8ewnmnae00bv4p9nt3t9gpg",
+  "slug": "qa005-def050-single",
+  "target_deployment": "qa005-exact",
+  "target_count": 1,
+  "visible_warning": "Target deployments missing declared tool_calling capability: qa005-exact."
+}

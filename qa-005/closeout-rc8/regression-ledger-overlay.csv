@@ -39,7 +39,7 @@ DEF-037,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focu
 DEF-038,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-039,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-040,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
-DEF-041,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-041,PARTIAL,PARTIAL (bounded read-only check),RC8 disposable DB had one active organization and zero shred requests or pending cleanups; no erasure/failure/recovery was executed. Historical CP71 remains controlling for recovery behavior.
 DEF-042,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-043,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-044,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
@@ -48,7 +48,7 @@ DEF-046,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focu
 DEF-047,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-048,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-049,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
-DEF-050,PARTIAL,BLOCKED / UNVERIFIED,No compliant local deployment candidate; native request returned 503 before fixture dispatch. Unified stream trailer path was not reached.
+DEF-050,PARTIAL,PASS (single-primary); PARTIAL overall,Real Console warning named sole primary qa005-exact and saved route with one target; CP98 two-target warning remains generic. Streaming acceptance is DEF-083.
 DEF-051,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-052,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-053,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
@@ -70,18 +70,18 @@ DEF-068,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focu
 DEF-069,FAIL,PASS (scoped),"PostgreSQL/Valkey: acknowledged partial-spend cancellation, unsupported cancellation and two concurrent cancellations reconciled task/hold/settlement state."
 DEF-070,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-071,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
-DEF-072,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-072,PARTIAL,PARTIAL (bounded read-only check),RC8 cluster-status API reported one healthy non-stale all-role node; wrapped org/project key rows and generations present, no shred pending. Expected-node loss/rejoin and KEK rotation remain untested; CP45 ambiguity preserved.
 DEF-073,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-074,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-075,FAIL,PASS (scoped),"Old and new credentials both authenticated during 60s grace; after expiry old returned 401, new 200, row became CREATED_ACTIVE v3 and finalization audit event existed."
 DEF-076,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
 DEF-077,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
-DEF-078,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-078,PARTIAL,PARTIAL (bounded accounting check),RC8 synthetic exact/estimated settlement aggregate 1,200 micros matched budget-ledger settled amount; zero reserved hold. No rollup rows or UI parity; historical one-micro mismatch remains unresolved.
 DEF-079,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
-DEF-080,FAIL (historical QA-005 finding),UNVERIFIED,No independent RC8 FinOps Viewer retest.
-DEF-081,FAIL (historical QA-005 finding),PARTIAL,PostgreSQL active installation/adapter inventory agreed after restart; fresh activate/re-enable was blocked by emergency stream-barrier failure during prerequisite quarantine.
+DEF-080,FAIL (historical QA-005 finding),PASS (scoped),Owner inventory HTTP 200 with five keys; pure FinOps Viewer inventory HTTP 403 insufficient_role_permission and Console explicitly showed Virtual Keys restricted; no rows disclosed.
+DEF-081,FAIL (historical QA-005 finding),FAIL (quarantine operation); broader lifecycle PARTIAL,On healthy three-primary Valkey Cluster and corrected PG role, OpenAI-compatible and Ollama quarantine each returned 503. Temporary Registry diagnostic: storage resource not found; RLS hides org-bound operator principal in global instance-operator scope while binding/install remain visible. Confirmed product-side RLS resolution failure; no state mutation.
 DEF-082,FAIL (historical QA-005 finding),BLOCKED,Quarantine prerequisite failed HTTP 503; unquarantine/badge reconciliation could not be reached.
-DEF-083,FAIL (historical QA-005 finding),BLOCKED,No eligible native provider route; HTTP 503 before upstream; unified stream not executed.
-DEF-084,FAIL (historical QA-005 finding),UNVERIFIED,320px no-alert state visually inspected; long-ID active-alert state absent.
+DEF-083,FAIL (historical QA-005 finding),PASS (scoped),Actual HTTP clients consumed native Ollama NDJSON and unified SSE: EXACT/ESTIMATED trailers on success and ESTIMATED on interrupted unified response; durable PG settlement/token aggregates and synthetic budget settlement checked.
+DEF-084,FAIL (historical QA-005 finding),PASS (scoped),Active long-ID budget alert at 320/375px; document/body scroll widths matched viewports; visually inspected wrapped ID and reachable Remediate action.
 DEF-085,FAIL (historical QA-005 finding),PASS (scoped),Zero-hold A2A request rejected with HTTP 403 before dispatch; fixture call count stayed zero.
-DEF-086,FAIL (historical QA-005 finding),PASS (scoped),"Full source migration verified on isolated PostgreSQL 16; financial references, pricing, settlements and audit parity preserved; live Console/A2A checks passed."
+DEF-086,FAIL (historical QA-005 finding),PASS (scoped),"Full source migration verified on isolated PostgreSQL 16; financial references, pricing, settlements, audit parity and DEKs preserved. Separate deterministic fixture migrated one encrypted secret envelope, 83 audit events, then authorized PostgreSQL provider probe/inference succeeded without retaining plaintext."

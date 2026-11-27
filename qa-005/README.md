@@ -205,4 +205,14 @@ CP122 showed DEF-086 is present in both `budget_ledgers.id` and `budget_reservat
 
 ## Current verdict
 
-`BASELINE_REMEDIATION_REQUIRED` for TEEP-01 entry, based on confirmed Major DEF-081/085/086 and historical FAILs DEF-022/069/075. The campaign remains ongoing with incomplete coverage; this verdict is not a QA-complete or release-ready claim. `GATE-REL-07` remains BLOCKED.
+`BASELINE_REMEDIATION_REQUIRED` for TEEP-01 entry. CP125 confirms the DEF-081 PostgreSQL quarantine failure; DEF-082 remains blocked pending a successful barrier transition, and material historical assurance gaps remain. DEF-083, DEF-080, DEF-084 and one encrypted-credential migration path now have scoped passes. The campaign remains incomplete; this verdict is not a QA-complete or release-ready claim. Historical findings and prior defect status are preserved. `GATE-REL-07` remains BLOCKED.
+
+## RC8 targeted closeout
+
+- [Consolidated RC8 closeout report](closeout-rc8/REPORT.md)
+- [CP124 prior checkpoint](closeout-rc8/checkpoints/CP124-RC8-TEEP00-closeout.md)
+- [CP125 targeted evidence closure](closeout-rc8/checkpoints/CP125-targeted-evidence-closure.md)
+- [CP125 coverage matrix](COVERAGE-AND-EVIDENCE-MATRIX.md#cp125--teep-00-targeted-evidence-closure-rc8)
+- [RC8 overlay, DEF-001–086](closeout-rc8/regression-ledger-overlay.csv)
+
+CP125 preserves CP123's historical 61 scoped PASS / 15 PARTIAL / three FAIL snapshot and updates only tested targeted dispositions. The single-target DEF-050 route warning is separate from DEF-083 streaming. The verdict remains `BASELINE_REMEDIATION_REQUIRED`; this is not release certification. `GATE-REL-07` remains BLOCKED.

@@ -1,0 +1,48 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "def080": {
+    "owner_inventory": {
+      "http": 200,
+      "count": 5
+    },
+    "finops_viewer_inventory": {
+      "http": 403,
+      "error": "insufficient_role_permission",
+      "returned_rows": 0
+    },
+    "viewer_ui_contains_explicit_denial": true,
+    "viewer_ui_text": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nVirtual Keys\nMembers & Roles\nEnvironment Virtual Keys\nVirtual Keys restricted\nYour role cannot list Virtual Keys in this environment."
+  },
+  "def050": {
+    "classification": "PASS (original single-primary-warning acceptance)",
+    "route_saved": true,
+    "route_slug": "qa005-def050-single",
+    "target_deployment": "qa005-exact",
+    "target_count": 1,
+    "warning": "Target deployments missing declared tool_calling capability: qa005-exact.",
+    "historical_two_target_copy": "PARTIAL remains; CP98 generic warning named no target, and this closeout did not rerun the multi-target condition."
+  },
+  "def084": {
+    "classification": "PASS (active long-ID alert, responsive widths)",
+    "alert_code": "ALT-BUDGET-80",
+    "long_budget_id_present": true,
+    "actual_spend_micros": 1200,
+    "lowered_limit_micros": 1000,
+    "viewports": {
+      "320": {
+        "scroll_width": 320,
+        "client_width": 320,
+        "visual_inspection": "ID wraps; remediation action remains reachable"
+      },
+      "375": {
+        "scroll_width": 375,
+        "client_width": 375,
+        "visual_inspection": "ID wraps; remediation action remains reachable"
+      }
+    },
+    "evidence_screenshots": [
+      "screenshots/def084-overview-320.png",
+      "screenshots/def084-overview-375.png"
+    ]
+  }
+}

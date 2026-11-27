@@ -1,0 +1,19 @@
+{
+  "budget_id": "bdg_01m8ewf3c0e008pc277p0j3tcv",
+  "version": 5,
+  "used_micros": 1200,
+  "limit_micros": 1000,
+  "alert_found": true,
+  "alert_code": "ALT-BUDGET-80",
+  "summary": "VIRTUAL_KEY budget bdg_01m8ewf3c0e008pc277p0j3tcv exceeded 80% utilization.",
+  "viewport_320": {
+    "scrollWidth": 320,
+    "clientWidth": 320,
+    "bodyWidth": 320
+  },
+  "viewport_375": {
+    "scrollWidth": 375,
+    "clientWidth": 375,
+    "bodyWidth": 375
+  }
+}

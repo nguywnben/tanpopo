@@ -1,0 +1,46 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "runtime": "Exact RC8 Linux/amd64 artifact; isolated PostgreSQL 16 database; least-privilege non-superuser application role; healthy three-primary Valkey Cluster; fresh process restart; Chromium Console",
+  "scope": "DEF-081 / DEF-082 PostgreSQL extension quarantine prerequisite",
+  "classification": "CONFIRMED PRODUCT DEFECT WITHIN DEF-081; DEF-082 REMAINS BLOCKED",
+  "reproduction": [
+    "Start the RC8 runtime against the isolated PostgreSQL database and healthy Valkey Cluster (state:ok, three primaries).",
+    "Confirm the Operations cluster-status API reports HTTP 200 and a healthy, non-stale node after runtime restart.",
+    "Use the real Owner Console to quarantine each of the active OpenAI-compatible and Ollama extension installations.",
+    "Both requests return HTTP 503 quarantine_kill_switch_failed; the UI reports that the emergency stream barrier could not be established.",
+    "Read back installation and kill-switch state: both installations remain ENABLED_ACTIVE; no quarantine switch is persisted.",
+    "Execute a temporary read-only Registry diagnostic against the same PostgreSQL role and trigger path; remove the diagnostic test file immediately after execution."
+  ],
+  "observations": {
+    "openai_compatible_http": 503,
+    "ollama_http": 503,
+    "error_code": "quarantine_kill_switch_failed",
+    "underlying_registry_error": "storage: resource not found",
+    "postgres_rls_visibility": {
+      "instance_operator_scope": true,
+      "org_scoped_operator_principal_visible": false,
+      "operator_role_binding_visible": true,
+      "extension_installation_visible": true
+    },
+    "cluster": "healthy and non-stale after restart",
+    "state_mutation": "none; transaction rolled back; no kill-switch row was created"
+  },
+  "cause": "Confirmed RLS/product behavior: global extension quarantine runs with empty current_org_id and instance-operator scope. The forced-RLS principals policy permits global rows with org_id IS NULL for an instance operator but hides this bootstrap operator principal because it has a non-null org_id. The registry therefore cannot resolve the actor and returns storage: resource not found; the HTTP handler masks it as quarantine_kill_switch_failed.",
+  "source_cross_check": {
+    "operator_rls_context": "internal/storage/port/port.go:184-186",
+    "forced_rls_principals_policy": "db/migrations/postgres/0001_full_schema_rls_partitions.sql:1626-1634",
+    "quarantine_barrier_call_and_masked_503": "internal/admin/http/extensions.go:817-827"
+  },
+  "environment_reconciliation": "The initial standalone Valkey setup was invalid and was corrected. The same failure reproduced with the healthy three-primary Valkey Cluster, corrected application-role grants, fresh app restart, visible installation and operator binding, and healthy cluster status. Stale membership or the corrected runtime topology does not explain this result.",
+  "limitations": [
+    "No quarantine or emergency stream barrier was committed; the safety barrier was not bypassed.",
+    "Unquarantine, re-enable after quarantine, badge freshness, and extension recovery are consequently not exercised.",
+    "The handler response does not expose the underlying storage error; the diagnostic and RLS visibility query provide the supporting cause evidence."
+  ],
+  "evidence": [
+    "screenshots/pg-quarantine-503.png",
+    "valkey-cluster-health.json",
+    "quarantine-rls-visibility.json",
+    "readonly-operations.json"
+  ]
+}

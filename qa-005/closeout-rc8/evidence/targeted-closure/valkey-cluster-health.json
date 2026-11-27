@@ -1,0 +1,17 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "check": "valkey-cli -p 17001 --raw cluster info",
+  "result": {
+    "cluster_state": "ok",
+    "cluster_slots_assigned": 16384,
+    "cluster_slots_ok": 16384,
+    "cluster_slots_pfail": 0,
+    "cluster_slots_fail": 0,
+    "cluster_known_nodes": 3,
+    "cluster_size": 3,
+    "cluster_current_epoch": 3,
+    "total_cluster_links_buffer_limit_exceeded": 0,
+    "ping": "PONG"
+  },
+  "relevance": "Healthy three-primary Valkey Cluster at the time of the reproduced PostgreSQL extension quarantine 503. This is distinct from the one Tanpopo application node returned by the Operations cluster-status API."
+}

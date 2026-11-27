@@ -1,0 +1,46 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "runtime": "Isolated exact-RC8 PostgreSQL 16/Valkey Cluster runtime; read-only API and SQL checks in organization scope",
+  "scope": ["DEF-041", "DEF-072", "DEF-078"],
+  "def041": {
+    "classification": "RESIDUAL ASSURANCE GAP; historical PARTIAL preserved",
+    "bounded_check": "Read-only inspection only; the isolated DB contained one active organization, zero vault shred requests, and zero pending shred cleanups.",
+    "not_exercised": ["crypto-shred execution", "audit failure injection", "restart/retry", "residual child-resource and credential purge"],
+    "reconciliation": "CP71's exact-RC7 destructive failure/retry evidence remains the historical basis. This closeout did not perform an erasure and does not infer recovery success from zero pending work."
+  },
+  "def072": {
+    "classification": "PARTIAL; historical FAIL remains visible",
+    "fresh_observations": {
+      "cluster_status_http": 200,
+      "storage_engine": "postgres",
+      "current_runtime_node_count": 1,
+      "node_role": "all",
+      "health": "ok",
+      "stale": false,
+      "config_epoch": 40,
+      "organization_key_envelopes": 1,
+      "project_key_envelopes": 1,
+      "vault_generation_rows": 2,
+      "pending_shred_requests": 0,
+      "pending_shred_cleanups": 0
+    },
+    "not_exercised": ["expected topology/replica count", "node loss and rejoin", "epoch transition", "KEK rotation/rewrap", "restore"],
+    "reconciliation": "The live single-process cluster inventory and extant wrapped-key metadata were present. This is not a fresh split-role or key-rotation pass and does not resolve CP45's expected-node ambiguity."
+  },
+  "def078": {
+    "classification": "PARTIAL; historical FAIL remains visible",
+    "fresh_observations": {
+      "settlements": 17,
+      "exact_settlements": 7,
+      "estimated_settlements": 10,
+      "settlement_total_cost_micros": 1200,
+      "budget_ledger_settled_total_micros": 1200,
+      "budget_ledger_reserved_hold_micros": 0,
+      "reservation_states": {"SETTLED_EXACT": 7, "SETTLED_ESTIMATED": 10},
+      "usage_rollup_rows": 0,
+      "audit_verification": {"http": 200, "intact": true, "checked_events": 143}
+    },
+    "reconciliation": "The independently observed synthetic request settlements reconcile to the ledger's 1,200 micro-USD settled amount with no outstanding budget hold. Historical one-micro discrepancy remains unresolved: this test fixture is a different project, and the absence of rollup rows means summary/chargeback parity was not freshly established.",
+    "not_exercised": ["boundary admission", "period rollover", "concurrency", "all usage accuracies across budgeted workloads", "other storage backends", "chargeback UI/API parity"]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "cluster_status_http": 200,
+  "cluster": {
+    "storage_engine": "postgres",
+    "peers_count": null,
+    "nodes": [
+      {
+        "role": "all",
+        "health": "ok",
+        "stale": false,
+        "config_epoch": 40
+      }
+    ]
+  },
+  "audit_verify_http": 200,
+  "audit_verify": {
+    "intact": true,
+    "checked_events_count": 143
+  },
+  "installations": [
+    {
+      "canonical_name": "@tanpopo/openai",
+      "state": "PENDING_PERMISSION_APPROVAL",
+      "active_version": null,
+      "candidate_version": "0.1.0"
+    },
+    {
+      "canonical_name": "@tanpopo/openai-compatible",
+      "state": "ENABLED_ACTIVE",
+      "active_version": "0.1.0",
+      "candidate_version": null
+    },
+    {
+      "canonical_name": "@tanpopo/ollama",
+      "state": "ENABLED_ACTIVE",
+      "active_version": "0.1.0",
+      "candidate_version": null
+    }
+  ],
+  "adapter_slugs": [
+    "openai-compatible",
+    "ollama"
+  ]
+}

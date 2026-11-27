@@ -44,3 +44,23 @@ Historical RR-001–RR-023 entries remain preserved above. RC8 independently res
 | RR-027 | Secret credential envelope migration and live use | UNVERIFIED | Source contained zero `secret_credentials`; use deterministic encrypted fixture and test decrypt/use without paid providers. |
 | RR-028 | CP123 15 historical PARTIAL criteria remain incompletely closed | PARTIAL | DEF-022/069/075 now have scoped RC8 passes; DEF-050 was blocked; 11 remaining partial findings were not retested. |
 | RR-029 | Windows runtime, multi-node PostgreSQL/Valkey failover/restore, and comprehensive platform/role/browser coverage | UNVERIFIED | Execute in dedicated isolated Windows and multi-node environments. |
+
+## TEEP-00 focused closure update (CP125, RC8)
+
+This addendum preserves RR-001–RR-029 and their historical snapshots. Targeted current dispositions:
+
+| Risk / target | CP125 disposition | Evidence and remaining assurance |
+|---|---|---|
+| DEF-081 PostgreSQL global extension quarantine | **Confirmed product failure** | Correct PG16/Valkey Cluster runtime returned 503 for two real Console quarantine actions. Registry diagnostic and RLS visibility query established that an org-bound operator principal is hidden in global instance-operator scope. Tracked under existing DEF-081; no DEF-087 added. Barrier remained fail-closed. Successful quarantine, audit/state atomicity and recovery remain unverified. See `closeout-rc8/evidence/targeted-closure/postgres-quarantine-diagnosis.json`. |
+| DEF-082 quarantine/unquarantine badge freshness | **BLOCKED** | No state transition was committed after DEF-081 prerequisite failed; freshness is not classified as pass/fail. |
+| DEF-083 streaming accuracy | **PASS (scoped)** | Native NDJSON and unified SSE exact/estimated trailers plus interrupted unified response were consumed with actual HTTP clients; durable settlements checked. Broader adapters and failure modes remain residual gaps. |
+| DEF-080 role-denied inventory | **PASS (scoped)** | Owner inventory and pure FinOps Viewer 403/explicit denied UI now independently reproduced. |
+| DEF-084 mobile alert | **PASS (scoped)** | Active long-ID alert fit 320px/375px and was visually inspected. |
+| DEF-050 route warning | **PASS single-target / PARTIAL overall** | Single-primary warning now names the affected deployment and persists. CP98 multi-target generic-warning clarity remains partial. |
+| DEF-086 secret credential migration | **PASS (one fixture/adapter)** | Deterministic encrypted credential migrated and used in authorized local-fixture PostgreSQL inference; other credential types/key rotation remain untested. |
+| DEF-041 erasure recovery | **PARTIAL** | Read-only state only; no destructive recovery operation executed. CP71 remains the sole operational failure/retry evidence. |
+| DEF-072 inventory and KEK safety | **PARTIAL** | One live healthy combined-role node and wrapped key metadata verified; no expected-topology loss/rejoin or KEK rewrap test. |
+| DEF-078 financial parity | **PARTIAL** | Synthetic 17-settlement aggregate reconciled to ledger total/holds; no rollup rows and no Chargeback UI parity. Historical one-micro issue is unresolved. |
+| CP123 overall historical partial ledger | **15 remain PARTIAL overall** | DEF-041/072/078 got bounded checks; DEF-050 passed only its single-primary slice. Eleven historical PARTIALs were not retested. See CP125 report and overlay. |
+
+No testing-only omission is recast as a product defect. No new product gap was added; PG-001–PG-014 are preserved.

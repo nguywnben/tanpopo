@@ -1,0 +1,72 @@
+[
+  {
+    "id": "unified_exact",
+    "model": "qa005-exact",
+    "status": 200,
+    "headers": {
+      "contentType": "text/event-stream; charset=utf-8",
+      "transferEncoding": "chunked",
+      "trailerDeclaration": "X-Tanpopo-Usage-Accuracy"
+    },
+    "trailers": {
+      "x-tanpopo-usage-accuracy": "EXACT"
+    },
+    "body": "data: {\"choices\":[{\"delta\":{},\"finish_reason\":null,\"index\":0}],\"id\":\"qa-fixture\",\"model\":\"\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"synthetic stream result\"},\"finish_reason\":null,\"index\":0}],\"id\":\"qa-fixture\",\"model\":\"\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"qa-fixture\",\"model\":\"\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":5,\"prompt_tokens\":7,\"total_tokens\":12}}\n\ndata: [DONE]\n\n"
+  },
+  {
+    "id": "unified_estimated",
+    "model": "qa005-estimated",
+    "status": 200,
+    "headers": {
+      "contentType": "text/event-stream; charset=utf-8",
+      "transferEncoding": "chunked",
+      "trailerDeclaration": "X-Tanpopo-Usage-Accuracy"
+    },
+    "trailers": {
+      "x-tanpopo-usage-accuracy": "ESTIMATED"
+    },
+    "body": "data: {\"choices\":[{\"delta\":{},\"finish_reason\":null,\"index\":0}],\"id\":\"qa-fixture\",\"model\":\"\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"synthetic stream result\"},\"finish_reason\":null,\"index\":0}],\"id\":\"qa-fixture\",\"model\":\"\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"qa-fixture\",\"model\":\"\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n"
+  },
+  {
+    "id": "unified_interrupted",
+    "model": "qa005-interrupted",
+    "status": 200,
+    "headers": {
+      "contentType": "text/event-stream; charset=utf-8",
+      "transferEncoding": "chunked",
+      "trailerDeclaration": "X-Tanpopo-Usage-Accuracy"
+    },
+    "trailers": {
+      "x-tanpopo-usage-accuracy": "ESTIMATED"
+    },
+    "body": "data: {\"choices\":[{\"delta\":{},\"finish_reason\":null,\"index\":0}],\"id\":\"qa-fixture\",\"model\":\"\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"synthetic stream result\"},\"finish_reason\":null,\"index\":0}],\"id\":\"qa-fixture\",\"model\":\"\",\"object\":\"chat.completion.chunk\"}\n\nevent: error\ndata: {\"error\":{\"code\":\"mid_stream_abort\",\"message\":\"upstream closed unexpectedly before stream completion\",\"request_id\":\"req_01m8evhxwfe008ke7t9gz7dqp5\",\"retryable\":false,\"type\":\"upstream_error\"}}\n\n"
+  },
+  {
+    "id": "native_exact",
+    "model": "qa005-native-exact",
+    "status": 200,
+    "headers": {
+      "contentType": "application/x-ndjson",
+      "transferEncoding": "chunked",
+      "trailerDeclaration": "X-Tanpopo-Usage-Accuracy"
+    },
+    "trailers": {
+      "x-tanpopo-usage-accuracy": "EXACT"
+    },
+    "body": "{\"model\":\"qa005\",\"message\":{\"role\":\"assistant\",\"content\":\"synthetic \"},\"done\":false}\n{\"model\":\"qa005\",\"message\":{\"role\":\"assistant\",\"content\":\"native result\"},\"done\":false}\n{\"model\":\"qa005\",\"done\":true,\"prompt_eval_count\":7,\"eval_count\":5}\n"
+  },
+  {
+    "id": "native_estimated",
+    "model": "qa005-native-estimated",
+    "status": 200,
+    "headers": {
+      "contentType": "application/x-ndjson",
+      "transferEncoding": "chunked",
+      "trailerDeclaration": "X-Tanpopo-Usage-Accuracy"
+    },
+    "trailers": {
+      "x-tanpopo-usage-accuracy": "ESTIMATED"
+    },
+    "body": "{\"model\":\"qa005\",\"message\":{\"role\":\"assistant\",\"content\":\"synthetic \"},\"done\":false}\n{\"model\":\"qa005\",\"message\":{\"role\":\"assistant\",\"content\":\"native result\"},\"done\":false}\n{\"model\":\"qa005\",\"done\":true}\n"
+  }
+]

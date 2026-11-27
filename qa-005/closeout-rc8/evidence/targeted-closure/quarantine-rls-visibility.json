@@ -1,0 +1,13 @@
+{
+  "exit_code": 0,
+  "transaction": [
+    "BEGIN",
+    "|true",
+    "principal_visible=0",
+    "operator_binding_visible=1",
+    "installation_visible=1",
+    "ROLLBACK"
+  ],
+  "stderr": "",
+  "context": "fresh PostgreSQL RLS app session, instance-operator scope, rolled back read-only transaction"
+}
