@@ -1,0 +1,64 @@
+{
+  "checkpoint": "CP69",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "Linux/amd64 exact-source binary; isolated SQLite all-role at 127.0.0.1:18145",
+  "browser": "Chromium 156.0.8078.79",
+  "provider": "local deterministic fixture only; route qa005-chat-route",
+  "scope": "QA005 Org / Initial Project / dev; synthetic Org Owner",
+  "test_1_correlated_t30_t61": {
+    "key_id": "vky_01m8deqerye00b55mn1tm5eb7v",
+    "rotation_http": 200,
+    "rotation_state_version": "ROTATING_DUAL_VALID v2",
+    "grace_seconds": 60,
+    "old_and_new_digests_verified_in_expected_db_fields": true,
+    "scope_matches_route": true,
+    "t30": {
+      "old": {"http": 200, "request_id": "req_01m8derdrye00a1wsa1sch7rsz"},
+      "replacement": {"http": 200, "request_id": "req_01m8derds7e00ay8v3m735mxa8"}
+    },
+    "t61": {
+      "old": {"http": 401, "code": "invalid_virtual_key", "request_id": "req_01m8desbyhe00apj3xsz6bvqrt"},
+      "replacement": {"http": 200, "request_id": "req_01m8desbyme00atcypfjth5ezs"}
+    },
+    "post_deadline_read": {
+      "sqlite_state": "ROTATING_DUAL_VALID",
+      "version": 2,
+      "grace_deadline_cleared": false,
+      "replacement_digest_still_active": true,
+      "admin_api_http": 200,
+      "audit_actions": ["virtual_key.rotated", "virtual_key.created"],
+      "rotation_finalized_event_present": false
+    },
+    "cleanup": {"test_key_revoked_http": 200}
+  },
+  "test_2_ui_reload_timeout_and_persisted_audit": {
+    "key_id": "vky_01m8dexnnfe009v0hg62fh0bf9",
+    "ui_render": "UNVERIFIED; Console did not finish rendering within 15 seconds after reload",
+    "http_t30_t61": "UNVERIFIED; script terminated before saving these outputs",
+    "rotation_event_time_ms": 1795748191568,
+    "finalization_event_time_ms": 1795748251770,
+    "elapsed_from_rotation_ms": 60202,
+    "final_state": "CREATED_ACTIVE",
+    "final_version": 3,
+    "grace_deadline_cleared": true,
+    "audit_events": ["virtual_key.created", "virtual_key.rotated", "virtual_key.rotation_finalized"],
+    "cleanup": {"test_key_revoked_http": 200}
+  },
+  "separate_successful_correlated_run": {
+    "evidence_file": "sanitized relevant fields summarized in this committed evidence record",
+    "t30_old_new_http": [200, 200],
+    "t61_old_new_http": [401, 200],
+    "post_deadline_state": "CREATED_ACTIVE v3",
+    "grace_deadline_cleared": true,
+    "rotation_finalized_audit": true,
+    "visual_capture": "evidence/screenshots/CP69-rotation-after-expiry.png; visually inspected"
+  },
+  "limitations": [
+    "One SQLite all-role runtime, one local route, one synthetic Owner.",
+    "No held-open streams, concurrency races, restart, multi-node, PostgreSQL/Valkey, alternate roles or platform matrix.",
+    "No real-provider credentials or paid calls.",
+    "Observed finalization timing/state conflicts across exact-source runs; acceptance is not closed."
+  ],
+  "classification": "PARTIAL"
+}
