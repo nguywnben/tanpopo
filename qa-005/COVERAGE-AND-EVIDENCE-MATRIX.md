@@ -104,3 +104,12 @@ Evidence: [CP94 checkpoint](checkpoints/CP94-def030-route-scope-switch.md), [san
 | Delayed real route collection response released after switching to a populated scope | PASS (scoped) | Exact RC7 Owner/SQLite/Chromium. A genuine HTTP 200 four-row Initial Project response was held in the browser, a real three-row QA project response then rendered, and release of the old response did not alter current rows. | Hard refresh/navigation, rapid repeated transitions, stale actions, roles/backends/browsers. |
 
 Evidence: [CP95 checkpoint](checkpoints/CP95-def030-held-route-response.md), [sanitized JSON](evidence/CP95-def030-held-route-response.json), and three visually inspected race screenshots.
+
+
+## CP96 — DEF-026 MCP first-review notice and schema lifecycle
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Initial tool discovery, unchanged resync, schema drift, and first schema pin | PASS (scoped) | Exact RC7 Owner/SQLite/Chromium and explicitly consented 127.0.0.1/32 synthetic MCP fixture. Initial and unchanged sync kept the newly discovered tool locked and showed the matching one-tool-pending-review message; drift produced one drift count and remained locked; first-review read-only pin returned 200 and changed the actual UI/API state to Pinned/ACTIVE. | Active-key grant denial/invocation denial before pin; other roles, backends and browsers; multiple tools, pagination and concurrent sync. No key was granted and no tool called in this run. |
+
+Evidence: [CP96 checkpoint](checkpoints/CP96-def026-mcp-first-review-state.md), [sanitized API/UI JSON](evidence/CP96-def026-mcp-first-review-state.json), and six visually inspected screenshots.
