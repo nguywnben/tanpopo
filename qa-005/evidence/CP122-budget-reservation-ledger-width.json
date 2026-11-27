@@ -1,0 +1,12 @@
+{
+  "checkpoint": "CP122",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "attempt": "Exact RC7 verified migration from disposable SQLite copy after removing three parent budget rows >40 chars; retained dependent budget_reservation_ledgers rows.",
+  "migration": {"exit":30,"result":"FAIL","table":"budget_reservation_ledgers","error":"ERROR: value too long for type character varying(40) (SQLSTATE 22001)","copy_transaction":"rolled back"},
+  "source": {"original_cp116_sha256":"720be31fcb7442fb7a4ea05d40091b7ac67eb180be0cf3228f9fec1d67e1ba59","budget_ledgers_over40_removed_from_test_copy":3,"budget_reservation_ledgers_total":43,"budget_reservation_ledgers_long_ledger_id_rows":39,"long_ledger_id_length":50,"schema_column":"budget_reservation_ledgers.ledger_id VARCHAR(40)","original_parent_budget_ids":"50 and 55 characters, created/persisted through real Console in CP35"},
+  "target": {"engine":"PostgreSQL 16","isolated_ram_process":true,"database":"qa005_cp122","migration_role":"qa005_cp122_migrator","rolsuper":false,"rolbypassrls":false,"counts_after_rollback":{"budget_ledgers":0,"budget_reservation_ledgers":0,"usage_settlements":0,"audit_events":0}},
+  "classification": {"new_defect":"none; extend DEF-086 acceptance to parent ID and dependent ledger_id column","severity":"Major","status":"FAIL"},
+  "integrity_correction": "CP118's 900c0d36... hash was captured before closing/checkpointing a WAL-backed clone and is not a complete logical-source digest. CP123 provides an after-close digest for a separate filtered source.",
+  "cleanup": {"ram_postgres_stopped_and_removed":true,"tunnel_stopped":true,"container_tmpfs_restored_to_1mib":true,"existing_qa_database_modified":false,"cp116_source_modified":false}
+}

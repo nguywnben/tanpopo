@@ -5,7 +5,7 @@
 
 ## Scope and setup
 
-To investigate whether the CP117 PostgreSQL `VARCHAR(40)` failure masked separate rate-card/settlement migration problems, I made a disposable SQLite backup of the CP116 source and removed only its three `budget_ledgers` IDs longer than 40 characters. The clone retained 9 budget rows, 48 settlements, 9 model deployments and 727 audit events. Its SHA-256 is `900c0d36e6fda5b33957740bac1bc126707ecd6ed5732669499c1e771b8d830e`; the original CP116 source hash remains unchanged.
+To investigate whether the CP117 PostgreSQL `VARCHAR(40)` failure masked separate rate-card/settlement migration problems, I made a disposable SQLite backup of the CP116 source and removed only its three `budget_ledgers` IDs longer than 40 characters. The clone retained 9 budget rows, 48 settlements, 9 model deployments and 727 audit events. Its pre-close main-file SHA-256 was recorded as `900c0d36e6fda5b33957740bac1bc126707ecd6ed5732669499c1e771b8d830e`; that digest does not represent the full WAL-backed logical clone used after close (see CP122/CP123). The original CP116 source hash remains unchanged.
 
 A separate PostgreSQL 16 process, database and `NOSUPERUSER NOBYPASSRLS` migration role were initialized in the existing QA-only PostgreSQL container's RAM-backed `/dev/shm`. The existing QA database was not used as target.
 

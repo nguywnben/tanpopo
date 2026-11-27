@@ -58,3 +58,8 @@ The supplemental provider probe used exact RC7 on the existing isolated SQLite O
 ## CP121 Windows cross-build
 
 The QA host includes Go 1.26.11 under `/tmp/qa005-go-root/go` and module cache `/tmp/qa-gopath/pkg/mod`. Linux overlay was full, so CP121 redirected Go work/temp/cache and the output PE artifact to per-command RAM. The resulting Windows amd64 file was identified as PE32+ x86-64, SHA-256 `47a4ff222a878c2cc3858c6339e54936af86665612b06bfb4798e3ab7efe96db`. It was not run and was not committed. No native Windows execution host is available in this campaign.
+
+
+## CP122–CP123 filtered migration environments
+
+CP122 and CP123 used separate PostgreSQL 16 processes in the existing QA-only container’s 64-MiB `/dev/shm`, each on internal port 5433 with a fresh test DB and dedicated `NOSUPERUSER NOBYPASSRLS` role. The host tunnel used Docker exec and byte-wise reads to avoid the prior 64-KiB blocking read bug. CP122 failed on the second 40-character budget reference; CP123 verified the filtered subset. Both processes/logs and tunnel were stopped; tmpfs returned to 1 MiB used and existing QA PostgreSQL stayed ready on 5432. CP123’s SQLite copy was WAL-checkpointed and closed before computing its SHA-256. CP118’s earlier pre-close digest is explicitly reclassified in CP122 as an incomplete main-file digest. See [CP122](checkpoints/CP122-budget-reservation-ledger-width.md) and [CP123](checkpoints/CP123-filtered-pricing-migration-parity.md).
