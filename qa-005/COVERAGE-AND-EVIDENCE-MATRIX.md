@@ -185,3 +185,12 @@ Evidence: [CP103 checkpoint](checkpoints/CP103-def077-chargeback-key-identifiers
 | Provider connection list and edit identity | PARTIAL | Exact RC7 Owner Console, SQLite and Chromium 156. Five API/UI records had distinct IDs; every row and the tested edit drawer displayed an 8-character stable suffix. The same inventory was inspected in two workspace scopes. Screenshots were visually inspected; no write/probe occurred. | Historical duplicate-name pair unavailable; probe/disable/delete confirmation target identity, exact duplicate list behavior, other roles/backends and browser engines. |
 
 Evidence: [CP104 checkpoint](checkpoints/CP104-def032-provider-identity.md), [sanitized record](evidence/CP104-def032-provider-identity.json), and four visually inspected screenshots.
+
+
+## CP105 — DEF-032 exact duplicate provider target identity
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Exact duplicate connections through list, Models picker, edit, Probe, disable and delete | PASS (scoped) | Exact RC7 SQLite/Owner/Chromium 156. Two disposable same-project pairs matched on name, adapter, endpoint, billing, region and allowlist. Short IDs distinguished list and picker rows; edit/delete confirmation named the selected ID. Probe (HTTP 200, `valid:true`, 7 ms), disable (PATCH 200), and delete (204) affected only the selected record; API/UI readback preserved the sibling until its own deletion. Final readback contained no temporary pair. | Other roles, browser engines, backends, pagination and long IDs. Historical QA-002 evidence remains preserved. |
+
+Evidence: [CP105 checkpoint](checkpoints/CP105-def032-exact-duplicate-provider-identity.md), [sanitized result and hashes](evidence/CP105-def032-exact-duplicate-provider-identity.json), and seven visually inspected screenshots.
