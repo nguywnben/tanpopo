@@ -177,3 +177,12 @@ Coverage remains incomplete for the 24 unverified historical findings, PostgreSQ
 ## CP83 update — DEF-028 ingress dialect
 
 On exact-source RC7 SQLite in Chromium 156, two real Route Explain submissions against one healthy loopback route (default normalized and explicit `ollama`) each returned HTTP 200 with one identical candidate and no dialect rejection. The screenshots were visually inspected. No provider request or budget hold occurred. A same-route live positive control was not achieved because synthetic Virtual Key attempts did not produce a successful correlated trace; temporary keys were revoked. DEF-028 is therefore PARTIAL. Details and evidence are in [CP83](checkpoints/CP83-def028-route-explain-dialect.md). The updated historical distribution is 45 scoped PASS, 9 PARTIAL, 2 FAIL, and 23 UNVERIFIED. QA remains in progress; no baseline stability verdict is issued.
+
+
+## CP84 update — DEF-021 one-time invite replay
+
+The real Owner row action issued a synthetic enrollment token (HTTP 201). First activation returned 200 and the fresh Owner readback confirmed the HUMAN Developer was active with a password. Submitting the same token in a new Chromium context returned 401 `invalid_enrollment_token`, established no session, and displayed an explicit invalid/expired/already-used message. The replay screenshot field was blanked before capture; token and passwords were not retained. This is a scoped replay-rejection pass; expiry timing and wider audit, recovery, role, tenant, backend and browser cases remain open. See [CP84](checkpoints/CP84-def021-invite-token-replay.md).
+
+## CP85 update — responsive Members & Roles workflow
+
+At 320×844 and 375×844 in Chromium 156, the Owner Console rendered all 12 synthetic member rows without page-level horizontal overflow. At 320px the horizontal tab strip was recoverable with a horizontal wheel gesture; the Add member drawer and its fields/actions fit within the viewport. Four screenshots were visually inspected, and no browser page errors occurred. This does not certify other screens, roles, touch/a11y behavior, engines, locales or devices. See [CP85](checkpoints/CP85-mobile-members-responsive.md).
