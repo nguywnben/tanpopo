@@ -1,0 +1,194 @@
+{
+  "checkpoint": "CP57",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": "exact-source SQLite 127.0.0.1:18145; deterministic local Ollama fixture data from CP40/41; Chromium Linux 1440x1000",
+  "workflow": "real Owner Console FinOps Chargeback; selected every supported group-by dimension; downloaded CSV and JSON for each; compared response grouping and visible table",
+  "comparison_method": "Compare sorted (group_key, group_id, exact, estimated, request counts, unmetered count) rows from the actual /admin/v1/usage/summary response, browser-downloaded CSV, browser-downloaded JSON, and rendered Console table.",
+  "dimensions": [
+    {
+      "dimension": "Project",
+      "summary_endpoint": "/admin/v1/usage/summary?group_by=project",
+      "http_status": 200,
+      "rows": [
+        {
+          "group_key": "Initial Project",
+          "group_id": "prj_01m8cj8phze00a0s2ha55vm8wt",
+          "exact_micro_usd": 11500016,
+          "estimated_micro_usd": 0,
+          "exact_request_count": 11,
+          "estimated_request_count": 0,
+          "unmetered_request_count": 0,
+          "key_prefix": ""
+        }
+      ],
+      "visible_table_rows": [
+        "Initial Project\nprj_01m8cj8phze00a0s2ha55vm8wt\n\t\nExact\n$11.500016\n\t\nEstimated\n$0.000000\n\t11 / 0\t\n0"
+      ],
+      "downloads": {
+        "csv": {
+          "filename": "tanpopo-chargeback-project.csv",
+          "content_type": "text/csv",
+          "bytes": 200,
+          "match": true
+        },
+        "json": {
+          "filename": "tanpopo-chargeback-project.json",
+          "content_type": "application/json",
+          "bytes": 258,
+          "match": true
+        }
+      },
+      "comparison_pass": true
+    },
+    {
+      "dimension": "Environment",
+      "summary_endpoint": "/admin/v1/usage/summary?group_by=env",
+      "http_status": 200,
+      "rows": [
+        {
+          "group_key": "dev",
+          "group_id": "env_01m8cj8phze00a0t3c590b5mdw",
+          "exact_micro_usd": 11500016,
+          "estimated_micro_usd": 0,
+          "exact_request_count": 11,
+          "estimated_request_count": 0,
+          "unmetered_request_count": 0,
+          "key_prefix": ""
+        }
+      ],
+      "visible_table_rows": [
+        "dev\nenv_01m8cj8phze00a0t3c590b5mdw\n\t\nExact\n$11.500016\n\t\nEstimated\n$0.000000\n\t11 / 0\t\n0"
+      ],
+      "downloads": {
+        "csv": {
+          "filename": "tanpopo-chargeback-env.csv",
+          "content_type": "text/csv",
+          "bytes": 188,
+          "match": true
+        },
+        "json": {
+          "filename": "tanpopo-chargeback-env.json",
+          "content_type": "application/json",
+          "bytes": 246,
+          "match": true
+        }
+      },
+      "comparison_pass": true
+    },
+    {
+      "dimension": "Virtual Key",
+      "summary_endpoint": "/admin/v1/usage/summary?group_by=key",
+      "http_status": 200,
+      "rows": [
+        {
+          "group_key": "Playground session",
+          "group_id": "vky_01m8ckeyfse008yfn8htwyv9ax",
+          "exact_micro_usd": 0,
+          "estimated_micro_usd": 0,
+          "exact_request_count": 1,
+          "estimated_request_count": 0,
+          "unmetered_request_count": 0,
+          "key_prefix": "vk_tp_dev_...iueu"
+        },
+        {
+          "group_key": "QA005 loopback provider v2",
+          "group_id": "vky_01m8ckamd0e00ak2x8e6yfvwmg",
+          "exact_micro_usd": 1,
+          "estimated_micro_usd": 0,
+          "exact_request_count": 2,
+          "estimated_request_count": 0,
+          "unmetered_request_count": 0,
+          "key_prefix": "vk_tp_dev_...Shf9"
+        },
+        {
+          "group_key": "QA005 native accounting exact-counter CP40b",
+          "group_id": "vky_01m8cxvs56e00a4zg9nb993zx8",
+          "exact_micro_usd": 11500015,
+          "estimated_micro_usd": 0,
+          "exact_request_count": 8,
+          "estimated_request_count": 0,
+          "unmetered_request_count": 0,
+          "key_prefix": "vk_tp_dev_...C6W7"
+        }
+      ],
+      "visible_table_rows": [
+        "Playground session\nvk_tp_dev_...iueu · vky_01m8ckeyfse008yfn8htwyv9ax\n\t\nExact\n$0.000000\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0",
+        "QA005 loopback provider v2\nvk_tp_dev_...Shf9 · vky_01m8ckamd0e00ak2x8e6yfvwmg\n\t\nExact\n$0.000001\n\t\nEstimated\n$0.000000\n\t2 / 0\t\n0",
+        "QA005 native accounting exact-counter CP40b\nvk_tp_dev_...C6W7 · vky_01m8cxvs56e00a4zg9nb993zx8\n\t\nExact\n$11.500015\n\t\nEstimated\n$0.000000\n\t8 / 0\t\n0"
+      ],
+      "downloads": {
+        "csv": {
+          "filename": "tanpopo-chargeback-key.csv",
+          "content_type": "text/csv",
+          "bytes": 408,
+          "match": true
+        },
+        "json": {
+          "filename": "tanpopo-chargeback-key.json",
+          "content_type": "application/json",
+          "bytes": 912,
+          "match": true
+        }
+      },
+      "comparison_pass": true
+    },
+    {
+      "dimension": "Model",
+      "summary_endpoint": "/admin/v1/usage/summary?group_by=model",
+      "http_status": 200,
+      "rows": [
+        {
+          "group_key": "qa005-model",
+          "group_id": "qa005-model",
+          "exact_micro_usd": 1,
+          "estimated_micro_usd": 0,
+          "exact_request_count": 3,
+          "estimated_request_count": 0,
+          "unmetered_request_count": 0,
+          "key_prefix": ""
+        },
+        {
+          "group_key": "qa005-native-fixture",
+          "group_id": "qa005-native-fixture",
+          "exact_micro_usd": 11400000,
+          "estimated_micro_usd": 0,
+          "exact_request_count": 7,
+          "estimated_request_count": 0,
+          "unmetered_request_count": 0,
+          "key_prefix": ""
+        },
+        {
+          "group_key": "qa005-native-vision",
+          "group_id": "qa005-native-vision",
+          "exact_micro_usd": 100015,
+          "estimated_micro_usd": 0,
+          "exact_request_count": 1,
+          "estimated_request_count": 0,
+          "unmetered_request_count": 0,
+          "key_prefix": ""
+        }
+      ],
+      "visible_table_rows": [
+        "qa005-model\n\t\nExact\n$0.000001\n\t\nEstimated\n$0.000000\n\t3 / 0\t\n0",
+        "qa005-native-fixture\n\t\nExact\n$11.400000\n\t\nEstimated\n$0.000000\n\t7 / 0\t\n0",
+        "qa005-native-vision\n\t\nExact\n$0.100015\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0"
+      ],
+      "downloads": {
+        "csv": {
+          "filename": "tanpopo-chargeback-model.csv",
+          "content_type": "text/csv",
+          "bytes": 285,
+          "match": true
+        },
+        "json": {
+          "filename": "tanpopo-chargeback-model.json",
+          "content_type": "application/json",
+          "bytes": 723,
+          "match": true
+        }
+      },
+      "comparison_pass": true
+    }
+  ],
+  "overall_pass": true
+}

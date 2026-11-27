@@ -1,0 +1,105 @@
+{
+  "checkpoint": "CP57",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "database": "isolated SQLite",
+    "control_data_plane": "127.0.0.1:18145",
+    "provider_fixture": "127.0.0.1:19096 (deterministic Ollama-compatible loopback)",
+    "browser": "Chromium Linux, viewport 1440x1000",
+    "identity": "synthetic ORG_OWNER",
+    "scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+    "project_id": "prj_01m8d6dbtxe008w7fphkgp2e24",
+    "environment_id": "env_01m8d6f78xe00a9w53vt41rnqg"
+  },
+  "provisioning": {
+    "project_create_http_status": 201,
+    "environment_create_http_status": 201,
+    "connection_create_http_status": 201,
+    "connection_state_after_probe": "ACTIVE",
+    "adapter": "@tanpopo/ollama",
+    "connection_billing_mode": "SELF_HOSTED_INFRA",
+    "connection_data_region": "ON_PREM",
+    "connection_probe": {
+      "http_status": 200,
+      "valid": true,
+      "latency_ms": 7,
+      "detected_model_ids": ["qa005-native:latest"]
+    },
+    "deployment_state": "ACTIVE_HEALTHY",
+    "rate_card": {
+      "input_token_nano_usd": 100000000,
+      "output_token_nano_usd": 200000000,
+      "token_rate_unit": "NANO_USD_PER_TOKEN"
+    },
+    "route_slug": "qa005-budgetless-route",
+    "key": {
+      "id": "vky_01m8d6tkeae00aj9kbcnzjxw2v",
+      "allowed_planes": ["PROVIDER"],
+      "allowed_routes": ["/native/ollama/*"],
+      "secret_in_repo": false,
+      "final_state": "REVOKED",
+      "final_version": 2
+    }
+  },
+  "requests": [
+    {
+      "request_id": "trc_01m8d6vrj0e009ps7s5r51bpxa",
+      "requested_slug": "qa005-native-fixture",
+      "http_status": 200,
+      "usage_accuracy_header": "EXACT",
+      "provider_model": "qa005-native:latest",
+      "prompt_eval_count": 7,
+      "eval_count": 4,
+      "trace_status": 200,
+      "trace_cost_micros": 1500000,
+      "trace_route_slug": "qa005-native-fixture",
+      "debug_payload_present": false,
+      "response_sha256": "3fa3dbdd47cf255c1b5a1c2f576b2dd0202c0d39af5da4bd49dd8a5b738d50ba"
+    },
+    {
+      "request_id": "trc_01m8d6zgjke00aqnwz8d1ty57s",
+      "requested_slug": "qa005-budgetless-route",
+      "http_status": 200,
+      "usage_accuracy_header": "EXACT",
+      "provider_model": "qa005-native:latest",
+      "prompt_eval_count": 7,
+      "eval_count": 4,
+      "trace_status": 200,
+      "trace_cost_micros": 1500000,
+      "trace_route_slug": "qa005-budgetless-route",
+      "debug_payload_present": false,
+      "response_sha256": "3fa3dbdd47cf255c1b5a1c2f576b2dd0202c0d39af5da4bd49dd8a5b738d50ba"
+    }
+  ],
+  "accounting": {
+    "per_request_math": "7*100000000 + 4*200000000 = 1500000000 nano-USD = 1500000 micro-USD",
+    "budget_query": {
+      "http_status": 200,
+      "project_id": "prj_01m8d6dbtxe008w7fphkgp2e24",
+      "include_ancestors": true,
+      "row_count": 0
+    },
+    "usage_summary_query": {
+      "http_status": 200,
+      "group_by": "project",
+      "project_row": {
+        "group_key": "QA005 No Budget Project",
+        "exact_micro_usd": 3000000,
+        "estimated_micro_usd": 0,
+        "exact_request_count": 2,
+        "estimated_request_count": 0,
+        "unmetered_request_count": 0
+      }
+    },
+    "finops_after_hard_refresh": {
+      "after_first_request_hard_refresh": {"exact_summary_usd_organization_scope": 13.000016, "budget_ceilings": 0, "empty_state": "No budgets configured", "project_chargeback_usd": 1.5},
+      "after_second_request_live_ui": {"exact_summary_usd_organization_scope": 14.500016, "budget_ceilings": 0, "empty_state": "No budgets configured", "project_chargeback_usd": 3.0}
+    }
+  },
+  "classification": {
+    "DEF-012": "PASS (scoped QA-005 fresh run)",
+    "new_defect": false,
+    "paid_provider_usage": false
+  }
+}
