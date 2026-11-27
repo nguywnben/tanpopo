@@ -1,0 +1,39 @@
+{
+  "checkpoint": "CP68",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_artifact": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "build_metadata": "linux/amd64; vcs.revision=737079ddb847d97dbcf832f610ed0048556cb65b; vcs.modified=false"
+  },
+  "environment": {
+    "runtime": "isolated SQLite QA runtime 127.0.0.1:18149, role all",
+    "browser": "Chromium 156.0.8078.79 via Playwright",
+    "operator": "synthetic local Owner",
+    "provider_calls": 0,
+    "paid_usage": false,
+    "source_changes": 0
+  },
+  "workflow": {
+    "initial_active_switches": 0,
+    "target": {"level": "PROJECT_OR_ORG_FREEZE", "project_name": "Initial Project", "project_slug": "initial-project", "project_id": "prj_01m8cj8phze00a0s2ha55vm8wt"},
+    "reason": "QA005 DEF020 badge refresh probe",
+    "preview": {"orgs": 1, "projects": 1, "virtual_keys": 3, "connections": 1},
+    "trigger": {"http": 200, "switch_id": "ksw_01m8ddesaqe00az4pg1vtqywgs", "config_epoch": 43, "affected_entities_count": 6, "severed_streams_count": 0},
+    "after_trigger": {"active_switches": 1, "header_badge": 1, "security_nav_badge": 1},
+    "clear": {"http": 200, "method": "DELETE", "same_session": true},
+    "after_clear_api": {"http": 200, "active_switches": 0},
+    "after_clear_ui_without_reload": {"active_switches": 0, "empty_state": true, "header_badge": 0, "security_nav_badge": 0},
+    "audit": {"http": 200, "actions": ["kill_switch.triggered", "kill_switch.cleared"], "same_switch_id": true, "same_project_target": true, "same_org_partition": true},
+    "screenshots": [
+      "evidence/screenshots/CP68-killswitch-create-filled.png",
+      "evidence/screenshots/CP68-killswitch-review.png",
+      "evidence/screenshots/CP68-killswitch-triggered.png",
+      "evidence/screenshots/CP68-killswitch-clear-form.png",
+      "evidence/screenshots/CP68-killswitch-cleared-same-session.png"
+    ]
+  },
+  "classification": {
+    "DEF-020": "PARTIAL: stale badge did not reproduce for this exact-RC7 Owner project-freeze clear flow; approval approve/reject case and other roles remain UNVERIFIED; historical QA-002 FAIL evidence is preserved."
+  }
+}
