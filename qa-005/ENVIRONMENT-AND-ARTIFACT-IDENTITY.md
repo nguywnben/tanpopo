@@ -49,3 +49,7 @@ The managed overlay had 0 free bytes (100% used), so a new disk-backed PostgreSQ
 ## CP118 supplemental migration attempt
 
 CP118 used an ephemeral copy under per-command RAM `/dev/shm`, source clone hash `900c0d36e6fda5b33957740bac1bc126707ecd6ed5732669499c1e771b8d830e`; it contained 9 budget rows after exactly three overlength IDs were removed, 48 settlements, 9 deployments and 727 audit events. A second PostgreSQL 16 process ran in the QA-only container RAM tmpfs under a restricted migrator role. The command's local bridge connected, but migration hung with the server session idle in `ClientRead`; the test was terminated and all temporary service/tunnel state removed. This filtered accounting/pricing parity slice is UNVERIFIED. Existing QA PostgreSQL and source DB remain unchanged. CP118 record: [checkpoint](checkpoints/CP118-pricing-migration-attempt.md) and [evidence](evidence/CP118-pricing-migration-attempt.json).
+
+## CP120 local redirect target
+
+The supplemental provider probe used exact RC7 on the existing isolated SQLite Owner runtime and Chromium 156. Two ephemeral Node HTTP listeners bound only to loopback: configured host at 127.0.0.1:19100 and receiver sentinel at 127.0.0.1:19101. The redirect response was deterministic and local. No provider credential was configured. Both listeners were closed after the probe; the temporary connection was deleted and readback showed no row. Evidence: [CP120 JSON](evidence/CP120-provider-redirect-host-port.json).

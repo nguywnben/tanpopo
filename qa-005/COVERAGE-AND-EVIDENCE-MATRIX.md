@@ -310,3 +310,12 @@ No inference of PASS or FAIL is made for the filtered pricing/settlement slice. 
 | Local Owner provider probe receives HTTP redirect to metadata address | PARTIAL | Exact RC7 SQLite/Owner/Chromium 156. Real Console created explicitly allowed 127.0.0.1/32 connection to a local fixture; two probe calls returned valid:false / upstream_unreachable. Fixture returned a metadata-address 302 and saw no follow-up. Screenshot after failure showed unchanged Unverified and no feedback. Connection deleted (204). | Direct socket-level evidence of metadata destination rejection; redirect variants, DNS rebinding, other private/IPv6 targets, other roles/backends/browsers; audit chain. PG-013 records unspecified failure UX. |
 
 Evidence: [CP119](checkpoints/CP119-provider-probe-redirect-and-failure-feedback.md), [sanitized data](evidence/CP119-provider-probe-redirect.json), and visually inspected screenshots CP119-redirect-connection-created.png / CP119-probe-result-unverified.png. The rejection is not claimed PASS because no socket-level or metadata-side telemetry was available.
+
+
+## CP120 — Provider redirect host/port scope
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Explicitly allowed provider host redirects to a second loopback port | PASS (scoped) | Exact RC7 SQLite/Owner/Chromium 156. Real Console created a connection allowing 127.0.0.1/32 at port 19100; fixture redirected to 19101. One request reached the configured endpoint; sentinel on 19101 received zero requests. Probe returned valid:false/upstream_unreachable; row remained Unverified; connection deleted (204). | Metadata-address redirect remains PARTIAL per CP119; DNS rebinding, IPv6, other schemes, roles/backends/browsers and audit-chain verification. PG-013 remains a separate failure-visibility observation. |
+
+Evidence: [CP120](checkpoints/CP120-provider-redirect-host-port-scope.md), [sanitized result](evidence/CP120-provider-redirect-host-port.json), and visually inspected form/result screenshots. This scoped pass does not upgrade CP119's distinct metadata-target test.

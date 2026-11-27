@@ -193,3 +193,6 @@ CP118 attempted a distinct pricing/settlement parity migration using a disposabl
 
 
 CP119 tested the real exact-RC7 Provider connection probe against a local fixture redirecting to the cloud metadata IP. Two probe calls returned valid:false / upstream_unreachable; no follow-up reached the fixture, but no socket-level telemetry was available, so SSRF redirect rejection is PARTIAL. The UI stayed Unverified and showed no failure result; record PG-013 because SCR-04 does not define failed-probe UI behavior. The temporary connection was deleted, and no paid/external provider was used. See [CP119](checkpoints/CP119-provider-probe-redirect-and-failure-feedback.md), [sanitized evidence](evidence/CP119-provider-probe-redirect.json), and the inspected screenshots.
+
+
+CP120 independently confirmed a scoped provider redirect boundary: real probe from the configured local host:port reached a same-IP/different-port sentinel zero times; probe returned upstream_unreachable and cleanup returned 204. This is a scoped pass for host/port isolation. CP119's distinct redirect to the metadata address remains PARTIAL because no socket-level telemetry was available. No new defect; PG-013 remains open. See [CP120](checkpoints/CP120-provider-redirect-host-port-scope.md), [sanitized result](evidence/CP120-provider-redirect-host-port.json), and inspected screenshots.
