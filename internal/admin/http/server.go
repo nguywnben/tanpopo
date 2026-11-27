@@ -470,6 +470,9 @@ func NewServer(cfg ServerConfig) (*Server, error) {
 		trustedProxyCIDRs:      trustedProxies,
 		version:                version,
 	}
+	if s.installer != nil && s.catalog != nil {
+		s.installer.SetSyncAdaptersTx(s.catalog.SyncExtensionProviderAdaptersTx)
+	}
 
 	s.routes = []routeEntry{
 		// Group A: Bootstrap & Session/CSRF

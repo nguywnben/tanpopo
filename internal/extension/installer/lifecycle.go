@@ -369,6 +369,7 @@ type ServiceConfig struct {
 	ValidationPolicy        ValidationPolicy
 	NowMs                   func() int64
 	RecordQuarantineEventTx func(context.Context, *sql.Tx, string, string, string) error
+	SyncAdaptersTx          func(context.Context, *sql.Tx, string, int64) error
 }
 
 // LifecycleService manages extension extraction, validation, provenance/org trust checks,
@@ -385,6 +386,7 @@ type LifecycleService struct {
 	valPolicy               ValidationPolicy
 	nowMs                   func() int64
 	recordQuarantineEventTx func(context.Context, *sql.Tx, string, string, string) error
+	syncAdaptersTx          func(context.Context, *sql.Tx, string, int64) error
 }
 
 // ArtifactRoot returns the service-owned root containing verified extension
@@ -471,7 +473,20 @@ func NewLifecycleService(cfg ServiceConfig) (*LifecycleService, error) {
 		valPolicy:               valPolicy,
 		nowMs:                   nowFn,
 		recordQuarantineEventTx: cfg.RecordQuarantineEventTx,
+		syncAdaptersTx:          cfg.SyncAdaptersTx,
 	}, nil
+}
+
+// SetSyncAdaptersTx attaches a transactional provider-adapter synchronization
+// callback invoked inside activation, upgrade, enable, and rollback transactions
+// prior to commit so extension state and adapter registration commit atomically.
+func (s *LifecycleService) SetSyncAdaptersTx(fn func(context.Context, *sql.Tx, string, int64) error) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.syncAdaptersTx = fn
 }
 
 // StageInstallRequest supplies archive stream/path, immutable source pin, signatures, and optional org gate check.
@@ -906,6 +921,11 @@ func (s *LifecycleService) ApproveAndActivate(ctx context.Context, req ApproveIn
 	}, now); aerr != nil {
 		return nil, aerr
 	}
+	if targetState == StateEnabledActive && s.syncAdaptersTx != nil {
+		if serr := s.syncAdaptersTx(ctx, tx, req.InstallationID, now); serr != nil {
+			return nil, serr
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("installer: commit ApproveAndActivate: %w", err)
 	}
@@ -1184,6 +1204,11 @@ func (s *LifecycleService) StageUpgrade(ctx context.Context, req StageUpgradeReq
 	}, now); aerr != nil {
 		return nil, aerr
 	}
+	if rowData.state == StateEnabledActive && s.syncAdaptersTx != nil {
+		if serr := s.syncAdaptersTx(ctx, tx, req.InstallationID, now); serr != nil {
+			return nil, serr
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -1448,6 +1473,11 @@ func (s *LifecycleService) ApproveEscalatedUpgrade(ctx context.Context, installa
 	}, now); aerr != nil {
 		return nil, aerr
 	}
+	if s.syncAdaptersTx != nil {
+		if serr := s.syncAdaptersTx(ctx, tx, installationID, now); serr != nil {
+			return nil, serr
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
@@ -1652,6 +1682,11 @@ func (s *LifecycleService) RollbackInstallation(ctx context.Context, installatio
 		"restored_version": targetPrevInfo.semver,
 	}, now); aerr != nil {
 		return nil, aerr
+	}
+	if s.syncAdaptersTx != nil {
+		if serr := s.syncAdaptersTx(ctx, tx, installationID, now); serr != nil {
+			return nil, serr
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
@@ -1919,6 +1954,11 @@ func (s *LifecycleService) EnableDisabledInstallation(ctx context.Context, insta
 		"new_state":         StateEnabledActive,
 	}, now); aerr != nil {
 		return nil, aerr
+	}
+	if s.syncAdaptersTx != nil {
+		if serr := s.syncAdaptersTx(ctx, tx, installationID, now); serr != nil {
+			return nil, serr
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("installer: commit EnableDisabledInstallation: %w", err)

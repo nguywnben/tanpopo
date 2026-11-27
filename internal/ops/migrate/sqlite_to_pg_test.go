@@ -492,3 +492,163 @@ func TestMigrateSQLiteToPostgresParityMismatchRollbackExit22(t *testing.T) {
 	// Positive CLI verification with matching KEK hex env var.
 	_ = json.Valid(outBuf.Bytes())
 }
+
+func TestDEF086_MigrateLongConsoleBudgetIDsLosslessly(t *testing.T) {
+	pgDSN := livePGDSNForMigrate(t)
+	if pgDSN == "" {
+		return
+	}
+	ctx := context.Background()
+	nowMs := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC).UnixMilli()
+	kek := newTestKEK(t, "kek_def086")
+
+	// Start from base fixture, then enrich SQLite with Console-derived long budget IDs
+	// (>40 chars and >60 chars), 40 reservation ledger rows, hold checkpoints, audits, and changelog entries.
+	dbPath, org1ID, _, proj1ID := buildSQLiteFixture(t, kek, nowMs, 20, 10)
+	sqStore, err := sqlite.Open(ctx, sqlite.Config{DBPath: dbPath, NowMs: func() int64 { return nowMs }})
+	if err != nil {
+		t.Fatalf("reopen source sqlite: %v", err)
+	}
+	var env1ID string
+	if err := sqStore.RawDB().QueryRowContext(ctx, `SELECT id FROM environments WHERE org_id = ? AND project_id = ? LIMIT 1`, org1ID, proj1ID).Scan(&env1ID); err != nil {
+		_ = sqStore.Close()
+		t.Fatalf("lookup env1ID: %v", err)
+	}
+
+	ledSvc, err := ledger.NewService(ledger.Config{DB: sqStore.RawDB(), NowMs: func() int64 { return nowMs }})
+	if err != nil {
+		_ = sqStore.Close()
+		t.Fatalf("ledger.NewService sqlite: %v", err)
+	}
+	audLog, err := audit.NewLogger(audit.LoggerConfig{DB: sqStore.RawDB(), NowMs: func() int64 { return nowMs }})
+	if err != nil {
+		_ = sqStore.Close()
+		t.Fatalf("audit.NewLogger sqlite: %v", err)
+	}
+
+	// Exact Console slug formula (`bgt_${scopeTier}_${targetId}_${period}`):
+	orgBudgetID := fmt.Sprintf("bgt_organization_%s_monthly", org1ID)              // 55 chars
+	projBudgetID := fmt.Sprintf("bgt_project_%s_monthly", proj1ID)                // 50 chars
+	vkeyBudgetID := fmt.Sprintf("bgt_virtual_key_%s_total_lifetime", "vkey_mig_01") // 42 chars
+	envBudgetID := fmt.Sprintf("bgt_environment_%s_total_lifetime", env1ID)       // 60 chars
+
+	longSpecs := []ledger.UpsertLedgerParams{
+		{ID: orgBudgetID, OrgID: org1ID, ScopeType: ledger.ScopeOrg, ScopeID: org1ID, PeriodKind: ledger.PeriodDaily, PeriodStartMs: nowMs - 10000, PeriodEndMs: nowMs + 86400000, HardLimitMicros: 5_000_000},
+		{ID: projBudgetID, OrgID: org1ID, ScopeType: ledger.ScopeProject, ScopeID: proj1ID, PeriodKind: ledger.PeriodMonthly, PeriodStartMs: nowMs - 10000, PeriodEndMs: nowMs + 86400000, HardLimitMicros: 3_000_000},
+		{ID: envBudgetID, OrgID: org1ID, ScopeType: ledger.ScopeEnv, ScopeID: env1ID, PeriodKind: ledger.PeriodTotalLifetime, PeriodStartMs: nowMs - 10000, PeriodEndMs: nowMs + 86400000, HardLimitMicros: 2_000_000},
+		{ID: vkeyBudgetID, OrgID: org1ID, ScopeType: ledger.ScopeVirtualKey, ScopeID: "vkey_mig_01", PeriodKind: ledger.PeriodTotalLifetime, PeriodStartMs: nowMs - 10000, PeriodEndMs: nowMs + 86400000, HardLimitMicros: 1_500_000},
+	}
+	for _, sp := range longSpecs {
+		if _, uerr := ledSvc.UpsertLedger(ctx, sp); uerr != nil {
+			_ = sqStore.Close()
+			t.Fatalf("UpsertLedger(%s): %v", sp.ID, uerr)
+		}
+		if aerr := audLog.Append(ctx, port.AuditEvent{
+			OrgID: &org1ID, ActorKind: "admin", ActorID: "usr_mig", EntryPoint: port.AuditEntryPointAdminAPI,
+			EventType: "budget.created", TargetType: "budget_ledger", TargetID: sp.ID, MetadataJSON: `{"len_test":true}`,
+		}); aerr != nil {
+			_ = sqStore.Close()
+			t.Fatalf("AuditAppend(%s): %v", sp.ID, aerr)
+		}
+		if _, cerr := sqStore.Changelog().Append(ctx, port.ChangelogEntry{
+			OrgID: &org1ID, EntityKind: "budget_ledger", EntityID: sp.ID, MutationType: port.MutationUpsert,
+		}); cerr != nil {
+			_ = sqStore.Close()
+			t.Fatalf("ChangelogAppend(%s): %v", sp.ID, cerr)
+		}
+	}
+
+	// Create 40 active/held reservations linked to the widened ledgers plus valkey_hold_checkpoints rows.
+	for i := 0; i < 40; i++ {
+		if _, rErr := ledSvc.Reserve(ctx, ledger.ReserveRequest{
+			OrgID: org1ID, ProjectID: proj1ID, EnvID: env1ID, VirtualKeyID: "vkey_mig_01",
+			RequestID: fmt.Sprintf("req_def086_hold_%02d", i), HoldMicros: 1_000,
+		}); rErr != nil {
+			_ = sqStore.Close()
+			t.Fatalf("Reserve[%d]: %v", i, rErr)
+		}
+	}
+	for idx, bid := range []string{orgBudgetID, projBudgetID, envBudgetID, vkeyBudgetID} {
+		if _, ierr := sqStore.RawDB().ExecContext(ctx, `
+			INSERT INTO valkey_hold_checkpoints (org_id, ledger_id, node_id, active_hold_micro_usd, active_inflight_streams, updated_at_ms)
+			VALUES (?, ?, ?, ?, 1, ?)`,
+			org1ID, bid, fmt.Sprintf("node-def086-%d", idx), 4000, nowMs,
+		); ierr != nil {
+			_ = sqStore.Close()
+			t.Fatalf("insert valkey_hold_checkpoints(%s): %v", bid, ierr)
+		}
+	}
+	if err := sqStore.CheckpointWAL(ctx); err != nil {
+		_ = sqStore.Close()
+		t.Fatalf("CheckpointWAL: %v", err)
+	}
+	_ = sqStore.Close()
+
+	// Also verify incremental PG upgrade (simulated pre-0006 DB missing 0006 -> Open applies 0006 cleanly).
+	rep, err := migrate.MigrateSQLiteToPostgres(ctx, migrate.MigrateOptions{
+		FromSQLite: "sqlite://" + dbPath,
+		ToPostgres: pgDSN,
+		Verify:     true,
+		KEK:        kek,
+		NowMs:      func() int64 { return nowMs },
+	})
+	if err != nil {
+		t.Fatalf("MigrateSQLiteToPostgres(DEF-086): %v", err)
+	}
+	if rep.Status != "VERIFIED" || !rep.Verified {
+		t.Fatalf("unexpected DEF-086 report: %+v", rep)
+	}
+	if rep.TableCounts["budget_ledgers"] != 5 {
+		t.Fatalf("budget_ledgers count = %d, want 5", rep.TableCounts["budget_ledgers"])
+	}
+	if rep.TableCounts["budget_reservation_ledgers"] < 40 {
+		t.Fatalf("budget_reservation_ledgers count = %d, want >= 40", rep.TableCounts["budget_reservation_ledgers"])
+	}
+
+	pgStore, err := postgres.Open(ctx, postgres.Options{DSN: pgDSN, NowMs: func() int64 { return nowMs }})
+	if err != nil {
+		t.Fatalf("postgres.Open after DEF-086 migration: %v", err)
+	}
+	defer func() { _ = pgStore.Close() }()
+
+	pgLed, err := ledger.NewService(ledger.Config{DB: pgStore.DB(), NowMs: func() int64 { return nowMs }})
+	if err != nil {
+		t.Fatalf("ledger.NewService pg: %v", err)
+	}
+	// Verify every long budget ID round-trips verbatim and supports live PG updates, reserves, and settlements.
+	for _, sp := range longSpecs {
+		tx, terr := pgStore.DB().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if terr != nil {
+			t.Fatalf("BeginTx: %v", terr)
+		}
+		_ = port.SetOrgRLSTx(ctx, tx, port.DialectPostgres, org1ID)
+		var gotScopeID string
+		qErr := tx.QueryRowContext(ctx, port.Rebind(port.DialectPostgres, `SELECT scope_id FROM budget_ledgers WHERE org_id = ? AND id = ?`), org1ID, sp.ID).Scan(&gotScopeID)
+		_ = tx.Rollback()
+		if qErr != nil || gotScopeID != sp.ScopeID {
+			t.Fatalf("migrated long budget ID %q missing/corrupted in PG: err=%v scope_id=%q", sp.ID, qErr, gotScopeID)
+		}
+		if _, uerr := pgLed.UpsertLedger(ctx, sp); uerr != nil {
+			t.Fatalf("post-migration UpsertLedger(%s) on PG: %v", sp.ID, uerr)
+		}
+	}
+	postRes, err := pgLed.Reserve(ctx, ledger.ReserveRequest{
+		OrgID: org1ID, ProjectID: proj1ID, EnvID: env1ID, VirtualKeyID: "vkey_mig_01",
+		RequestID: "req_def086_post_pg", HoldMicros: 2_000,
+	})
+	if err != nil {
+		t.Fatalf("post-migration Reserve on PG: %v", err)
+	}
+	if _, err := pgLed.Settle(ctx, ledger.SettleRequest{
+		ReservationID: postRes.ID, OrgID: org1ID, ProjectID: proj1ID, EnvID: env1ID, VirtualKeyID: "vkey_mig_01",
+		RequestID: "req_def086_post_pg", Plane: ledger.PlaneProvider,
+		Usage: pricing.UsageInput{UpstreamUsagePresent: true, UpstreamAccuracy: pricing.AccuracyExact, InputTokens: 50, OutputTokens: 25},
+		Rate:  pricing.RateCard{BillingMode: pricing.BillingModeCommercialAPI, InputPer1MNanoUSD: 1_000_000_000, OutputPer1MNanoUSD: 2_000_000_000},
+	}); err != nil {
+		t.Fatalf("post-migration Settle on PG: %v", err)
+	}
+	if audRep, err := audit.VerifyAuditChain(ctx, pgStore.DB(), audit.VerifyOptions{}); err != nil || audRep.TotalVerified != 14 {
+		t.Fatalf("post-migration DEF-086 VerifyAuditChain: err=%v rep=%+v", err, audRep)
+	}
+}
+

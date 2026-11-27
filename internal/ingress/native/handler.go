@@ -1181,6 +1181,9 @@ func (h *Handler) executeStreamingNativeAttempt(
 	if serr == nil {
 		finalUsage = settledUsage
 	}
+	if pumpRes.streamStarted {
+		w.Header().Set("X-Tanpopo-Usage-Accuracy", formatUsageAccuracyHeader(finalUsage.Accuracy))
+	}
 	h.reconcileAdmissionUsage(admLease, &finalUsage)
 	h.recordNativeUsageTelemetry(usageCtx, model, finalUsage)
 	h.recordUsage(usageCtx, UsageRecord{
@@ -2537,6 +2540,7 @@ func writeNativeSSEHeaders(w http.ResponseWriter, isNDJSON bool) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Add("Trailer", "X-Tanpopo-Usage-Accuracy")
 	w.WriteHeader(http.StatusOK)
 }
 

@@ -434,6 +434,11 @@ func (s *Server) executeStreamingResponsesAttempt(
 		if serr == nil && settledUsage != nil {
 			observedUsage = settledUsage
 		}
+		acc := formatUsageAccuracyHeader(port.UsageAccuracyUnmeteredFlagged)
+		if observedUsage != nil && observedUsage.Accuracy != "" {
+			acc = formatUsageAccuracyHeader(observedUsage.Accuracy)
+		}
+		w.Header().Set("X-Tanpopo-Usage-Accuracy", acc)
 	}
 	if observedUsage != nil {
 		s.reconcileAdmissionUsage(admLease, observedUsage)

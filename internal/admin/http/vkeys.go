@@ -129,6 +129,10 @@ func (s *Server) handleListVirtualKeys(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if s.vkeys != nil {
+		_, _ = s.vkeys.FinalizeExpiredRotationsForOrg(r.Context(), orgID)
+	}
+
 	var allowedProjects []string
 	if !actorHasOrgScopeBinding(sc.Actor, orgID) {
 		allowedProjects = actorProjectIDs(sc.Actor, orgID)
@@ -480,6 +484,9 @@ func (s *Server) handleUpdateVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if s.vkeys != nil {
+		_, _ = s.vkeys.FinalizeExpiredRotationsForOrg(r.Context(), orgID)
+	}
 	cur, err := s.vkeys.Get(r.Context(), orgID, keyID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
@@ -618,6 +625,9 @@ func (s *Server) handleRotateVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if s.vkeys != nil {
+		_, _ = s.vkeys.FinalizeExpiredRotationsForOrg(r.Context(), orgID)
+	}
 	cur, err := s.vkeys.Get(r.Context(), orgID, keyID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)
@@ -715,6 +725,9 @@ func (s *Server) handleRevokeVirtualKey(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	if s.vkeys != nil {
+		_, _ = s.vkeys.FinalizeExpiredRotationsForOrg(r.Context(), orgID)
+	}
 	cur, err := s.vkeys.Get(r.Context(), orgID, keyID)
 	if errors.Is(err, port.ErrNotFound) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "virtual key not found", false, nil)

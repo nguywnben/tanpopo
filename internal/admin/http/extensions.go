@@ -21,7 +21,6 @@ import (
 	"github.com/nguywnben/tanpopo/internal/extension/lockfile"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
-	"github.com/nguywnben/tanpopo/internal/provider/catalog"
 	"github.com/nguywnben/tanpopo/internal/security/killswitch"
 	"github.com/nguywnben/tanpopo/internal/security/trust"
 	"github.com/nguywnben/tanpopo/internal/storage/port"
@@ -1805,80 +1804,8 @@ func sqlNullStrPtr(ns sql.NullString) *string {
 }
 
 func (s *Server) syncExtensionProviderAdapters(ctx context.Context, installationID string) error {
-	if s.catalog == nil || s.db == nil || strings.TrimSpace(installationID) == "" {
+	if s.catalog == nil || strings.TrimSpace(installationID) == "" {
 		return nil
 	}
-
-	var (
-		state           string
-		activeVersionID string
-		manifestJSON    string
-	)
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
-	if err != nil {
-		return err
-	}
-	func() {
-		defer func() { _ = tx.Rollback() }()
-		if rerr := port.SetOperatorRLSTx(ctx, tx, s.dialect); rerr != nil {
-			err = rerr
-			return
-		}
-		err = tx.QueryRowContext(ctx, s.rebind(`
-			SELECT ei.state, COALESCE(ei.active_version_id, ''), COALESCE(ev.manifest_json, '')
-			FROM extension_installations ei
-			LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id
-			WHERE ei.id = ?`), installationID,
-		).Scan(&state, &activeVersionID, &manifestJSON)
-		if errors.Is(err, sql.ErrNoRows) {
-			err = nil
-			state = ""
-			return
-		}
-	}()
-	if err != nil {
-		return err
-	}
-	if activeVersionID == "" || strings.TrimSpace(manifestJSON) == "" {
-		return nil
-	}
-	switch state {
-	case installer.StateEnabledActive, installer.StateRolledBack, installer.StateUpdatingPendingReconsent:
-	default:
-		return nil
-	}
-
-	var manifest installer.ExtensionManifest
-	if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
-		return fmt.Errorf("decode extension manifest for adapter sync: %w", err)
-	}
-	allowedHosts := normalizeHostList(manifest.Permissions.NetworkEgress.AllowedHosts)
-	if len(allowedHosts) == 0 {
-		return nil
-	}
-
-	for _, capItem := range manifest.Capabilities {
-		if strings.TrimSpace(capItem.Type) != "provider_adapter" {
-			continue
-		}
-		slug := strings.TrimSpace(capItem.AdapterSlug)
-		if slug == "" {
-			continue
-		}
-		var nativePrefix *string
-		if p := strings.TrimSpace(capItem.NativePassthroughPrefix); p != "" {
-			nativePrefix = &p
-		}
-		if _, cerr := s.catalog.UpsertProviderAdapter(ctx, catalog.CreateProviderAdapterParams{
-			InstallationID:          installationID,
-			ExpectedActiveVersionID: activeVersionID,
-			AdapterSlug:             slug,
-			NativePrefix:            nativePrefix,
-			SupportedDialects:       capItem.SupportedDialects,
-			AllowedHosts:            allowedHosts,
-		}); cerr != nil {
-			return cerr
-		}
-	}
-	return nil
+	return s.catalog.SyncExtensionProviderAdapters(ctx, installationID)
 }

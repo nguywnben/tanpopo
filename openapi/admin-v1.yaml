@@ -1045,6 +1045,8 @@ components:
         enforced_region: { type: string }
         sub_budget_hold_micros: { type: integer, minimum: 0 }
         settled_cost_micros: { type: integer, minimum: 0 }
+        downstream_cancel_status: { type: string, enum: [pending, acknowledged, unsupported, rejected, unreachable, local_only] }
+        downstream_cancel_detail: { type: string }
         version: { type: integer }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
