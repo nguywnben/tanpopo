@@ -1,0 +1,261 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source Linux/amd64 SQLite clone at 127.0.0.1:18164; deterministic local Ollama-compatible fixture at 127.0.0.1:19096; synthetic Owner; Chromium 156.0.8078.79",
+  "def059": {
+    "scope": "native Ollama /api/generate and provider-compatible /v1/chat/completions; same project/dev, one authorized PROVIDER VKEY; local synthetic connections/routes only",
+    "baseline": {
+      "native": {
+        "http": 200,
+        "request_id": "req_01m8e24an3e00bd660gvkwzs8g"
+      },
+      "provider": {
+        "http": 200,
+        "request_id": "req_01m8e24anpe00bvz2fq3hsn005"
+      }
+    },
+    "quarantined_requests": {
+      "native": {
+        "path": "/native/ollama/api/generate",
+        "status": 503,
+        "request_id": "req_01m8e25dwte009w16gzq7hhk6k",
+        "trace_id": "trc_01m8e25dwve00bc5c6xwhpzmbk",
+        "body": {
+          "error": {
+            "code": "extension_quarantined",
+            "message": "The backing provider adapter extension is quarantined.",
+            "request_id": "req_01m8e25dwte009w16gzq7hhk6k",
+            "retryable": false,
+            "type": "extension_error"
+          }
+        }
+      },
+      "provider": {
+        "path": "/v1/chat/completions",
+        "status": 503,
+        "request_id": "req_01m8e25dx6e00aepz70gwgg99w",
+        "trace_id": "trc_01m8e25dx7e0090qd2rmnq42be",
+        "body": {
+          "error": {
+            "code": "extension_quarantined",
+            "type": "extension_error",
+            "message": "The backing provider adapter extension is quarantined.",
+            "request_id": "req_01m8e25dx6e00aepz70gwgg99w",
+            "retryable": false
+          }
+        }
+      }
+    },
+    "trace_details": [
+      {
+        "request_id": "trc_01m8e25dwve00bc5c6xwhpzmbk",
+        "plane": "NATIVE",
+        "env_id": "env_01m8cj8phze00a0t3c590b5mdw",
+        "virtual_key_id": "vky_01m8e23463e00a1pv64cqgc307",
+        "route_slug": "/native/{dialect}",
+        "deployment_id": null,
+        "data_region": null,
+        "status_code": 503,
+        "error_code": "extension_quarantined",
+        "usage_accuracy": "UNSETTLED",
+        "total_cost_micros": 0,
+        "ttft_ms": null,
+        "duration_ms": 1,
+        "has_debug_payload": false,
+        "waterfall_stages": [
+          {
+            "stage": "Policy",
+            "duration_ms": 0,
+            "outcome": ""
+          }
+        ],
+        "created_at": "2026-11-27T08:32:47.005Z"
+      },
+      {
+        "request_id": "trc_01m8e25dx7e0090qd2rmnq42be",
+        "plane": "PROVIDER",
+        "env_id": "env_01m8cj8phze00a0t3c590b5mdw",
+        "virtual_key_id": "vky_01m8e23463e00a1pv64cqgc307",
+        "route_slug": "/v1/chat/completions",
+        "deployment_id": null,
+        "data_region": null,
+        "status_code": 503,
+        "error_code": "extension_quarantined",
+        "usage_accuracy": "UNSETTLED",
+        "total_cost_micros": 0,
+        "ttft_ms": null,
+        "duration_ms": 0,
+        "has_debug_payload": false,
+        "waterfall_stages": [
+          {
+            "stage": "Policy",
+            "duration_ms": 0,
+            "outcome": ""
+          }
+        ],
+        "created_at": "2026-11-27T08:32:47.016Z"
+      }
+    ],
+    "installation_after_restore": [
+      {
+        "id": "ins_01m8cjgmk7e0087j5d1px4jkw3",
+        "state": "ENABLED_ACTIVE",
+        "version": 5
+      }
+    ],
+    "cleanup": {
+      "post_restore_native_http": 401,
+      "test_keys_active": []
+    },
+    "extension_audit_events": [
+      [
+        7,
+        "extension.quarantined",
+        "ins_01m8cjgmk7e0087j5d1px4jkw3",
+        "PRINCIPAL"
+      ],
+      [
+        8,
+        "extension.unquarantined",
+        "ins_01m8cjgmk7e0087j5d1px4jkw3",
+        "PRINCIPAL"
+      ],
+      [
+        9,
+        "extension.staged_pending_approval",
+        "ins_01m8cjgmk7e0087j5d1px4jkw3",
+        "PRINCIPAL"
+      ],
+      [
+        15,
+        "extension.permissions_approved",
+        "ins_01m8cjgmk7e0087j5d1px4jkw3",
+        "PRINCIPAL"
+      ],
+      [
+        626,
+        "extension.enabled",
+        "ins_01m8cjgmk7e0087j5d1px4jkw3",
+        "PRINCIPAL"
+      ]
+    ],
+    "audit_chain_verification": [
+      {
+        "org_id": "org_01m8crmjtje009gbep9v278fpe",
+        "name": "QA005 Secondary Org",
+        "http": 200,
+        "body": {
+          "intact": true,
+          "checked_events_count": 5,
+          "first_broken_seq_no": null
+        }
+      },
+      {
+        "org_id": "org_01m8cj8phze00a0r8dfkqmmfn0",
+        "name": "QA005 Org",
+        "http": 200,
+        "body": {
+          "intact": true,
+          "checked_events_count": 663,
+          "first_broken_seq_no": null
+        }
+      }
+    ],
+    "limitations": [
+      "One all-role SQLite clone, Org Owner, one Ollama installation/version and two deterministic loopback paths.",
+      "The selected route policies each had one target; compliant failover selection and a separate residency-ineligible control were not tested.",
+      "Fixture has no independent request counter in this run. Both baseline requests reached HTTP 200; quarantined trace details show deployment_id null, Policy-only execution, HTTP 503 and zero cost, consistent with pre-dispatch rejection. No direct fixture counter claim is made.",
+      "No paid provider, external provider credential, production signature or real-provider interoperability used."
+    ],
+    "quarantine_details": {
+      "native": {
+        "path": "/native/ollama/api/generate",
+        "status": 503,
+        "request_id": "req_01m8e25dwte009w16gzq7hhk6k",
+        "trace_id": "trc_01m8e25dwve00bc5c6xwhpzmbk",
+        "body": {
+          "error": {
+            "code": "extension_quarantined",
+            "message": "The backing provider adapter extension is quarantined.",
+            "request_id": "req_01m8e25dwte009w16gzq7hhk6k",
+            "retryable": false,
+            "type": "extension_error"
+          }
+        }
+      },
+      "provider": {
+        "path": "/v1/chat/completions",
+        "status": 503,
+        "request_id": "req_01m8e25dx6e00aepz70gwgg99w",
+        "trace_id": "trc_01m8e25dx7e0090qd2rmnq42be",
+        "body": {
+          "error": {
+            "code": "extension_quarantined",
+            "type": "extension_error",
+            "message": "The backing provider adapter extension is quarantined.",
+            "request_id": "req_01m8e25dx6e00aepz70gwgg99w",
+            "retryable": false
+          }
+        }
+      }
+    },
+    "visual_evidence": [
+      "evidence/screenshots/CP113-quarantined-state.png",
+      "evidence/screenshots/CP113-def059-native-trace-detail.png",
+      "evidence/screenshots/CP113-def059-provider-trace-detail.png",
+      "evidence/screenshots/CP113-def059-permission-review.png",
+      "evidence/screenshots/CP113-def059-restored-disabled.png",
+      "evidence/screenshots/CP113-def059-restored-active.png",
+      "evidence/screenshots/CP113-rotation-started.png"
+    ],
+    "audit_verification_note": "An initial verification POST without X-CSRF-Token was correctly denied 403; the authenticated retry with the session CSRF token returned HTTP 200 and intact=true for both Org chains (primary QA Org 663 events)."
+  },
+  "def076": {
+    "historical_report": "QA-004 RC6 report claimed TP-IMP-0009 AC-2 expected virtual_key_expired while AUTH-05 expected key_expired; preserve that historical report unchanged.",
+    "frozen_rc7_contract": {
+      "docs/planning/units/TP-IMP-0009.md:41": "AC-2: grace_seconds=300; after FakeClock.Advance(301s), old key is rejected with uniform 401 invalid_virtual_key for anti-enumeration.",
+      "docs/quality/contract-test-matrix.md:100": "AUTH-05: at T+61s old key returns uniform 401 invalid_virtual_key; reaper finalizes rotation.",
+      "docs/specifications/api-protocol-compatibility.md:79": "401 invalid_virtual_key covers unknown, expired, or REVOKED keys."
+    },
+    "runtime": {
+      "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+      "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+      "runtime": "exact-source SQLite 127.0.0.1:18164, all-role; local deterministic provider fixture",
+      "browser": "Chromium 156.0.8078.79",
+      "scope": "Initial Project / dev",
+      "key_id": "vky_01m8e2fgp1e00962z11ctj1t70",
+      "rotation_http": 200,
+      "grace_seconds_requested": 300,
+      "grace_deadline_ms": 1795768999273,
+      "rotation_audit_timestamp_ms": 1795768699273,
+      "previous_and_active_hashes_verified": true,
+      "within_grace_old_and_new_http": [
+        200,
+        200
+      ],
+      "within_grace_elapsed_ms": 270165,
+      "after_grace_elapsed_ms": 301086,
+      "old_at_t301": {
+        "http": 401,
+        "code": "invalid_virtual_key",
+        "request_id": "req_01m8e2rrche009jvc853w2ss5w"
+      },
+      "new_at_t301": {
+        "http": 200,
+        "code": null,
+        "request_id": "req_01m8e2rrcre00b0hj3pe3avg83"
+      },
+      "post_expiry_persisted_state": "ROTATING_DUAL_VALID",
+      "post_expiry_version": 2,
+      "grace_deadline_cleared": false,
+      "rotation_finalized_audit": false,
+      "test_key_cleanup_http": 200,
+      "limitations": [
+        "One SQLite all-role runtime and one synthetic local provider route only.",
+        "No parallel streams held open; no multi-node, PostgreSQL/Valkey, or other platform rotation.",
+        "No real provider credentials or paid calls."
+      ]
+    },
+    "classification": "PASS (scoped RC7 expired-key response/documentation); the independently observed lack of rotation finalization is recorded under DEF-075, not treated as a specific expired-key error-code result."
+  }
+}

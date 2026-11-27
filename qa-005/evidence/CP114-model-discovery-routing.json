@@ -1,0 +1,36 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": "exact-source SQLite clone 127.0.0.1:18164; deterministic loopback OpenAI-compatible fixture 127.0.0.1:19090; Owner; Chromium 156",
+  "scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+  "route": "qa005-playground-openai",
+  "connection": "CP58 OpenAI SSE loopback fixture",
+  "upstream_model_configured": "qa005-model",
+  "logical_model_id": "qa005-playground-low",
+  "models_http": 200,
+  "models": [
+    "qa005-native-fixture",
+    "qa005-playground-low",
+    "qa005-teamadmin-def056-probe"
+  ],
+  "logical_name_request": {
+    "model": "qa005-playground-low",
+    "http": 200,
+    "request_id": "req_01m8e3cs43e009bw9x42wk3539",
+    "response_model": "qa005-playground-low"
+  },
+  "upstream_name_request": {
+    "model": "qa005-model",
+    "http": 503,
+    "code": "no_compliant_deployment_available",
+    "request_id": "req_01m8e3cs4de009zdbeabas7r5y"
+  },
+  "key_cleanup": {
+    "http": 200
+  },
+  "paid_provider_calls": 0,
+  "limitations": [
+    "Single SQLite clone and one scoped key/route.",
+    "No alternate role, backend, route set, client SDK or browser beyond Chromium tested."
+  ],
+  "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9"
+}
