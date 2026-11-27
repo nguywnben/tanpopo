@@ -176,3 +176,12 @@ Evidence: [CP102 checkpoint](checkpoints/CP102-def078-rc7-budget-chargeback-reco
 | Per-key Chargeback duplicate names in Console, CSV and JSON | PARTIAL | Exact RC7 Owner/SQLite/Chromium. Repeated `Playground session` rows visibly included masked prefixes and distinct `group_id`s. The real UI summary request used `group_by=key` and returned 200. CSV and JSON exports each returned 200 with `group_id` and `key_prefix` on rows. Ten rows per format; screenshots inspected; no writes/provider calls. | Controlled same-name keys with different usage, other roles/scopes/backends, broader export consistency and spreadsheet-open/import handling. Historical QA-004 failure remains. |
 
 Evidence: [CP103 checkpoint](checkpoints/CP103-def077-chargeback-key-identifiers.md), [sanitized schema/row/hash record](evidence/CP103-def077-chargeback-identifiers.json), and visually inspected screenshots.
+
+
+## CP104 — DEF-032 provider connection identity
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Provider connection list and edit identity | PARTIAL | Exact RC7 Owner Console, SQLite and Chromium 156. Five API/UI records had distinct IDs; every row and the tested edit drawer displayed an 8-character stable suffix. The same inventory was inspected in two workspace scopes. Screenshots were visually inspected; no write/probe occurred. | Historical duplicate-name pair unavailable; probe/disable/delete confirmation target identity, exact duplicate list behavior, other roles/backends and browser engines. |
+
+Evidence: [CP104 checkpoint](checkpoints/CP104-def032-provider-identity.md), [sanitized record](evidence/CP104-def032-provider-identity.json), and four visually inspected screenshots.

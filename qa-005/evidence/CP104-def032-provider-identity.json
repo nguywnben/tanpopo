@@ -1,0 +1,51 @@
+{
+  "checkpoint": "CP104",
+  "finding": "DEF-032",
+  "status": "PARTIAL",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source Linux RC7, isolated SQLite, loopback port 18145 through TLS proxy 19444",
+  "browser": "Chromium 156 via real Playwright, 1440x1000",
+  "role": "Owner",
+  "scopes": [
+    "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+    "QA005 Org / Initial Project / dev"
+  ],
+  "steps": [
+    "Open Providers > Connections in the real authenticated Console.",
+    "Read GET /admin/v1/connections?limit=100; HTTP 200 returned five records with distinct connection IDs.",
+    "Visually inspect the list in both workspace scopes; each visible connection name includes a stable short ID suffix.",
+    "Open the edit drawer for QA005 budgetless Ollama (shr38yc9); the drawer heading retains the suffix; cancel without saving."
+  ],
+  "observations": {
+    "record_count": 5,
+    "duplicate_display_names_in_current_fixture": false,
+    "same_adapter_and_loopback_host_records": 2,
+    "same_host_records_have_distinct_names_short_ids_and_project_ids": true,
+    "stable_id_visible_in_list": true,
+    "stable_id_visible_in_edit_heading": true,
+    "list_api_status": 200,
+    "writes": 0,
+    "probe_disable_delete_actions": "not exercised",
+    "secret_values": "not read or recorded",
+    "provider_calls": 0,
+    "paid_usage": 0
+  },
+  "limitations": [
+    "The historical identical-name fixture was unavailable, so duplicate-name ambiguity was not reproduced.",
+    "Probe, Disable and Delete target confirmation/action identity were not tested.",
+    "Scope-specific provider inventory contract was not inferred from the Owner view."
+  ],
+  "screenshots": [
+    "evidence/screenshots/CP104-provider-connections-inventory.png",
+    "evidence/screenshots/CP104-provider-scope-picker.png",
+    "evidence/screenshots/CP104-provider-edit-identity.png",
+    "evidence/screenshots/CP104-provider-connections-initial-project.png"
+  ],
+  "screenshot_sha256": {
+    "evidence/screenshots/CP104-provider-connections-initial-project.png": "b4163f2996590cf72f6be38427ca40f6530e114f95b3d4df653759805270fb73",
+    "evidence/screenshots/CP104-provider-connections-inventory.png": "75dc1c07b8ac8d8d63946108bda463533485034a986f7e6226216a890fdb5600",
+    "evidence/screenshots/CP104-provider-edit-identity.png": "1552ad6d73526601845faf2f36951decb295d27b55144cead68afe1714a931f0",
+    "evidence/screenshots/CP104-provider-scope-picker.png": "5358fe5a95b9c6bd912127531891075390860c17bb4e048bfd02e665e586e532"
+  }
+}
