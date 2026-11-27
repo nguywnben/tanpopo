@@ -1,0 +1,34 @@
+{
+  "checkpoint": "CP98",
+  "finding": "DEF-050",
+  "classification": "PARTIAL (fresh route-warning UI retest)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER (qa005-owner@example.invalid)",
+  "scope": "QA005 No Budget Project / QA005 Budgetless Dev",
+  "single_target": {
+    "strategy": "Priority failover",
+    "target": "CP58 OpenAI SSE loopback fixture / qa005-model · fsf2nr",
+    "warning": "At least one target deployment does not declare tool_calling capability.",
+    "uses_fallback_wording": false,
+    "names_affected_target": false,
+    "screenshot": "CP98-def050-single-primary-warning.png"
+  },
+  "two_targets": {
+    "strategy": "Priority failover",
+    "primary": "CP58 OpenAI SSE loopback fixture / qa005-model · fsf2nr",
+    "fallback": "QA005 budgetless Ollama / qa005-playground-low:latest · 9trtct",
+    "warning": "At least one target deployment does not declare tool_calling capability.",
+    "identifies_affected_fallback": false,
+    "screenshot": "CP98-def050-two-target-warning.png"
+  },
+  "create_route_request": false,
+  "route_writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "remaining_scope": ["direct model capability readback", "Playground/API unsupported tool-call rejection", "zero upstream dispatch evidence", "other capabilities and strategies", "roles", "backends", "browser engines"],
+  "historical_qa003_capability_guard_evidence_preserved_not_inherited": true,
+  "gate_rel_07": "BLOCKED"
+}

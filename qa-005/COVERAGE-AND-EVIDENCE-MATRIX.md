@@ -122,3 +122,12 @@ Evidence: [CP96 checkpoint](checkpoints/CP96-def026-mcp-first-review-state.md), 
 | Active adapter action menu in Extensions → Installed | PARTIAL | Exact RC7 Owner/SQLite/Chromium. The two active official adapter rows matched HTTP 200 installation readback. Active Ollama actions no longer include Uninstall; Quarantine remains available and Rollback is disabled with no-previous-pin guidance. | Whether quarantine is clearly identified as required for uninstall, post-quarantine uninstall/persistent audit state, kill-switch cleanup, other lifecycle states, roles, backends and browsers. No writes performed. |
 
 Evidence: [CP97 checkpoint](checkpoints/CP97-def044-active-extension-actions.md), [sanitized JSON](evidence/CP97-def044-active-extension-actions.json), and visually inspected inventory/action-menu screenshots.
+
+
+## CP98 — DEF-050 route tool-call warning copy
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| One-primary and two-target Priority failover capability warnings | PARTIAL | Exact RC7 Owner/SQLite/Chromium. Real route form with a single CP58 loopback deployment and then that primary plus an Ollama fallback no longer says “fallback target”; both show a generic tool_calling capability warning. Neither configuration was saved. | Name the affected single target and specific unsupported fallback, independently verify model capability metadata, and exercise unsupported tool-call denial before provider egress through API/Playground. Other strategies, capabilities, roles/backends/browsers. |
+
+Evidence: [CP98 checkpoint](checkpoints/CP98-def050-route-capability-warning.md), [sanitized JSON](evidence/CP98-def050-route-capability-warning.json), and visually inspected screenshots.
