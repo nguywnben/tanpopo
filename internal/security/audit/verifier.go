@@ -311,13 +311,13 @@ func resolveChainKeysToVerify(ctx context.Context, db *sql.DB, requested []strin
 
 func setAuditRLSTx(ctx context.Context, tx *sql.Tx, chainKey string) error {
 	if chainKey == SystemChainKey {
-		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); err != nil {
-			return fmt.Errorf("audit: set app.is_instance_operator: %w", err)
+		if err := port.SetOperatorRLSTx(ctx, tx, port.DialectPostgres); err != nil {
+			return fmt.Errorf("audit: set operator RLS context: %w", err)
 		}
 		return nil
 	}
-	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', $1, true)`, chainKey); err != nil {
-		return fmt.Errorf("audit: set app.current_org_id: %w", err)
+	if err := port.SetOrgRLSTx(ctx, tx, port.DialectPostgres, chainKey); err != nil {
+		return fmt.Errorf("audit: set org RLS context: %w", err)
 	}
 	return nil
 }

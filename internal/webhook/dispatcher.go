@@ -391,6 +391,17 @@ func isSQLiteBusyError(err error) bool {
 // RecordEventTx persists a tenant-scoped event in the transactional outbox.
 // Call it in the same database transaction as the business state transition.
 func (d *Dispatcher) RecordEventTx(ctx context.Context, tx *sql.Tx, event Event) error {
+	return d.recordEventTx(ctx, tx, event, true)
+}
+
+// RecordPriorityEventTx persists a high-priority security containment event
+// (such as global extension quarantine or kill-switch activation) without
+// allowing per-tenant outbox saturation to abort the containment transaction.
+func (d *Dispatcher) RecordPriorityEventTx(ctx context.Context, tx *sql.Tx, event Event) error {
+	return d.recordEventTx(ctx, tx, event, false)
+}
+
+func (d *Dispatcher) recordEventTx(ctx context.Context, tx *sql.Tx, event Event, enforceOrgQuota bool) error {
 	if tx == nil || event.OrgID == "" || event.ID == "" || event.Type == "" || len(event.ID) > 40 || len(event.OrgID) > 40 || len(event.ProjectID) > 40 || len(event.Type) > 64 || len(event.Payload) == 0 || !json.Valid(event.Payload) {
 		return ErrInvalidEvent
 	}
@@ -407,12 +418,14 @@ func (d *Dispatcher) RecordEventTx(ctx context.Context, tx *sql.Tx, event Event)
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("webhook: check transactional outbox id: %w", err)
 	}
-	var pending int
-	if err := tx.QueryRowContext(ctx, d.bind(`SELECT COUNT(*) FROM webhook_event_outbox WHERE org_id=? AND dispatched_at_ms IS NULL`), event.OrgID).Scan(&pending); err != nil {
-		return fmt.Errorf("webhook: count pending outbox events: %w", err)
-	}
-	if pending >= maxOutstandingPerOrg {
-		return fmt.Errorf("webhook: organization outbox capacity reached")
+	if enforceOrgQuota {
+		var pending int
+		if err := tx.QueryRowContext(ctx, d.bind(`SELECT COUNT(*) FROM webhook_event_outbox WHERE org_id=? AND dispatched_at_ms IS NULL`), event.OrgID).Scan(&pending); err != nil {
+			return fmt.Errorf("webhook: count pending outbox events: %w", err)
+		}
+		if pending >= maxOutstandingPerOrg {
+			return fmt.Errorf("webhook: organization outbox capacity reached")
+		}
 	}
 	_, err := tx.ExecContext(ctx, d.bind(`INSERT INTO webhook_event_outbox(id,org_id,project_id,event_type,payload_json,created_at_ms)
 		VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`), event.ID, event.OrgID, nullable(event.ProjectID), event.Type, string(clean), d.cfg.Now().UnixMilli())

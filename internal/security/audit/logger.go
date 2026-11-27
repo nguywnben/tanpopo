@@ -230,12 +230,12 @@ func (l *Logger) appendWithTx(ctx context.Context, tx *sql.Tx, ev port.AuditEven
 
 	if l.dialect == port.DialectPostgres {
 		if normalized.OrgID != nil {
-			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', $1, true)`, *normalized.OrgID); serr != nil {
-				return fmt.Errorf("audit: set app.current_org_id: %w", serr)
+			if serr := port.SetOrgRLSTx(ctx, tx, l.dialect, *normalized.OrgID); serr != nil {
+				return fmt.Errorf("audit: set org RLS context: %w", serr)
 			}
 		} else {
-			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); serr != nil {
-				return fmt.Errorf("audit: set app.is_instance_operator: %w", serr)
+			if serr := port.SetOperatorRLSTx(ctx, tx, l.dialect); serr != nil {
+				return fmt.Errorf("audit: set operator RLS context: %w", serr)
 			}
 		}
 		if _, lerr := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('audit:' || $1, 0))`, chainKey); lerr != nil {
@@ -583,12 +583,12 @@ func ListEvents(ctx context.Context, db *sql.DB, filter ListFilter) ([]StoredEve
 		}
 		defer func() { _ = tx.Rollback() }()
 		if chainKey == SystemChainKey {
-			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true)`); serr != nil {
-				return nil, fmt.Errorf("audit: set app.is_instance_operator: %w", serr)
+			if serr := port.SetOperatorRLSTx(ctx, tx, dialect); serr != nil {
+				return nil, fmt.Errorf("audit: set operator RLS context: %w", serr)
 			}
 		} else {
-			if _, serr := tx.ExecContext(ctx, `SELECT set_config('app.current_org_id', $1, true)`, chainKey); serr != nil {
-				return nil, fmt.Errorf("audit: set app.current_org_id: %w", serr)
+			if serr := port.SetOrgRLSTx(ctx, tx, dialect, chainKey); serr != nil {
+				return nil, fmt.Errorf("audit: set org RLS context: %w", serr)
 			}
 		}
 		rows, err = tx.QueryContext(ctx, query, args...)

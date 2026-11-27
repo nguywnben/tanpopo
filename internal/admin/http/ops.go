@@ -1461,13 +1461,35 @@ func (s *Server) countKillSwitchAffectedEntities(ctx context.Context, orgID stri
 		return cnt
 	case killswitch.LevelExtensionInstallation:
 		if instanceWide {
-			_ = s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
-				return q.QueryRowContext(ctx, s.rebind(`
-				SELECT COUNT(*)
-				FROM provider_connections pc
-				JOIN provider_adapters pa ON pa.id = pc.adapter_id
-				WHERE pa.installation_id = ?`), targetID).Scan(&cnt)
-			})
+			if s.dialect == port.DialectPostgres {
+				tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+				if err == nil {
+					defer func() { _ = tx.Rollback() }()
+					if orgIDs, lerr := port.ListOrgIDsTx(ctx, tx, s.dialect); lerr == nil {
+						for _, oid := range orgIDs {
+							if rerr := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); rerr != nil {
+								break
+							}
+							var n int
+							if qerr := tx.QueryRowContext(ctx, s.rebind(`
+								SELECT COUNT(*)
+								FROM provider_connections pc
+								JOIN provider_adapters pa ON pa.id = pc.adapter_id
+								WHERE pa.installation_id = ? AND pc.org_id = ?`), targetID, oid).Scan(&n); qerr == nil {
+								cnt += n
+							}
+						}
+					}
+				}
+			} else {
+				_ = s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
+					return q.QueryRowContext(ctx, s.rebind(`
+					SELECT COUNT(*)
+					FROM provider_connections pc
+					JOIN provider_adapters pa ON pa.id = pc.adapter_id
+					WHERE pa.installation_id = ?`), targetID).Scan(&cnt)
+				})
+			}
 		} else {
 			_ = s.withOrgReadTx(ctx, orgID, func(q adminDBQuerier) error {
 				return q.QueryRowContext(ctx, s.rebind(`

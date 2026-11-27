@@ -1826,6 +1826,13 @@ func (s *LifecycleService) UnquarantineInstallationIfVersion(ctx context.Context
 	if rowData.state != StateQuarantined || !IsValidSM01Transition(rowData.state, StateInstalledDisabled) {
 		return fmt.Errorf("%w: cannot unquarantine installation in state %s", ErrInvalidStateTransition, rowData.state)
 	}
+	okOp, opErr := s.ensureInstanceOperatorPrincipalActiveTx(ctx, tx, actorID)
+	if opErr != nil {
+		return opErr
+	}
+	if !okOp {
+		return fmt.Errorf("%w: active principal %q requires INSTANCE OPERATOR role to unquarantine extension", ErrPermissionDenied, actorID)
+	}
 
 	res, err := tx.ExecContext(ctx, s.rebind(`
 		UPDATE extension_installations
@@ -1877,6 +1884,13 @@ func (s *LifecycleService) EnableDisabledInstallation(ctx context.Context, insta
 			_ = tx.Rollback()
 		}
 	}()
+
+	if err := s.ensureGlobalApproverRoleTx(ctx, tx, actorID, orgID); err != nil {
+		return nil, err
+	}
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return nil, err
+	}
 
 	rowData, err := s.loadInstallationForTx(ctx, tx, installationID)
 	if err != nil {
@@ -2812,7 +2826,7 @@ func (s *LifecycleService) checkEnabledOrgPoliciesForPackageTx(ctx context.Conte
 				return perr
 			}
 		}
-		return nil
+		return port.SetOperatorRLSTx(ctx, tx, s.dialect)
 	}
 	rows, err := tx.QueryContext(ctx, `
 		SELECT o.min_plugin_trust
@@ -2876,6 +2890,9 @@ func (s *LifecycleService) resetEnabledOrgPoliciesOnUnsignedTransitionTx(ctx con
 			if bool(wasEnabled) {
 				orgIDs = append(orgIDs, oid)
 			}
+		}
+		if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+			return nil, err
 		}
 		for _, oid := range orgIDs {
 			if _, err := s.appendExtensionChangelogTx(ctx, tx, "org_extension_policy", oid+":"+packageID, port.MutationUpsert, false, now); err != nil {
@@ -3014,6 +3031,66 @@ func (s *LifecycleService) ensureOrgOwnerRoleTx(ctx context.Context, tx *sql.Tx,
 	return nil
 }
 
+func (s *LifecycleService) ensureInstanceOperatorPrincipalActiveTx(ctx context.Context, tx *sql.Tx, principalID string) (bool, error) {
+	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+		return false, err
+	}
+	var rbCount int
+	if err := tx.QueryRowContext(ctx, s.rebind(`
+		SELECT COUNT(*)
+		FROM role_bindings
+		WHERE principal_id = ?
+		  AND org_id IS NULL
+		  AND scope_type = 'INSTANCE'
+		  AND scope_id = 'instance'
+		  AND role_name = 'OPERATOR'`),
+		principalID,
+	).Scan(&rbCount); err != nil {
+		return false, err
+	}
+	if rbCount == 0 {
+		return false, nil
+	}
+
+	var status string
+	q := s.rebind(`SELECT status FROM principals WHERE id = ?`)
+	err := tx.QueryRowContext(ctx, q, principalID).Scan(&status)
+	switch {
+	case err == nil:
+		return status == "ACTIVE", nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return false, err
+	case s.dialect == port.DialectPostgres:
+		orgIDs, listErr := port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if listErr != nil {
+			return false, listErr
+		}
+		found := false
+		for _, oid := range orgIDs {
+			if rerr := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); rerr != nil {
+				return false, rerr
+			}
+			err = tx.QueryRowContext(ctx, q, principalID).Scan(&status)
+			if err == nil {
+				found = true
+				break
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return false, err
+			}
+		}
+		if rerr := port.SetOperatorRLSTx(ctx, tx, s.dialect); rerr != nil {
+			return false, rerr
+		}
+		if !found {
+			return false, nil
+		}
+		return status == "ACTIVE", nil
+	default:
+		return false, nil
+	}
+}
+
 func (s *LifecycleService) ensureGlobalApproverRoleTx(ctx context.Context, tx *sql.Tx, principalID, orgID string) error {
 	if strings.TrimSpace(principalID) == "" {
 		return fmt.Errorf("%w: approver principal_id is required", ErrPermissionDenied)
@@ -3028,21 +3105,11 @@ func (s *LifecycleService) ensureGlobalApproverRoleTx(ctx context.Context, tx *s
 	// Multi-tenant deployments (> 1 active organization) or empty orgID restrict global extension lifecycle
 	// mutations exclusively to active INSTANCE-scoped OPERATOR principals.
 	if orgCount > 1 || strings.TrimSpace(orgID) == "" {
-		var count int
-		err := tx.QueryRowContext(ctx, s.rebind(`
-			SELECT COUNT(*)
-			FROM role_bindings rb
-			JOIN principals p ON p.id = rb.principal_id
-			WHERE rb.principal_id = ?
-			  AND p.status = 'ACTIVE'
-			  AND rb.scope_type = 'INSTANCE'
-			  AND rb.role_name = 'OPERATOR'`),
-			principalID,
-		).Scan(&count)
+		ok, err := s.ensureInstanceOperatorPrincipalActiveTx(ctx, tx, principalID)
 		if err != nil {
 			return err
 		}
-		if count == 0 {
+		if !ok {
 			return fmt.Errorf("%w: active principal %q requires INSTANCE OPERATOR role for global operation", ErrPermissionDenied, principalID)
 		}
 		return nil
@@ -3074,21 +3141,12 @@ func (s *LifecycleService) ensureApproverRoleTx(ctx context.Context, tx *sql.Tx,
 			return err
 		}
 		if count == 0 {
-			if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
-				return err
+			ok, opErr := s.ensureInstanceOperatorPrincipalActiveTx(ctx, tx, principalID)
+			if opErr != nil {
+				return opErr
 			}
-			err = tx.QueryRowContext(ctx, s.rebind(`
-				SELECT COUNT(*)
-				FROM role_bindings rb
-				JOIN principals p ON p.id = rb.principal_id
-				WHERE rb.principal_id = ?
-				  AND p.status = 'ACTIVE'
-				  AND rb.scope_type = 'INSTANCE'
-				  AND rb.role_name = 'OPERATOR'`),
-				principalID,
-			).Scan(&count)
-			if err != nil {
-				return err
+			if ok {
+				count = 1
 			}
 			// Restore org RLS scope so subsequent org-scoped statements in the same tx remain intact.
 			if rlsErr := port.SetOrgRLSTx(ctx, tx, s.dialect, orgID); rlsErr != nil {
@@ -3102,23 +3160,11 @@ func (s *LifecycleService) ensureApproverRoleTx(ctx context.Context, tx *sql.Tx,
 	}
 
 	// Instance-global action (orgID == ""): require active INSTANCE-scoped OPERATOR role (forbid org/project privilege escalation).
-	if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
-		return err
-	}
-	err := tx.QueryRowContext(ctx, s.rebind(`
-		SELECT COUNT(*)
-		FROM role_bindings rb
-		JOIN principals p ON p.id = rb.principal_id
-		WHERE rb.principal_id = ?
-		  AND p.status = 'ACTIVE'
-		  AND rb.scope_type = 'INSTANCE'
-		  AND rb.role_name = 'OPERATOR'`),
-		principalID,
-	).Scan(&count)
+	ok, err := s.ensureInstanceOperatorPrincipalActiveTx(ctx, tx, principalID)
 	if err != nil {
 		return err
 	}
-	if count == 0 {
+	if !ok {
 		return fmt.Errorf("%w: active principal %q requires INSTANCE OPERATOR role for global operation", ErrPermissionDenied, principalID)
 	}
 	return nil
@@ -3200,6 +3246,9 @@ func (s *LifecycleService) checkNoDependentConnectionsTx(ctx context.Context, tx
 				return fmt.Errorf("installer: query provider_connections dependencies: %w", err)
 			}
 			activeDeps += n
+		}
+		if err := port.SetOperatorRLSTx(ctx, tx, s.dialect); err != nil {
+			return err
 		}
 	} else {
 		if err := tx.QueryRowContext(ctx, `

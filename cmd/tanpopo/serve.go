@@ -620,7 +620,7 @@ func buildRuntimeDetailed(ctx context.Context, role, listen string, beforeSQLite
 				}
 				return recordExtensionWebhookOutbox(ctx, tx, dialect, webhookDispatcher, body.TargetID, "kill_switch:"+eventKey, eventType, payload)
 			}
-			return webhookDispatcher.RecordEventTx(ctx, tx, webhook.Event{
+			return webhookDispatcher.RecordPriorityEventTx(ctx, tx, webhook.Event{
 				ID: webhook.StableEventID("kill_switch:" + eventKey), OrgID: orgID,
 				ProjectID: projectID, Type: eventType, Payload: payload,
 			})
@@ -709,7 +709,8 @@ func buildRuntimeDetailed(ctx context.Context, role, listen string, beforeSQLite
 			if err != nil {
 				return err
 			}
-			return recordExtensionWebhookOutbox(ctx, tx, dialect, webhookDispatcher, installationID, "extension.quarantined:"+installationID, "extension.quarantined", payload)
+			eventKey := fmt.Sprintf("extension.quarantined:%s:%d", installationID, time.Now().UnixNano())
+			return recordExtensionWebhookOutbox(ctx, tx, dialect, webhookDispatcher, installationID, eventKey, "extension.quarantined", payload)
 		},
 		SyncAdaptersTx: catalogRepo.SyncExtensionProviderAdaptersTx,
 	})
@@ -1044,6 +1045,45 @@ func buildRuntimeDetailed(ctx context.Context, role, listen string, beforeSQLite
 }
 
 func recordExtensionWebhookOutbox(ctx context.Context, tx *sql.Tx, dialect port.Dialect, dispatcher *webhook.Dispatcher, installationID, eventKey, eventType string, payload []byte) error {
+	if dialect == port.DialectPostgres {
+		orgIDs, err := port.ListOrgIDsTx(ctx, tx, dialect)
+		if err != nil {
+			return err
+		}
+		var matchedOrgs []string
+		for _, orgID := range orgIDs {
+			if err := port.SetOrgRLSTx(ctx, tx, dialect, orgID); err != nil {
+				return err
+			}
+			var matched int
+			qerr := tx.QueryRowContext(ctx, port.Rebind(dialect, `
+				SELECT 1
+				WHERE EXISTS (
+					SELECT 1 FROM org_extension_policies
+					WHERE org_id = ? AND package_id = (SELECT package_id FROM extension_installations WHERE id = ?) AND enabled = TRUE
+				) OR EXISTS (
+					SELECT 1 FROM provider_connections pc
+					JOIN provider_adapters pa ON pa.id = pc.adapter_id
+					WHERE pc.org_id = ? AND pa.installation_id = ?
+				)`),
+				orgID, installationID, orgID, installationID,
+			).Scan(&matched)
+			if qerr == nil && matched == 1 {
+				matchedOrgs = append(matchedOrgs, orgID)
+			} else if qerr != nil && !errors.Is(qerr, sql.ErrNoRows) {
+				return qerr
+			}
+		}
+		for _, orgID := range matchedOrgs {
+			if err := port.SetOrgRLSTx(ctx, tx, dialect, orgID); err != nil {
+				return err
+			}
+			if err := dispatcher.RecordPriorityEventTx(ctx, tx, webhook.Event{ID: webhook.StableEventID(eventKey + ":" + orgID), OrgID: orgID, Type: eventType, Payload: payload}); err != nil {
+				return err
+			}
+		}
+		return port.SetOperatorRLSTx(ctx, tx, dialect)
+	}
 	rows, err := tx.QueryContext(ctx, port.Rebind(dialect, `SELECT org_id FROM org_extension_policies WHERE package_id=(SELECT package_id FROM extension_installations WHERE id=?) AND enabled=`+port.BoolExpr(dialect, true)+`
 		UNION SELECT pc.org_id FROM provider_connections pc JOIN provider_adapters pa ON pa.id=pc.adapter_id WHERE pa.installation_id=? ORDER BY 1`), installationID, installationID)
 	if err != nil {
@@ -1062,7 +1102,7 @@ func recordExtensionWebhookOutbox(ctx context.Context, tx *sql.Tx, dialect port.
 		return err
 	}
 	for _, orgID := range orgIDs {
-		if err := dispatcher.RecordEventTx(ctx, tx, webhook.Event{ID: webhook.StableEventID(eventKey + ":" + orgID), OrgID: orgID, Type: eventType, Payload: payload}); err != nil {
+		if err := dispatcher.RecordPriorityEventTx(ctx, tx, webhook.Event{ID: webhook.StableEventID(eventKey + ":" + orgID), OrgID: orgID, Type: eventType, Payload: payload}); err != nil {
 			return err
 		}
 	}
