@@ -1,0 +1,21 @@
+{
+  "checkpoint": "CP80",
+  "finding": "DEF-022",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {"binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9", "listener": "127.0.0.1:18162", "database": "isolated SQLite clone", "browser": "Chromium 156"},
+  "steps": [
+    {"action": "Owner created synthetic HUMAN Security Reviewer and issued enrollment token", "create_http": 201, "invite_http": 201},
+    {"action": "Reviewer activated in separate browser context and opened Security approval queue", "activation_http": 200, "result": "Security page and Trigger kill switch visible"},
+    {"action": "Owner refreshed list, changed Security Reviewer to Developer, and saved through Console", "mutation_method": "PATCH", "mutation_path": "/admin/v1/members/{principal_id}/roles", "http_status": 200, "owner_readback": {"roles": ["DEVELOPER"], "version": 6, "enrollment_pending": false}},
+    {"action": "Existing Reviewer browser checked its Admin session", "http_status": 401},
+    {"action": "Existing Reviewer browser navigated to Security → Kill Switches without reload", "security_navigation_still_visible": true, "trigger_kill_switch_visible": true, "empty_state": "No active kill switches", "mutation_submitted": false},
+    {"action": "Reloaded existing Reviewer browser", "redirected_to": "/login", "security_navigation_visible": false}
+  ],
+  "classification": "FAIL (fresh QA-005 reproduction)",
+  "impact": "Stale restricted UI and action remain visible after authenticated session check returns 401; no authorization bypass or protected action was tested.",
+  "screenshots": ["evidence/screenshots/CP80-def022-add-reviewer-form.png", "evidence/screenshots/CP80-def022-reviewer-before-downgrade.png", "evidence/screenshots/CP80-def022-edit-reviewer-roles.png", "evidence/screenshots/CP80-def022-role-selection-after.png", "evidence/screenshots/CP80-def022-after-session-invalidated.png", "evidence/screenshots/CP80-def022-after-reload.png"],
+  "visual_inspection": "All listed screenshots inspected. Stale-after-401 screenshot visibly retains Security nav, Trigger kill switch, and No active kill switches; post-reload screenshot shows the sign-in form.",
+  "secret_handling": "Synthetic invite token and password were not retained in files, logs, screenshots or Git.",
+  "product_code_modified": false,
+  "gate_rel_07": "BLOCKED"
+}
