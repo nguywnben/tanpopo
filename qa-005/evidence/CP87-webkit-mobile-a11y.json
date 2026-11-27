@@ -31,7 +31,8 @@
   "visual_inspection": "The inspected screenshot shows the stacked member rows, selected Members & Roles tab, scroll affordance and 320px content without horizontal page overflow.",
   "evidence": [
     "evidence/screenshots/CP87-webkit-members-accessibility-320px.png",
-    "evidence/screenshots/CP86-webkit-tab-arrow-click.png"
+    "evidence/screenshots/CP86-webkit-tab-arrow-click.png",
+    "evidence/screenshots/CP87-webkit-tab-a11y-focus.png"
   ],
   "classification": "PASS (scoped accessibility check)",
   "limitations": [
