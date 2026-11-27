@@ -342,3 +342,9 @@ DEF-011 advances from PARTIAL to PASS (scoped): an exact-RC7, delayed loopback t
 CP115 adds DEF-085 (Major, FAIL): two zero-hold requests reached the authorized synthetic downstream endpoint before HTTP 403 spend rejection, producing failed rows and zero internal settlement. This contradicts the accepted SM-07 hold-before-dispatch boundary and AC-2’s settlement against allocated sub-budget. The local test proves ordering, not an actual external charge. Detailed reproduction and acceptance criteria are in [the standalone engineering handoff](reports/DEF-085-zero-hold-a2a-dispatch.md).
 
 **Current historical ledger:** 61 scoped PASS, 15 PARTIAL, three fresh FAIL (DEF-022, DEF-069, DEF-075), zero UNVERIFIED. **New findings:** DEF-080–085 are FAIL. **QA-005 campaign:** IN PROGRESS; TEEP-01 readiness NOT DETERMINED; no baseline-stable verdict. GATE-REL-07 remains BLOCKED.
+
+## CP116 update — A2A live SSE events
+
+A real authenticated `GET /a2a/tasks/{id}` event stream returned the input-required snapshot and, during actual Console resume, streamed the same task through `working` v4 to `completed` v5. Durable reads, artifact, exact settlement and audit events agreed. The final A2A-only key matched the visible form selection and API grant, was revoked and replay-denied. The audit chain remained intact. This is scoped protocol evidence only: initial dispatch-to-input-required SSE, cancellation/error paths, other backends/roles/browsers and real interoperability remain open. Two setup keys carrying the default PROVIDER plane were revoked before use; no defect was found. The selection default is recorded separately as PG-012.
+
+The historical distribution remains 61 scoped PASS, 15 PARTIAL, three fresh FAIL and zero UNVERIFIED; new DEF-080–085 remain FAIL. QA-005 is IN PROGRESS, TEEP-01 readiness NOT DETERMINED, and GATE-REL-07 BLOCKED.

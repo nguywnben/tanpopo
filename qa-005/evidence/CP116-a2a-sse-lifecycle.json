@@ -1,0 +1,184 @@
+{
+  "checkpoint": "CP116",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated SQLite clone copied from the prior QA runtime, 127.0.0.1:18167; A2A enabled; Air-gapped offline mode",
+  "fixture": "authorized deterministic loopback A2A endpoint at 127.0.0.1:19188; no external/paid provider usage",
+  "browser": "real Chromium 156 Console at 1440x1000; screenshots visually inspected",
+  "a2a_key": {
+    "id": "vky_01m8e4trske0092p9zh8tv4d1m",
+    "state_before_cleanup": "CREATED_ACTIVE",
+    "allowed_planes": [
+      "A2A"
+    ],
+    "allowed_routes": [
+      "/a2a/*"
+    ],
+    "displayed_plane_selection": [
+      "A2A"
+    ],
+    "persisted_selection_matches_display": true,
+    "secret_omitted": true
+  },
+  "sse_resume": {
+    "task_id": "tsk_01m8e4vxgve008v7smg99js386",
+    "trace_root_id": "trc_01m8e4vxgve008v895p7tv76ta",
+    "initial_create_state": "input-required",
+    "initial_create_version": 3,
+    "sse_http": 200,
+    "sse_content_type": "text/event-stream",
+    "sse_events": [
+      {
+        "event": "task.status",
+        "state": "input-required",
+        "version": 3,
+        "t_offset_ms": 0
+      },
+      {
+        "event": "task.status",
+        "state": "working",
+        "version": 4,
+        "t_offset_ms": 4295
+      },
+      {
+        "event": "task.status",
+        "state": "completed",
+        "version": 5,
+        "settled_cost_micros": 2000,
+        "t_offset_ms": 16306
+      }
+    ],
+    "resume_http": 200,
+    "resume_elapsed_ms": 12317,
+    "resume_response": {
+      "state": "completed",
+      "version": 5,
+      "settled_cost_micros": 2000
+    },
+    "final_read": {
+      "task_id": "tsk_01m8e4vxgve008v7smg99js386",
+      "state": "completed",
+      "version": 5,
+      "settled_cost_micros": 2000,
+      "hold": 10000,
+      "artifact_count": 1,
+      "trace_root_id": "trc_01m8e4vxgve008v895p7tv76ta"
+    },
+    "persistent_task": {
+      "id": "tsk_01m8e4vxgve008v7smg99js386",
+      "state": "COMPLETED",
+      "sub_budget_cap_micros": 10000,
+      "settled_cost_micros": 2000,
+      "reservation_id": "rsv_01m8e4vxgwe00b2qfpjr8212g9",
+      "version": 5
+    },
+    "audit_task_events": [
+      {
+        "seq_no": 705,
+        "event_type": "a2a.task.submitted",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e4vxgve008v7smg99js386",
+        "metadata_json": "{\"enforced_region\":\"US\",\"hop_count\":1,\"sub_budget_hold_micros\":10000,\"target_agent_id\":\"agt_01m8e3qwzhe008np2pzwy7dwqd\",\"trace_root_id\":\"trc_01m8e4vxgve008v895p7tv76ta\"}"
+      },
+      {
+        "seq_no": 706,
+        "event_type": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e4vxgve008v7smg99js386",
+        "metadata_json": "{\"from_state\":\"submitted\",\"spent_micros\":0,\"to_state\":\"working\"}"
+      },
+      {
+        "seq_no": 707,
+        "event_type": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e4vxgve008v7smg99js386",
+        "metadata_json": "{\"from_state\":\"working\",\"spent_micros\":1000,\"to_state\":\"input-required\"}"
+      },
+      {
+        "seq_no": 709,
+        "event_type": "a2a.task.resumed",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e4vxgve008v7smg99js386",
+        "metadata_json": "{\"from_state\":\"input-required\",\"spent_micros\":0,\"to_state\":\"working\"}"
+      },
+      {
+        "seq_no": 710,
+        "event_type": "a2a.task.resumed",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e4vxgve008v7smg99js386",
+        "metadata_json": "{\"from_state\":\"working\",\"spent_micros\":2000,\"to_state\":\"completed\"}"
+      }
+    ],
+    "fixture": {
+      "calls": 2,
+      "completed": 1,
+      "auth_forwarded": false,
+      "resume_elapsed_seconds": 12
+    }
+  },
+  "setup_correction": {
+    "observation": "The issue-key dialog initially selects PROVIDER. Selecting A2A alone adds the A2A plane; the displayed form and persisted grant then correctly show both. Before using any key, test setup was corrected by explicitly deselecting PROVIDER, visually confirming A2A alone, and verifying API readback allowed_planes=[A2A].",
+    "misconfigured_setup_keys_created": 2,
+    "misconfigured_keys_revoked_before_data_plane_use": true,
+    "synthetic_requests_with_those_keys": 0,
+    "resulting_product_defect": false,
+    "screenshots": [
+      "screenshots/CP116-a2a-plane-default-open.png",
+      "screenshots/CP116-a2a-plane-only-before-issue.png"
+    ]
+  },
+  "cleanup": {
+    "temporary_a2a_key_revoke_http": 200,
+    "state_readback": "REVOKED",
+    "version": 2,
+    "replay": {
+      "http": 401,
+      "error": "invalid_credential_plane"
+    },
+    "audit_chain_verification": [
+      {
+        "org_id": "org_01m8crmjtje009gbep9v278fpe",
+        "http": 200,
+        "body": {
+          "intact": true,
+          "checked_events_count": 5,
+          "first_broken_seq_no": null
+        }
+      },
+      {
+        "org_id": "org_01m8cj8phze00a0r8dfkqmmfn0",
+        "http": 200,
+        "body": {
+          "intact": true,
+          "checked_events_count": 711,
+          "first_broken_seq_no": null
+        }
+      }
+    ],
+    "runtime_and_fixture_stopped": true,
+    "secret_omitted": true
+  },
+  "visual_evidence": [
+    {
+      "file": "screenshots/CP116-a2a-sse-input-required.png",
+      "inspection": "The row shows the same task in Input required with the prompt, Resume/Cancel actions, $0.010000 hold and $0.000000 settlement."
+    },
+    {
+      "file": "screenshots/CP116-a2a-sse-resume-filled.png",
+      "inspection": "The required follow-up answer is filled in the resume dialog."
+    },
+    {
+      "file": "screenshots/CP116-a2a-sse-resume-pending.png",
+      "inspection": "While the delayed resume request is pending, dialog stays open and send action shows spinner."
+    },
+    {
+      "file": "screenshots/CP116-a2a-sse-completed.png",
+      "inspection": "Success banner; same task is Completed and the row shows $0.002000 settled under the $0.010000 hold."
+    }
+  ],
+  "limitations": [
+    "SQLite/Owner/Chromium only in this SSE follow-up.",
+    "Initial submitted-to-input-required dispatch is not fully observed over SSE because subscription began after synchronous task creation; this run observes initial input-required snapshot and subsequent working/completed events.",
+    "No partner interoperability, alternate role/browser, PostgreSQL/Valkey SSE, cancellation, failure/retry or timeout scenario."
+  ]
+}
