@@ -156,6 +156,7 @@ Coverage remains incomplete for the 42 unverified historical findings, PostgreSQ
 - CP68: DEF-020 project kill-switch trigger/clear, same-session badge reconciliation and audit event readback
 - CP69: DEF-075 correlated key rotation at T+30/T+61 with conflicting post-deadline lifecycle/audit observations
 - CP70: DEF-038 exact-RC7 Console crypto-shred, post-shred backup verify/restore, restored service and audit verification
+- CP71: DEF-041 exact-RC7 injected audit failure, pending-erasure UX, recovery retry and audit verification
 - CP51: full Valkey outage RPM/revocation fallback and cluster recovery
 - CP52: PostgreSQL + Valkey dual-dependency partition fail-closed acceptance and isolated test environment recovery
 - CP50: DEF-069 PostgreSQL/Valkey delayed-work cancellation with nonzero hold and durable reservation-state readback
