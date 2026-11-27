@@ -203,3 +203,12 @@ Evidence: [CP105 checkpoint](checkpoints/CP105-def032-exact-duplicate-provider-i
 | Narrow and restore project data-region policy with no environment selected | PASS (scoped) | Exact RC7 Owner/SQLite/Chromium 156. Real Console at QA005 project / No env saved `ON_PREM` only (HTTP 200), restored all four regions (HTTP 200/version 2), and a hard reload plus explicit No env reselection returned the restored project policy at ETag v2. No route/deployment mutation or inference. | Team Admin, stale concurrent writer, parent-relaxation rejection, guardrails, PostgreSQL/Valkey, other browsers and keyboard/screen-reader paths. The `policy.created` / `policy.updated` events appear at seq 567/568; real Console chain verification returned intact across 574 events. QA database retains an explicit v2 project policy with the original effective all-region value. |
 
 Evidence: [CP106 checkpoint](checkpoints/CP106-def039-project-policy-no-environment-rc7.md), [sanitized API/UI/audit record](evidence/CP106-def039-project-policy-no-environment.json), and seven visually inspected screenshots.
+
+
+## CP107 — DEF-036 Marketplace installed-version state
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Installed package identity reconciled with same-version Marketplace row | PARTIAL | Exact RC7 Owner Console/SQLite/Chromium 156. Installed `@tanpopo/ollama` v0.1.0 is `ENABLED_ACTIVE`; catalog API lists the same official signature-verified v0.1.0. The real Marketplace row says Installed and has no duplicate Stage action. Both APIs returned 200; no write or provider call. | Historical Gemini duplicate action/error path, eligible newer version and upgrade/permission diff, race, error recovery, other package lifecycle states, roles, backends and browsers. |
+
+Evidence: [CP107 checkpoint](checkpoints/CP107-def036-marketplace-installed-state-rc7.md), [sanitized record](evidence/CP107-def036-marketplace-installed-state.json), and three visually inspected screenshots.
