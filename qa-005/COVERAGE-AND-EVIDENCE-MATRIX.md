@@ -212,3 +212,12 @@ Evidence: [CP106 checkpoint](checkpoints/CP106-def039-project-policy-no-environm
 | Installed package identity reconciled with same-version Marketplace row | PARTIAL | Exact RC7 Owner Console/SQLite/Chromium 156. Installed `@tanpopo/ollama` v0.1.0 is `ENABLED_ACTIVE`; catalog API lists the same official signature-verified v0.1.0. The real Marketplace row says Installed and has no duplicate Stage action. Both APIs returned 200; no write or provider call. | Historical Gemini duplicate action/error path, eligible newer version and upgrade/permission diff, race, error recovery, other package lifecycle states, roles, backends and browsers. |
 
 Evidence: [CP107 checkpoint](checkpoints/CP107-def036-marketplace-installed-state-rc7.md), [sanitized record](evidence/CP107-def036-marketplace-installed-state.json), and three visually inspected screenshots.
+
+
+## CP108 — DEF-043 exact-RC7 built-in extension provenance
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Built-in Official provenance across Marketplace and Installed views | PARTIAL | Exact RC7 Owner/SQLite/Chromium 156. Existing `@tanpopo/ollama` v0.1.0 appeared Official and Signature verified with fingerprint prefix `d04e71ce017b` in both views. Catalog and installation API reads returned 200 and agreed on `signature_verified=true`, `enterprise_signed=false`, official trust tier, version and fingerprint. Frozen source verifies embedded signatures against configured release-root public keys; no instance-KEK signer is assigned in the server path inspected. Both screenshots were visually inspected. No write or provider call occurred. | Production root and release artifact identity, cross-runtime signer consistency, altered/unsigned/spoofed package behavior, stage/consent lifecycle, all other built-ins, browser/platform breadth and production signing remain UNVERIFIED/BLOCKED. |
+
+Evidence: [CP108 checkpoint](checkpoints/CP108-def043-rc7-builtin-provenance.md), [sanitized API/source result](evidence/CP108-def043-extension-provenance.json), and two visually inspected screenshots.

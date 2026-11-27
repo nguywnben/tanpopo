@@ -1,0 +1,60 @@
+{
+  "checkpoint": "CP108",
+  "finding": "DEF-043",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "database": "isolated QA SQLite",
+    "console": "Chromium 156, Owner session, loopback runtime 127.0.0.1:18145"
+  },
+  "workflow": "Read-only Extensions > Marketplace, then Installed. No Stage, install, approval, quarantine, activation, uninstall, or provider request was made.",
+  "api": {
+    "catalog_http": 200,
+    "installations_http": 200,
+    "package_id": "@tanpopo/ollama",
+    "catalog_version": "0.1.0",
+    "installation_version": "0.1.0",
+    "installation_state": "ENABLED_ACTIVE",
+    "origin_trust_tier_catalog": "official",
+    "origin_trust_tier_installation": "official",
+    "signature_verified_catalog": true,
+    "signature_verified_installation": true,
+    "enterprise_signed_catalog": false,
+    "enterprise_signed_installation": false,
+    "signing_key_fingerprint_prefix_catalog": "d04e71ce017b",
+    "signing_key_fingerprint_prefix_installation": "d04e71ce017b"
+  },
+  "ui_observation": "Marketplace and Installed views label the bundled adapter Official and Signature verified (d04e71ce017b). These labels are consistent with the API metadata. Screenshots visually inspected.",
+  "source_inspection": {
+    "files": [
+      "cmd/tanpopo/serve.go:379-391,963-973",
+      "internal/extension/builtin/catalog.go:63-85,138-151",
+      "internal/extension/builtin/release_keys.go:47-51,266-293"
+    ],
+    "finding": "RC7 loads configured release-root public keys, loads embedded/operator release signature records, leaves builtinSigner nil in the shown server path, uses the embedded signature during built-in staging when no signer is supplied, and evaluates catalog provenance by Ed25519 verification against the configured public roots. The loader comment says it does not derive signing material from the instance KEK.",
+    "scope_limit": "Source inspection establishes the RC7 source path only. It does not establish that the test runtime trust root is the production release root, verify an owner-signed production artifact, or resolve canonical archive digest differences."
+  },
+  "historical_evidence": "QA-003 RC5 reproduced official provenance paired with Publisher signature Unsigned, metadata signature_verified=true and enterprise_signed=false, and a locally KEK-derived signer path. QA-004 RC6 unsigned external package views consistently said unverified/Unsigned. Both are preserved as historical observations.",
+  "classification": "PARTIAL",
+  "limitations": [
+    "No independent production release artifact or production public trust-root identity was verified.",
+    "No second independently provisioned runtime was compared.",
+    "Only the built-in Ollama package UI/API state was inspected; stage/approval lifecycle, unsigned external package, tamper/spoof behavior, and other browsers remain unverified.",
+    "Production signing is deferred and blocked by the stated canonical archive digest difference."
+  ],
+  "writes": 0,
+  "provider_calls": 0,
+  "paid_usage": 0,
+  "screenshots": [
+    {
+      "path": "screenshots/CP108-def043-marketplace-provenance.png",
+      "sha256": "a6d3c031cc38d277e64aeb575893d2ec22415c161121084b993e7b1c9917faa6",
+      "visual_inspection": "Marketplace table visually showed Official origin, Signature verified (d04e71ce017b), and Installed for @tanpopo/ollama."
+    },
+    {
+      "path": "screenshots/CP108-def043-installed-provenance.png",
+      "sha256": "7ac10742832ec14002205849f661ef3e09df1b5642954e3e6bcd8bc1bc0c59c4",
+      "visual_inspection": "Installed table visually showed @tanpopo/ollama Active v0.1.0, Official, Signature verified (d04e71ce017b), declarative."
+    }
+  ]
+}
