@@ -202,3 +202,7 @@ CP121 successfully cross-compiled exact RC7 for Windows amd64 using the cached G
 
 
 CP122 showed DEF-086 is present in both `budget_ledgers.id` and `budget_reservation_ledgers.ledger_id` (39 child refs use 50-character valid IDs); the filtered migration failed at the reference column and rolled back. CP123 fixed the test bridge and verified a filtered subset: 55 tables / 1,230 rows, audit chain 727, 9 pricing JSON records and 48 settlement pricing/media/counter/cost records matched exactly; total settlement cost was 18,104,016 micro-USD on both sides. The three long budgets and 39 dependent links were excluded, no Vault envelopes existed, and migrated API/UI behavior remains UNVERIFIED. Full-source migration still FAILs DEF-086. The CP118 WAL checksum was captured pre-close and is corrected in CP122/123; CP123 hash is post-close. See [CP122](checkpoints/CP122-budget-reservation-ledger-width.md), [CP123](checkpoints/CP123-filtered-pricing-migration-parity.md), and the [CP123 evidence](evidence/CP123-filtered-pricing-migration-parity.json).
+
+## Current verdict
+
+`BASELINE_REMEDIATION_REQUIRED` for TEEP-01 entry, based on confirmed Major DEF-081/085/086 and historical FAILs DEF-022/069/075. The campaign remains ongoing with incomplete coverage; this verdict is not a QA-complete or release-ready claim. `GATE-REL-07` remains BLOCKED.
