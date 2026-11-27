@@ -1,0 +1,42 @@
+{
+  "checkpoint": "CP118",
+  "classification": "UNVERIFIED",
+  "attempt_blocked": true,
+  "blocker": "Local Docker port bridge accepted a PostgreSQL connection, but exact-source migration command did not return; target PostgreSQL session was idle in ClientRead.",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "source": {
+    "clone_from": "CP116 SQLite QA clone",
+    "original_sha256": "720be31fcb7442fb7a4ea05d40091b7ac67eb180be0cf3228f9fec1d67e1ba59",
+    "ephemeral_clone_sha256": "900c0d36e6fda5b33957740bac1bc126707ecd6ed5732669499c1e771b8d830e",
+    "filtered_rows": "Exactly three budget_ledgers IDs with length >40 removed from disposable copy to isolate further accounting migration behavior.",
+    "remaining_rows": {
+      "budget_ledgers": 9,
+      "usage_settlements": 48,
+      "model_deployments": 9,
+      "audit_events": 727
+    }
+  },
+  "target": {
+    "engine": "PostgreSQL 16",
+    "location": "separate process, database and restricted role in QA-only container RAM tmpfs",
+    "role_flags": {"rolsuper": false, "rolbypassrls": false},
+    "existing_qa_database_modified": false
+  },
+  "result": "No migration outcome obtained; no PASS/FAIL inference.",
+  "verification": {
+    "row_counts": "UNVERIFIED",
+    "micro_usd_totals": "UNVERIFIED",
+    "pricing_snapshots": "UNVERIFIED",
+    "audit_chain": "UNVERIFIED",
+    "vault_decrypt": "UNVERIFIED",
+    "post_migration_api_ui": "UNVERIFIED"
+  },
+  "cleanup": {
+    "test_postgres_stopped_and_tmpfs_cluster_removed": true,
+    "bridge_stopped": true,
+    "tmpfs_used_after_cleanup_mib": 1,
+    "source_clone_unchanged": true,
+    "no_production_or_paid_provider_usage": true
+  }
+}
