@@ -87,3 +87,12 @@ Evidence: [CP92 checkpoint](checkpoints/CP92-def035-deployment-scope-retest.md),
 | Team Admin route list and target picker under unrelated policy-read failure | PASS (scoped; browser failure injection) | Exact RC7 SQLite and real Chromium. Real project/environment route API returned three rows, retained in Console after refresh. Separate Playwright injection changed only effective-policy responses to 403; the real route response still returned 200/3, all three UI rows remained, and the target picker offered five assigned-project deployments. | Runtime-originated policy failures, other roles/scopes, in-flight races, route mutation, other API errors, backends and browser engines. Historical QA-004 failure preserved. |
 
 Evidence: [CP93](checkpoints/CP93-def054-teamadmin-routes-policy-error.md), [sanitized JSON](evidence/CP93-def054-teamadmin-routes-policy-error.json), and inspected route-list/error-injection/drawer screenshots.
+
+
+## CP94 — DEF-030 Routes & Policies scope-switch state
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Owner Routes & Policies when switching between populated environments and organization-only scope | PASS (scoped) | Exact RC7 SQLite/Chromium. Two distinct populated environment scopes returned HTTP 200 with 3 and 4 route rows respectively; IDs/slugs matched the UI. Organization-only scope showed a scope prompt and zero rows without an environment-filtered collection request. Returning to the initial QA environment restored the same three route rows. | Held-response race, hard refresh/navigation, rapid transitions/stale actions, other roles, PostgreSQL/Valkey, WebKit/Firefox. Organization-wide inventory contract is not inferred. |
+
+Evidence: [CP94 checkpoint](checkpoints/CP94-def030-route-scope-switch.md), [sanitized JSON](evidence/CP94-def030-route-scope-switch.json), and four visually inspected scope screenshots.
