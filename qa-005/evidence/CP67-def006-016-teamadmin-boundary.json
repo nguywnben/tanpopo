@@ -1,0 +1,95 @@
+{
+  "checkpoint": "CP67",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_artifact": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "build_metadata": "linux/amd64; vcs.revision=737079ddb847d97dbcf832f610ed0048556cb65b; vcs.modified=false"
+  },
+  "environment": {
+    "runtime": "exact-source SQLite clone at 127.0.0.1:18161",
+    "browser": "Chromium 156.0.8078.79",
+    "provider_calls": 0,
+    "paid_usage": false,
+    "source_changes": 0
+  },
+  "workflow": {
+    "form_roles_text": "Team Admin",
+    "form_project_text": "QA005 CP64 Project (qa005-cp64-project)",
+    "member_create": {
+      "status": 201,
+      "id": "prc_01m8dd2ajce00bsbmh6a91gz7z",
+      "roles": [
+        "TEAM_ADMIN"
+      ],
+      "project_ids": [
+        "prj_01m8dbkxhne009a8wxaz7fwcb6"
+      ],
+      "enrollment_pending": true,
+      "has_enrollment_token": true
+    },
+    "enrollment": {
+      "status": 200,
+      "roles": [
+        "TEAM_ADMIN"
+      ],
+      "principal_matches": true
+    },
+    "initial_scope_text": "QA005 CP64 Project\n/\ndev\n(Active workspace scope)",
+    "member_requests": [
+      {
+        "method": "GET",
+        "status": 200,
+        "query": "project_id=prj_01m8dbkxhne009a8wxaz7fwcb6&limit=100"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "query": "project_id=prj_01m8dbkxhne009a8wxaz7fwcb6&limit=100"
+      },
+      {
+        "method": "GET",
+        "status": 403,
+        "query": "limit=100"
+      },
+      {
+        "method": "GET",
+        "status": 200,
+        "query": "project_id=prj_01m8dbkxhne009a8wxaz7fwcb6&limit=100"
+      }
+    ],
+    "explicit_reads": {
+      "scoped": {
+        "status": 200,
+        "keys": [
+          "data",
+          "has_more"
+        ]
+      },
+      "unscoped": {
+        "status": 403,
+        "error": "insufficient_role_permission",
+        "keys": [
+          "error"
+        ]
+      }
+    },
+    "member_page_visible_invitee": true,
+    "refresh_page_visible_invitee": true
+  },
+  "screenshots": [
+    "evidence/screenshots/CP67-pure-teamadmin-invite-form.png",
+    "evidence/screenshots/CP67-owner-member-persisted.png",
+    "evidence/screenshots/CP67-teamadmin-members-scoped.png",
+    "evidence/screenshots/CP67-teamadmin-members-after-refresh.png"
+  ],
+  "classification": {
+    "DEF-006": "PASS (scoped fresh retest): pure Team Admin project-scoped invitation, activation and persistence independently verified; cross-project/cross-tenant breadth remains open.",
+    "DEF-016": "PASS (scoped fresh retest): authenticated project-filtered member reads succeed, UI uses project_id filter and renders after refresh, and explicit unscoped enumeration is denied with HTTP 403 insufficient_role_permission.",
+    "limits": [
+      "Only one assigned project; sibling-project boundary not exercised.",
+      "No write permissions or cross-tenant isolation claimed.",
+      "Enrollment password and token were not recorded."
+    ]
+  }
+}
