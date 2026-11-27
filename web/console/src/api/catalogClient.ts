@@ -1,5 +1,6 @@
 import type {components} from './generated';
 import {api, apiError} from './client';
+import {notifySecurityStateChanged} from './managementClient';
 
 export async function listProviderAdapters() {
   const rows: components['schemas']['ProviderAdapterSummary'][] = [];
@@ -235,6 +236,7 @@ export async function quarantineExtension(id: string, etag: string, reason: stri
     params: {path: {installationId: id}, header: {'If-Match': etag}}, body: {reason},
   });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  notifySecurityStateChanged();
   return result.data;
 }
 
@@ -243,11 +245,13 @@ export async function unquarantineExtension(id: string, etag: string, reason: st
     params: {path: {installationId: id}, header: {'If-Match': etag}}, body: {reason},
   });
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  notifySecurityStateChanged();
   return result.data;
 }
 
 export async function triggerExtensionKillSwitch(id: string, reason: string, confirmSlug: string) {
   const result = await api.POST('/admin/v1/kill-switches', {body: {target_level: 'EXTENSION', target_id: id, confirm_slug: confirmSlug, abort_active_streams: true, reason}});
   if (!result.response.ok || !result.data) throw apiError(result.response, result.error);
+  notifySecurityStateChanged();
   return result.data;
 }

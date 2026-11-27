@@ -86,11 +86,16 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
   };
 
   const refresh = useCallback(async () => {
+    const gen = ++genRef.current;
     if (!authorized) {
+      setEvents([]);
+      setNextAuditCursor(undefined);
+      setKillSwitches([]);
+      setApprovals([]);
+      setError('');
       setLoading(false);
       return;
     }
-    const gen = ++genRef.current;
     setLoading(true);
     setError('');
     try {
@@ -105,11 +110,19 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
       setKillSwitches(switches);
       setApprovals(pending);
     } catch (cause) {
-      if (gen === genRef.current) setError(errText(cause, t));
+      if (gen === genRef.current) {
+        if (isForbiddenError(cause)) {
+          setEvents([]);
+          setNextAuditCursor(undefined);
+          setKillSwitches([]);
+          setApprovals([]);
+        }
+        setError(errText(cause, t));
+      }
     } finally {
       if (gen === genRef.current) setLoading(false);
     }
-  }, [authorized, actionFilter, canReviewApprovals, t]);
+  }, [authorized, activeTab, actionFilter, canReviewApprovals, t]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -565,3 +578,6 @@ export function SecurityPage({pathname, roles}: {pathname: string; roles: Role[]
 }
 
 function errText(cause: unknown, t: (key: string) => string): string { return cause instanceof Error ? cause.message : t('common.requestFailed'); }
+function isForbiddenError(cause: unknown): boolean {
+  return Boolean(cause && typeof cause === 'object' && 'status' in cause && (cause as {status?: unknown}).status === 403);
+}

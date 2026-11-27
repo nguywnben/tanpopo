@@ -175,7 +175,7 @@ export function OverviewPage() {
                   <div className="tp-stack-sm" style={{minWidth: 0, flex: '1 1 240px'}}>
                     <div className="tp-row">
                       <StatusPill tone={alert.severity === 'PAGE' ? 'danger' : 'warn'} label={sevLabel} />
-                      <span style={{fontWeight: 600}}>{alert.summary}</span>
+                      <span style={{fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere'}}>{alert.summary}</span>
                     </div>
                     <span className="tp-muted mono">
                       {alert.alert_code} · {formatDateTime(alert.triggered_at)}

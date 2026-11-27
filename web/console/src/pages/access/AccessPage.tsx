@@ -70,6 +70,8 @@ export function AccessPage({
   const [traces, setTraces] = useState<components['schemas']['TraceSummary'][]>([]);
   const [availableModels, setAvailableModels] = useState<components['schemas']['LogicalModel'][]>([]);
   const [loading, setLoading] = useState(true);
+  const [keysRestricted, setKeysRestricted] = useState(false);
+  const [keysLoadError, setKeysLoadError] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -124,6 +126,8 @@ export function AccessPage({
     }
     setLoading(true);
     setError('');
+    setKeysRestricted(false);
+    setKeysLoadError('');
     const [keysRes, membersRes, tracesRes, modelsRes, depsRes] = await Promise.allSettled([
       hasEnvScope ? listVirtualKeys(projectId, environmentId) : Promise.resolve([] as VirtualKey[]),
       shouldFetchMembers ? listMembers(memberQueryProject) : Promise.resolve([] as Member[]),
@@ -134,8 +138,17 @@ export function AccessPage({
     if (refreshSeqRef.current !== seq) return;
     const failures: string[] = [];
     if (hasEnvScope) {
-      if (keysRes.status === 'fulfilled') setKeys(keysRes.value);
-      else failures.push(t('access.loadKeysFailed', {error: errText(keysRes.reason, t)}));
+      if (keysRes.status === 'fulfilled') {
+        setKeys(keysRes.value);
+      } else if (isForbiddenError(keysRes.reason)) {
+        setKeys([]);
+        setKeysRestricted(true);
+      } else {
+        const keyMsg = t('access.loadKeysFailed', {error: errText(keysRes.reason, t)});
+        setKeys([]);
+        setKeysLoadError(keyMsg);
+        failures.push(keyMsg);
+      }
     }
     if (shouldFetchMembers) {
       if (membersRes.status === 'fulfilled') setMembers(membersRes.value);
@@ -378,8 +391,8 @@ export function AccessPage({
         activeId={activeTab}
         onSelect={id => navigate(id === 'members' ? '/access/members' : '/access/virtual-keys')}
         items={[
-          {id: 'keys', label: t('access.tabKeys'), count: keys.length},
-          {id: 'members', label: t('access.tabMembers'), count: members.length},
+          {id: 'keys', label: t('access.tabKeys'), ...(keysRestricted || Boolean(keysLoadError) ? {} : {count: keys.length})},
+          {id: 'members', label: t('access.tabMembers'), ...(canReadMembers ? {count: members.length} : {})},
         ]}
       />
 
@@ -389,22 +402,30 @@ export function AccessPage({
 
       {activeTab === 'keys' ? (
         <section className="tp-section">
-          <SectionHeader title={t('access.envKeysTitle')} count={keys.length} />
-          <DataTable
-            ariaLabel={t('access.keysAria')}
-            loading={loading}
-            rows={keys}
-            rowKey={row => row.id}
-            emptyTitle={t('access.emptyKeysTitle')}
-            emptyDescription={t('access.emptyKeysDesc')}
-            emptyAction={
-              canManage && environmentId ? (
-                <Button variant="primary" size="md" onClick={() => setIssueOpen(true)}>
-                  <Plus size={14} aria-hidden="true" />
-                  <span>{t('access.issueKey')}</span>
-                </Button>
-              ) : undefined
-            }
+          <SectionHeader
+            title={t('access.envKeysTitle')}
+            {...(keysRestricted || Boolean(keysLoadError) ? {} : {count: keys.length})}
+          />
+          {keysRestricted ? (
+            <Banner tone="info" title={t('access.keysRestrictedTitle')}>
+              {t('access.keysRestrictedDesc')}
+            </Banner>
+          ) : (
+            <DataTable
+              ariaLabel={t('access.keysAria')}
+              loading={loading}
+              rows={keys}
+              rowKey={row => row.id}
+              emptyTitle={keysLoadError ? t('common.requestFailed') : t('access.emptyKeysTitle')}
+              emptyDescription={keysLoadError || t('access.emptyKeysDesc')}
+              emptyAction={
+                !keysLoadError && canManage && environmentId ? (
+                  <Button variant="primary" size="md" onClick={() => setIssueOpen(true)}>
+                    <Plus size={14} aria-hidden="true" />
+                    <span>{t('access.issueKey')}</span>
+                  </Button>
+                ) : undefined
+              }
             columns={[
               {id: 'name', header: t('common.name'), primary: true, width: '24%', render: row => <span style={{fontWeight: 600}}>{row.name}</span>},
               {id: 'key', header: t('access.col.prefixLast4'), width: '16%', render: row => <span className="mono">{row.key_prefix}…{row.last_four}</span>},
@@ -461,7 +482,8 @@ export function AccessPage({
                   ) : null,
               },
             ]}
-          />
+            />
+          )}
         </section>
       ) : !canReadMembers ? (
         <Banner tone="info">{t('access.membersNoRead')}</Banner>
@@ -825,3 +847,6 @@ export function AccessPage({
 }
 
 function errText(cause: unknown, t: (key: string) => string): string { return cause instanceof Error ? cause.message : t('common.requestFailed'); }
+function isForbiddenError(cause: unknown): boolean {
+  return Boolean(cause && typeof cause === 'object' && 'status' in cause && (cause as {status?: unknown}).status === 403);
+}

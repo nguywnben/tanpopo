@@ -2258,6 +2258,9 @@ export interface components {
             enforced_region?: string;
             sub_budget_hold_micros: number;
             settled_cost_micros?: number;
+            /** @enum {string} */
+            downstream_cancel_status?: "pending" | "acknowledged" | "unsupported" | "rejected" | "unreachable" | "local_only";
+            downstream_cancel_detail?: string;
             version?: number;
             /** Format: date-time */
             created_at: string;

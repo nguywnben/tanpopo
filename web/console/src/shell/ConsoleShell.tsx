@@ -41,6 +41,7 @@ import {
   purgeOrgScopedClientState,
   setActiveOrgId,
   subscribeCrossTabLogout,
+  subscribeForbidden,
   subscribeUnauthorized,
 } from '../api/client';
 import {listKillSwitches, listPendingApprovals, subscribeSecurityStateChanged} from '../api/managementClient';
@@ -228,6 +229,11 @@ export function ConsoleShell() {
     return () => { active = false; };
   }, [navigate]);
 
+  const sessionRef = useRef<Session | null>(null);
+  sessionRef.current = session;
+  const revalidateSessionRef = useRef<() => void>(() => {});
+  const lastPathnameRef = useRef(pathname);
+
   useEffect(() => {
     const resetAndRedirectToLogin = () => {
       setSession(null);
@@ -241,25 +247,79 @@ export function ConsoleShell() {
       setActiveSwitches(0);
       navigate('/login?reason=session_expired', {replace: true});
     };
-    const unsubUnauth = subscribeUnauthorized(resetAndRedirectToLogin);
-    const unsubCrossTab = subscribeCrossTabLogout(resetAndRedirectToLogin);
-    const unsubSec = subscribeSecurityStateChanged(() => {
-      const userRoles = session?.roles ?? [];
-      if (!userRoles.some(role => emergencyRoles.includes(role))) return;
+    const refreshSecurityCounts = (userRoles: Role[]) => {
+      if (!userRoles.some(role => emergencyRoles.includes(role))) {
+        setActiveSwitches(0);
+        setPendingApprovals(0);
+        return;
+      }
       void Promise.allSettled([
         listKillSwitches(),
         userRoles.some(role => approvalRoles.includes(role)) ? listPendingApprovals() : Promise.resolve([]),
       ]).then(([switchesRes, approvalsRes]) => {
         if (switchesRes.status === 'fulfilled') setActiveSwitches(switchesRes.value.length);
+        else setActiveSwitches(0);
         if (approvalsRes.status === 'fulfilled') setPendingApprovals(approvalsRes.value.length);
+        else setPendingApprovals(0);
       });
+    };
+    let revalidating = false;
+    const revalidateSession = () => {
+      if (revalidating || !sessionRef.current) return;
+      revalidating = true;
+      void getAdminSession()
+        .then(fresh => {
+          setSession(prev => {
+            if (
+              prev
+              && prev.principal_id === fresh.principal_id
+              && prev.org_id === fresh.org_id
+              && prev.multi_org_enabled === fresh.multi_org_enabled
+              && prev.roles.length === fresh.roles.length
+              && prev.roles.every((role, idx) => role === fresh.roles[idx])
+            ) {
+              return prev;
+            }
+            refreshSecurityCounts(fresh.roles);
+            return fresh;
+          });
+        })
+        .catch(() => {
+          // 401 is handled globally via subscribeUnauthorized; ignore transient network errors.
+        })
+        .finally(() => {
+          revalidating = false;
+        });
+    };
+    revalidateSessionRef.current = revalidateSession;
+
+    const unsubUnauth = subscribeUnauthorized(resetAndRedirectToLogin);
+    const unsubCrossTab = subscribeCrossTabLogout(resetAndRedirectToLogin);
+    const unsubForbidden = subscribeForbidden(revalidateSession);
+    const unsubSec = subscribeSecurityStateChanged(() => {
+      refreshSecurityCounts(sessionRef.current?.roles ?? []);
     });
+    const onFocus = () => revalidateSession();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') revalidateSession();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       unsubUnauth();
       unsubCrossTab();
+      unsubForbidden();
       unsubSec();
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [navigate, session]);
+  }, [navigate]);
+
+  useEffect(() => {
+    if (lastPathnameRef.current === pathname) return;
+    lastPathnameRef.current = pathname;
+    revalidateSessionRef.current();
+  }, [pathname]);
 
   async function refreshOrganizations() {
     try {
@@ -763,7 +823,7 @@ export function ConsoleShell() {
             <Banner tone="danger" title={t('shell.contextUnavailableTitle')}>
               {offline ? t('shell.contextOfflineDesc') : t('shell.contextErrorDesc')}
             </Banner>
-          ) : (
+          ) : !session ? null : (
             <Suspense fallback={<p className="tp-muted" role="status">{t('shell.loadingSection')}</p>}>
               <WorkspaceRouter
                 key={`${activeOrgId}:${orgSwitchEpoch}`}
