@@ -249,3 +249,12 @@ Evidence: [CP110 checkpoint](checkpoints/CP110-def073-tampered-archive-integrity
 | Bootstrap fresh instance with no adapter and inspect route-readiness claims | PARTIAL | Exact RC7 fresh SQLite/Owner/Chromium 156. Setup headline accurately describes primary Org/Owner initialization; First connection explicitly says no adapters are enabled and instructs adapter activation before connection creation; Review says connection skipped. After actual completion, API showed zero routes and the Console displayed the matching Routes empty state. DB readback: one Org/Project/environment and zero provider connections/models/deployments/route policies/targets. No provider calls. | Adapter-enabled end-to-end setup with connection/model/deployment/route creation and persistent inference readiness; other browsers/platforms/locales and accessibility remain open. |
 
 Evidence: [CP111 checkpoint](checkpoints/CP111-def049-fresh-no-adapter-setup.md), [sanitized readback](evidence/CP111-def049-fresh-no-adapter-setup.json), and five visually inspected screenshots.
+
+
+## CP112 — DEF-009 WebKit/WPE mobile webhook drawer
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Operations → Webhooks → Add webhook at mobile widths | PASS (scoped WPE WebKit) | Exact RC7 isolated SQLite clone / synthetic Owner / Playwright WebKit-WPE 26.5 over HTTPS. At 375×812 and 320×740 the real drawer header, URL, signing credential, event controls and bottom actions were visible; document/body widths equaled viewport; Webhooks and secrets reads returned HTTP 200; no page errors. No submit/write. Screenshots visually inspected. | Native Safari on macOS/iOS, other roles/locales/widths, keyboard, touch, screen-reader and form-submit validation. Historical conflicting QA-001 runs remain. |
+
+Evidence: [CP112 checkpoint](checkpoints/CP112-def009-webkit-webhook-drawer.md), [sanitized result](evidence/CP112-def009-webkit-webhook-drawer.json), and three visually inspected screenshots.

@@ -1,0 +1,68 @@
+{
+  "checkpoint": "CP112",
+  "finding": "DEF-009",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "database": "isolated SQLite clone on 127.0.0.1:18164",
+    "browser_engine": "Playwright 1.62.1 WebKit/WPE 26.5 (userAgent reports Version/26.5 Safari/605.1.15)",
+    "origin": "HTTPS loopback reverse proxy 127.0.0.1:19446 to exact RC7 runtime; ephemeral test certificate; HTTPS used for Secure session cookie",
+    "actor": "synthetic QA Owner"
+  },
+  "workflow": {
+    "path": "Operations > Webhooks > Add webhook",
+    "webhook_count": 0,
+    "viewport_375x812": {
+      "document_width": 375,
+      "body_width": 375,
+      "drawer_visible": true,
+      "receiver_url_field_visible": true,
+      "credential_selector_visible": true,
+      "events_selector_visible": true,
+      "cancel_action_visible": true,
+      "register_action_visible": true
+    },
+    "viewport_320x740": {
+      "document_width": 320,
+      "body_width": 320,
+      "drawer_visible": true,
+      "receiver_url_field_visible": true,
+      "credential_selector_visible": true,
+      "events_selector_visible": true,
+      "cancel_action_visible": true,
+      "register_action_visible": true
+    },
+    "admin_api_read_statuses": {
+      "GET /admin/v1/webhooks": 200,
+      "GET /admin/v1/secrets": 200
+    },
+    "page_errors": [],
+    "writes": 0,
+    "webhook_post": false,
+    "new_secret_created": false
+  },
+  "result": "PASS (scoped WPE WebKit retest)",
+  "limitations": [
+    "WPE WebKit engine only; no native Safari/macOS/iOS validation.",
+    "Only Owner role and 320/375 CSS viewports; other roles, rotation, keyboard/screen-reader/touch and event-selection edge cases remain unverified.",
+    "Form was opened and inspected only; it was not submitted and no webhook or secret was created.",
+    "Historical QA-001 conflicting WebKit observations remain preserved."
+  ],
+  "screenshots": [
+    {
+      "path": "screenshots/CP112-def009-webkit-webhooks-375.png",
+      "sha256": "1386faea9332ad1bf1f419e9f0d496fc8c4f89697044ccebc453b1e660c385b7",
+      "inspection": "At 375x812, Webhooks tab, zero-row empty state and Add webhook action were visually visible without document overflow."
+    },
+    {
+      "path": "screenshots/CP112-def009-webkit-add-drawer-375.png",
+      "sha256": "30247f002ad105e1cae26ee6132d0d4bb5a6b6e9d49145c3585a805f01656f6b",
+      "inspection": "At 375x812, drawer header, receiver URL, signing-credential selector, event selector, Cancel and Register webhook controls fit in view."
+    },
+    {
+      "path": "screenshots/CP112-def009-webkit-add-drawer-320.png",
+      "sha256": "acb72832771bb8d38129c6212e2c0febda280bf011eca98626f46f55b1fd0b15",
+      "inspection": "At 320x740, drawer and form controls remain visible; document/body width equals the viewport."
+    }
+  ]
+}
