@@ -78,7 +78,7 @@ CP51 exercised the frozen Valkey-unreachable/PostgreSQL-healthy degraded-mode co
 
 ## Defect register and recommended priorities
 
-The complete DEF-001–079 intake ledger is [DEFECT-REGRESSION-LEDGER.md](DEFECT-REGRESSION-LEDGER.md); it retains each historical QA-004 classification and begins QA-005 with UNVERIFIED. QA-005 has changed only DEF-075 to PARTIAL based on fresh, limited runtime evidence; CP69 adds contradictory exact-source observations and does not close the lifecycle finding. Full new findings are in [NEW-DEFECT-REGISTER.md](NEW-DEFECT-REGISTER.md).
+The complete DEF-001–079 intake ledger is [DEFECT-REGRESSION-LEDGER.md](DEFECT-REGRESSION-LEDGER.md); it retains each historical QA-004 classification and begins QA-005 with UNVERIFIED. QA-005 has freshly scoped-passed DEF-038 on exact RC7 (CP70) and changed DEF-075 to PARTIAL based on fresh, limited runtime evidence; CP69 adds contradictory exact-source observations and does not close the lifecycle finding. Full new findings are in [NEW-DEFECT-REGISTER.md](NEW-DEFECT-REGISTER.md).
 
 Recommended stabilization sequence:
 
@@ -155,6 +155,7 @@ Coverage remains incomplete for the 42 unverified historical findings, PostgreSQ
 - CP67: DEF-006 pure Team Admin invitation and activation; DEF-016 filtered member-list read/refresh and unscoped-list denial
 - CP68: DEF-020 project kill-switch trigger/clear, same-session badge reconciliation and audit event readback
 - CP69: DEF-075 correlated key rotation at T+30/T+61 with conflicting post-deadline lifecycle/audit observations
+- CP70: DEF-038 exact-RC7 Console crypto-shred, post-shred backup verify/restore, restored service and audit verification
 - CP51: full Valkey outage RPM/revocation fallback and cluster recovery
 - CP52: PostgreSQL + Valkey dual-dependency partition fail-closed acceptance and isolated test environment recovery
 - CP50: DEF-069 PostgreSQL/Valkey delayed-work cancellation with nonzero hold and durable reservation-state readback
