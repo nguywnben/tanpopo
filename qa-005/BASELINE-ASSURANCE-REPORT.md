@@ -362,3 +362,6 @@ CP119 used the real Providers Console and exact RC7 runtime to send two connecti
 
 
 CP120 added a scoped SSRF redirect pass: an exact-RC7 real Owner provider probe configured for 127.0.0.1:19100 received a redirect to a harmless sentinel at 127.0.0.1:19101. The redirector received one GET; the sentinel received none; Tanpopo returned upstream_unreachable. The connection was deleted with HTTP 204. This demonstrates host/port redirect isolation for the tested loopback fixture. It does not prove rejection of the metadata IP in CP119, which remains PARTIAL without socket-level evidence. No new defect; PG-013 remains the failure-feedback gap. See [CP120](checkpoints/CP120-provider-redirect-host-port-scope.md) and [evidence](evidence/CP120-provider-redirect-host-port.json).
+
+
+CP121 cross-compiled the frozen source for Windows amd64 with Go 1.26.11 and identified a PE32+ executable (SHA-256 in [evidence](evidence/CP121-windows-amd64-cross-build.json)). This is a compile-only PASS; no Windows host is attached, so runtime, service shutdown, filesystem, drivers, networking and recovery remain UNVERIFIED/BLOCKED. The artifact was ephemeral RAM data, not committed. No new defect. See [CP121](checkpoints/CP121-windows-amd64-cross-build.md).

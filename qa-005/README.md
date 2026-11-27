@@ -196,3 +196,6 @@ CP119 tested the real exact-RC7 Provider connection probe against a local fixtur
 
 
 CP120 independently confirmed a scoped provider redirect boundary: real probe from the configured local host:port reached a same-IP/different-port sentinel zero times; probe returned upstream_unreachable and cleanup returned 204. This is a scoped pass for host/port isolation. CP119's distinct redirect to the metadata address remains PARTIAL because no socket-level telemetry was available. No new defect; PG-013 remains open. See [CP120](checkpoints/CP120-provider-redirect-host-port-scope.md), [sanitized result](evidence/CP120-provider-redirect-host-port.json), and inspected screenshots.
+
+
+CP121 successfully cross-compiled exact RC7 for Windows amd64 using the cached Go 1.26.11 toolchain; PE32+ artifact SHA-256 is in [evidence](evidence/CP121-windows-amd64-cross-build.json). This does not establish Windows runtime behavior. The host is Linux-only, so Windows service/filesystem/network/database/browser and recovery testing remain UNVERIFIED/BLOCKED; temporary binary remained in RAM and was not committed. See [CP121](checkpoints/CP121-windows-amd64-cross-build.md).

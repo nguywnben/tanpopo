@@ -53,3 +53,8 @@ CP118 used an ephemeral copy under per-command RAM `/dev/shm`, source clone hash
 ## CP120 local redirect target
 
 The supplemental provider probe used exact RC7 on the existing isolated SQLite Owner runtime and Chromium 156. Two ephemeral Node HTTP listeners bound only to loopback: configured host at 127.0.0.1:19100 and receiver sentinel at 127.0.0.1:19101. The redirect response was deterministic and local. No provider credential was configured. Both listeners were closed after the probe; the temporary connection was deleted and readback showed no row. Evidence: [CP120 JSON](evidence/CP120-provider-redirect-host-port.json).
+
+
+## CP121 Windows cross-build
+
+The QA host includes Go 1.26.11 under `/tmp/qa005-go-root/go` and module cache `/tmp/qa-gopath/pkg/mod`. Linux overlay was full, so CP121 redirected Go work/temp/cache and the output PE artifact to per-command RAM. The resulting Windows amd64 file was identified as PE32+ x86-64, SHA-256 `47a4ff222a878c2cc3858c6339e54936af86665612b06bfb4798e3ab7efe96db`. It was not run and was not committed. No native Windows execution host is available in this campaign.
