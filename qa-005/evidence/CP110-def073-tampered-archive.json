@@ -1,0 +1,54 @@
+{
+  "checkpoint": "CP110",
+  "finding": "DEF-073",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "database": "isolated exact-RC7 SQLite online-backup clone, 127.0.0.1:18164",
+    "browser": "Chromium 156",
+    "actor": "synthetic QA Owner"
+  },
+  "fixture": {
+    "package_id": "@qa004/lifecycle-canary",
+    "original_archive_bytes": 362,
+    "mutated_archive_bytes": 362,
+    "mutation": "one trailing byte changed; the package archive was not installed or executed",
+    "source_uri": "tanpopo-local://cp109-tampered.tpkg",
+    "original_expected_sha256": "59841233bee7df19e9a45a4de9e38d1cf7818bc1fc1e80951102add6232b9964",
+    "mutated_actual_sha256": "675dbba90b6c2534113eb529a1c475deb12b43011f7388448e571f87b313e3c1"
+  },
+  "reproduction": {
+    "workflow": "Extensions > Stage package; submit mutated local archive while retaining original archive SHA-256 pin",
+    "http": 400,
+    "api_error_code": "hash_mismatch",
+    "api_message": "extension package SHA-256 digest does not match expected value",
+    "console_message": "The archive bytes do not match the expected SHA-256 digest. Re-verify the source package and only recalculate the digest for an intentionally trusted artifact.",
+    "submitted_uri_retained_while_error_open": true,
+    "submitted_digest_retained_while_error_open": true,
+    "readback_http": 200,
+    "existing_installation_count": 3,
+    "canary_active_version": "0.1.0",
+    "canary_state": "ENABLED_ACTIVE",
+    "candidate_version": null,
+    "new_installation_created": false
+  },
+  "result": "PASS (scoped)",
+  "limitations": [
+    "One trailing-byte mutation and local archive resolver only; OCI/Git sources and alternate archive/parser/signature attacks remain unverified.",
+    "The isolated clone already contained the synthetic canary from CP109; the baseline database was not changed.",
+    "Other roles, browsers and backends were not tested.",
+    "No provider requests, external calls, production keys or paid usage."
+  ],
+  "screenshots": [
+    {
+      "path": "screenshots/CP110-def073-tampered-archive-form-retained.png",
+      "sha256": "80e9c97d297c0413936601d2e348151a4af1bb13bc0157c6f59b88ec6842d251",
+      "inspection": "Visually confirmed mutated package URI and original digest remain in the open form after failure; the specific digest mismatch and safe recovery guidance are shown."
+    },
+    {
+      "path": "screenshots/CP110-def073-tampered-archive-error.png",
+      "sha256": "dd26a5daf48ec47112e460a8634f7a761ea8cf9b740d274bc90eccac1474c832",
+      "inspection": "After closing the form, visually confirmed the full integrity message; active canary remains at 0.1.0 and no candidate is displayed."
+    }
+  ]
+}

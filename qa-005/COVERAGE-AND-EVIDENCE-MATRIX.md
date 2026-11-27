@@ -231,3 +231,12 @@ Evidence: [CP108 checkpoint](checkpoints/CP108-def043-rc7-builtin-provenance.md)
 | Retry identical rejected immutable extension candidate | PASS (scoped) | Same 0.1.1 archive and digest returned HTTP 409 `resource_already_exists`; active 0.1.0 remained unchanged. Real Console gave specific duplicate-version and new-SemVer/updated-digest guidance, visually captured with the full message unobscured. | Other conflict conditions, role/backend/browser matrix, generic versus package-version edge cases. |
 
 Evidence: [CP109 checkpoint](checkpoints/CP109-def061-def062-extension-rejection-retry.md), [sanitized workflow/audit record](evidence/CP109-def061-def062-extension-discard-and-retry.json), and seven visually inspected screenshots.
+
+
+## CP110 — DEF-073 tampered archive digest feedback
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Reject archive content that does not match the operator’s pinned SHA-256 | PASS (scoped) | Exact RC7 SQLite clone / Owner / Chromium 156. One byte of a 362-byte synthetic manifest-only archive was flipped while the original digest was submitted. API returned HTTP 400 `hash_mismatch`; the Console showed specific digest mismatch and safe re-verification guidance, retained the URI/digest while the form remained open, and readback confirmed unchanged active 0.1.0 with no candidate or new installation. Screenshots visually inspected. | Git/OCI sources, alternate digest/signature/archive parser attacks, successful retry, other roles/backends/browsers and all error mappings. Historical RC6 FAIL remains preserved. |
+
+Evidence: [CP110 checkpoint](checkpoints/CP110-def073-tampered-archive-integrity-error.md), [sanitized result](evidence/CP110-def073-tampered-archive.json), and two visually inspected screenshots.
