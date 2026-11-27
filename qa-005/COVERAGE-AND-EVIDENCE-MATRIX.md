@@ -194,3 +194,12 @@ Evidence: [CP104 checkpoint](checkpoints/CP104-def032-provider-identity.md), [sa
 | Exact duplicate connections through list, Models picker, edit, Probe, disable and delete | PASS (scoped) | Exact RC7 SQLite/Owner/Chromium 156. Two disposable same-project pairs matched on name, adapter, endpoint, billing, region and allowlist. Short IDs distinguished list and picker rows; edit/delete confirmation named the selected ID. Probe (HTTP 200, `valid:true`, 7 ms), disable (PATCH 200), and delete (204) affected only the selected record; API/UI readback preserved the sibling until its own deletion. Final readback contained no temporary pair. | Other roles, browser engines, backends, pagination and long IDs. Historical QA-002 evidence remains preserved. |
 
 Evidence: [CP105 checkpoint](checkpoints/CP105-def032-exact-duplicate-provider-identity.md), [sanitized result and hashes](evidence/CP105-def032-exact-duplicate-provider-identity.json), and seven visually inspected screenshots.
+
+
+## CP106 — DEF-039 project policy at No env
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Narrow and restore project data-region policy with no environment selected | PASS (scoped) | Exact RC7 Owner/SQLite/Chromium 156. Real Console at QA005 project / No env saved `ON_PREM` only (HTTP 200), restored all four regions (HTTP 200/version 2), and a hard reload plus explicit No env reselection returned the restored project policy at ETag v2. No route/deployment mutation or inference. | Team Admin, stale concurrent writer, parent-relaxation rejection, guardrails, PostgreSQL/Valkey, other browsers and keyboard/screen-reader paths. The `policy.created` / `policy.updated` events appear at seq 567/568; real Console chain verification returned intact across 574 events. QA database retains an explicit v2 project policy with the original effective all-region value. |
+
+Evidence: [CP106 checkpoint](checkpoints/CP106-def039-project-policy-no-environment-rc7.md), [sanitized API/UI/audit record](evidence/CP106-def039-project-policy-no-environment.json), and seven visually inspected screenshots.
