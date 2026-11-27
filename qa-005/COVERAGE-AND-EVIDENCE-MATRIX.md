@@ -283,3 +283,12 @@ Evidence: [CP115 checkpoint](checkpoints/CP115-a2a-resume-and-zero-budget-dispat
 | Live A2A SSE snapshot and resumed lifecycle updates | PASS (scoped) | Exact RC7 SQLite clone, authorized A2A-only `/a2a/*` key, Chromium Owner Console, deterministic delayed loopback agent. GET task with `Accept: text/event-stream` returned HTTP 200 and `task.status` input-required v3; real Console resume streamed working v4 and completed v5; independent GET/SQLite readback matched, exact 2,000/10,000 micro-USD hold and one artifact; key revoked and chain verified. | Subscription began after synchronous create; initial submitted/working transitions not seen by SSE subscriber. Alternate roles/backends/engines, A2A partner interoperability, cancellation, errors/retry/timeouts and multihop remain open. |
 
 Evidence: [CP116 checkpoint](checkpoints/CP116-a2a-sse-resume.md), [sanitized SSE and state record](evidence/CP116-a2a-sse-lifecycle.json), visually inspected screenshots under `evidence/screenshots/CP116-a2a-*`. PG-012 records the visible PROVIDER default as a separate safe-default product gap.
+
+
+## CP117 — FinOps budget identity migration
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| SQLite→PostgreSQL engine migration with real Console-created budget rows | FAIL (DEF-086) | Exact RC7 binary, source clone from CP116 and isolated PostgreSQL 16 RAM target, restricted migration role. Valid CP35 IDs of length 50 and 55 fail at PostgreSQL `budget_ledgers.id VARCHAR(40)`; row-copy transaction rolls back and target application row counts remain zero. | Other table/field width mismatches, high-volume data, every budget scope/period, full financial/Vault/audit parity, migrated API/UI reads and settlements. |
+
+Evidence: [CP117](checkpoints/CP117-finops-postgres-migration-budget-id-overflow.md), [sanitized migration record](evidence/CP117-finops-postgres-migration.json), [DEF-086 handoff](reports/DEF-086-budget-ledger-id-postgres-migration-overflow.md). Disk-backed Docker creation is BLOCKED by a 100%-used managed overlay; the RAM-backed isolated server provided a meaningful migration test. No image/volume cleanup was performed.

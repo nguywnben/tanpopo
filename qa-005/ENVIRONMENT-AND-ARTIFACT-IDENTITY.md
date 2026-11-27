@@ -39,3 +39,8 @@ See [CP00](checkpoints/CP00-baseline-identity.md) and [machine-readable build pr
 ## CP24 A2A runtime variant
 
 A separate SQLite online-backup clone was started on `127.0.0.1:18147` from the QA SQLite test DB. The clone used the same local exact-source RC7 binary and test master-key file, with `TANPOPO_A2A_ENABLED=true`; the baseline process on `127.0.0.1:18145` remained A2A-disabled by default. The local A2A mock was bound only to `127.0.0.1:19092` and allowed via the explicit QA-only `127.0.0.1/32` CIDR. The A2A Virtual Key secret, database copy, and test trust material are outside the repository in `/tmp`.
+
+
+## CP117 migration test target and current storage limit
+
+The managed overlay had 0 free bytes (100% used), so a new disk-backed PostgreSQL container could not initialize; no existing image, container or QA evidence was removed. To continue independently, CP117 launched a separate PostgreSQL 16 process in the existing QA-only container's 64-MiB `/dev/shm`, on a separate process port and fresh database, with a dedicated `NOSUPERUSER NOBYPASSRLS` migration role. A local-only tunnel exposed that process for the exact-source migration. The process, log and tunnel were stopped/removed; tmpfs returned to 1 MiB used. The existing QA PostgreSQL database was not modified. Detailed identity, rollback and command evidence: [CP117 JSON](evidence/CP117-finops-postgres-migration.json). Disk-backed infrastructure work may remain blocked until managed storage is made available; other tests that fit existing isolated runtimes remain executable.
