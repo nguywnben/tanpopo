@@ -1,0 +1,48 @@
+{
+  "checkpoint": "CP101",
+  "finding": "DEF-084",
+  "classification": "FAIL (fresh QA-005 reproduction)",
+  "severity": "Low",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite through TLS proxy https://127.0.0.1:19444",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER",
+  "route": "/overview",
+  "scope": "populated synthetic QA organization/project/environment",
+  "viewports": [
+    {
+      "viewport": "375x844",
+      "document_scroll_width_px": 413,
+      "body_scroll_width_px": 413,
+      "horizontal_overflow_px": 38,
+      "screenshot": "screenshots/CP101-overview-mobile-375.png"
+    },
+    {
+      "viewport": "320x844 after hard refresh",
+      "document_scroll_width_px": 413,
+      "body_scroll_width_px": 413,
+      "horizontal_overflow_px": 93,
+      "screenshot": "screenshots/CP101-overview-mobile-320.png"
+    }
+  ],
+  "visible_active_alert": "PROJECT budget bgt_project_prj_01m8d6dbtxe008w7fphkgp2e24_monthly exceeded 80% utilization.",
+  "measured_alert_text_span": {
+    "x_px": 27,
+    "right_px": 413,
+    "width_px": 386,
+    "white_space": "normal",
+    "word_break": "normal",
+    "overflow_wrap": "normal"
+  },
+  "overview_summary_http": 200,
+  "other_admin_api_failures": [],
+  "page_errors": [],
+  "remediate_button_visible": true,
+  "hard_refresh_reproduced": true,
+  "writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "historical_defect_records_modified": false,
+  "gate_rel_07": "BLOCKED"
+}

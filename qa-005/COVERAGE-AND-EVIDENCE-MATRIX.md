@@ -149,3 +149,12 @@ Evidence: [CP99 checkpoint](checkpoints/CP99-def031-mobile-invalid-cidr-feedback
 | Route target selection and selected target identity | PARTIAL | Exact RC7 Owner Console, SQLite, Chromium 156 at 1440×1000. Picker options included provider-connection display name, model, short deployment ID, region and health. Two same-model `qa005-native:latest` candidates had distinct IDs; selecting one preserved the identifier in the target card. Real screenshots inspected, drawer canceled, zero route writes and zero provider calls. | Historical 3-connection, same-model, healthy failover case; saved multi-target route summary; actual 503→200 failover and trace ordering; edit/reorder; other roles, scopes, backends and browsers. |
 
 Evidence: [CP100 checkpoint](checkpoints/CP100-def027-route-target-identity.md), [sanitized JSON](evidence/CP100-def027-route-target-identity.json), and three visually inspected screenshots.
+
+
+## CP101 — DEF-084 mobile Overview alert overflow
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Overview active-alert rendering at 375px and 320px | FAIL — new DEF-084 (Low) | Exact RC7 Owner Console/SQLite/Chromium 156. The loaded synthetic budget alert widened document and body scroll width to 413px: 38px beyond 375px and 93px beyond 320px after a hard refresh. Screenshot shows the long identifier clipped. Summary API returned 200; no API/page errors or writes. | Other alerts and identifier types/locales, keyboard/screen readers, dynamic updates, WebKit/Firefox, backend variants, and desktop comparison. |
+
+Evidence: [CP101 checkpoint](checkpoints/CP101-overview-mobile-alert-overflow.md), [sanitized geometry/API JSON](evidence/CP101-overview-mobile-alert-overflow.json), and visually inspected [375px](evidence/screenshots/CP101-overview-mobile-375.png) / [320px](evidence/screenshots/CP101-overview-mobile-320.png) screenshots.
