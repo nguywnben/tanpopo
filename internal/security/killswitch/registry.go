@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -983,41 +984,28 @@ func (r *Registry) ListWithFilter(ctx context.Context, filter ListFilter) ([]Kil
 		return nil, fmt.Errorf("%w: org_id is required unless AllowInstanceScope is enabled", port.ErrInvalidInput)
 	}
 
-	query := `
+	const selectCols = `
 		SELECT id, org_id, level, target_id, active, abort_active_streams, reason,
 		       triggered_by_principal_id, cleared_by_principal_id, clear_reason, version,
 		       triggered_at_ms, cleared_at_ms
 		FROM emergency_kill_switches
 		WHERE 1=1`
-	var args []any
-
-	if trimmedOrg != "" {
-		if filter.AllowInstanceScope {
-			query += ` AND (org_id = ? OR org_id IS NULL)`
-			args = append(args, trimmedOrg)
-		} else {
-			query += ` AND org_id = ?`
-			args = append(args, trimmedOrg)
-		}
-	}
+	activeClause := ""
 	if filter.ActiveOnly {
-		query += ` AND active = ` + port.BoolExpr(r.dialect, true)
+		activeClause = ` AND active = ` + port.BoolExpr(r.dialect, true)
 	}
-	query += ` ORDER BY triggered_at_ms DESC`
 
-	if r.dialect == port.DialectPostgres && trimmedOrg == "" && filter.AllowInstanceScope {
+	if r.dialect == port.DialectPostgres && filter.AllowInstanceScope {
 		tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 		if err != nil {
 			return nil, fmt.Errorf("killswitch: begin list tx: %w", err)
 		}
 		defer func() { _ = tx.Rollback() }()
-		orgIDs, err := port.ListOrgIDsTx(ctx, tx, r.dialect)
-		if err != nil {
-			return nil, err
-		}
+
 		var out []KillSwitch
-		appendRows := func() error {
-			rows, qerr := tx.QueryContext(ctx, port.Rebind(r.dialect, query), args...)
+		seen := make(map[string]struct{})
+		appendQuery := func(q string, args ...any) error {
+			rows, qerr := tx.QueryContext(ctx, port.Rebind(r.dialect, q), args...)
 			if qerr != nil {
 				return fmt.Errorf("killswitch: list switches: %w", qerr)
 			}
@@ -1027,23 +1015,64 @@ func (r *Registry) ListWithFilter(ctx context.Context, filter ListFilter) ([]Kil
 				if serr != nil {
 					return serr
 				}
+				if _, exists := seen[ks.ID]; exists {
+					continue
+				}
+				seen[ks.ID] = struct{}{}
 				out = append(out, ks)
 			}
 			return rows.Err()
 		}
-		if err := appendRows(); err != nil {
+
+		// 1. Collect global instance-scoped switches (org_id IS NULL) under operator RLS.
+		if err := port.SetOperatorRLSTx(ctx, tx, r.dialect); err != nil {
 			return nil, err
+		}
+		if err := appendQuery(selectCols + ` AND org_id IS NULL` + activeClause + ` ORDER BY triggered_at_ms DESC`); err != nil {
+			return nil, err
+		}
+
+		// 2. Collect org-scoped switches either for trimmedOrg or all organizations under strict org RLS.
+		var orgIDs []string
+		if trimmedOrg != "" {
+			orgIDs = []string{trimmedOrg}
+		} else {
+			var listErr error
+			orgIDs, listErr = port.ListOrgIDsTx(ctx, tx, r.dialect)
+			if listErr != nil {
+				return nil, listErr
+			}
 		}
 		for _, oid := range orgIDs {
 			if err := port.SetOrgRLSTx(ctx, tx, r.dialect, oid); err != nil {
 				return nil, err
 			}
-			if err := appendRows(); err != nil {
+			if err := appendQuery(selectCols+` AND org_id = ?`+activeClause+` ORDER BY triggered_at_ms DESC`, oid); err != nil {
 				return nil, err
 			}
 		}
+
+		sort.Slice(out, func(i, j int) bool {
+			if out[i].TriggeredAtMs != out[j].TriggeredAtMs {
+				return out[i].TriggeredAtMs > out[j].TriggeredAtMs
+			}
+			return out[i].ID < out[j].ID
+		})
 		return out, nil
 	}
+
+	query := selectCols
+	var args []any
+	if trimmedOrg != "" {
+		if filter.AllowInstanceScope {
+			query += ` AND (org_id = ? OR org_id IS NULL)`
+			args = append(args, trimmedOrg)
+		} else {
+			query += ` AND org_id = ?`
+			args = append(args, trimmedOrg)
+		}
+	}
+	query += activeClause + ` ORDER BY triggered_at_ms DESC`
 
 	var out []KillSwitch
 	err := r.withReadScopeTx(ctx, trimmedOrg, func(q sqlQueryer) error {
@@ -1145,17 +1174,84 @@ func verifyPrincipalAndTargetTx(ctx context.Context, tx *sql.Tx, d port.Dialect,
 }
 
 func verifyPrincipalMembershipForScopeTx(ctx context.Context, tx *sql.Tx, d port.Dialect, orgID, principalID string) error {
-	if d == port.DialectPostgres {
-		// Allow reading either instance-scoped operator (org_id IS NULL) or org-scoped principal.
-		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true), set_config('app.current_org_id', $1, true)`, orgID); err != nil {
-			return fmt.Errorf("killswitch: set membership RLS context: %w", err)
+	if err := port.SetOperatorRLSTx(ctx, tx, d); err != nil {
+		return fmt.Errorf("killswitch: set operator RLS context: %w", err)
+	}
+	opCount, err := countInstanceOperatorRoleTx(ctx, tx, d, principalID)
+	if err != nil {
+		return err
+	}
+	if opCount > 0 {
+		var status string
+		found := false
+		q := port.Rebind(d, `SELECT status FROM principals WHERE id = ?`)
+		err := tx.QueryRowContext(ctx, q, principalID).Scan(&status)
+		switch {
+		case err == nil:
+			found = true
+		case !errors.Is(err, sql.ErrNoRows):
+			return fmt.Errorf("killswitch: verify operator principal: %w", err)
+		case d == port.DialectPostgres:
+			// Bootstrapped / org-bound INSTANCE OPERATOR principals carry a non-null org_id.
+			// Forced RLS on principals intentionally hides non-null org_id rows when current_org_id='',
+			// so resolve only after verifying an authoritative org_id=NULL INSTANCE OPERATOR binding.
+			if orgID != "" {
+				if rerr := port.SetOrgRLSTx(ctx, tx, d, orgID); rerr != nil {
+					return fmt.Errorf("killswitch: set org RLS context for operator lookup: %w", rerr)
+				}
+				err = tx.QueryRowContext(ctx, q, principalID).Scan(&status)
+				if err == nil {
+					found = true
+				} else if !errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("killswitch: verify org-bound operator principal: %w", err)
+				}
+			}
+			if !found {
+				orgIDs, listErr := port.ListOrgIDsTx(ctx, tx, d)
+				if listErr != nil {
+					return fmt.Errorf("killswitch: list orgs for operator lookup: %w", listErr)
+				}
+				for _, oid := range orgIDs {
+					if oid == orgID {
+						continue
+					}
+					if rerr := port.SetOrgRLSTx(ctx, tx, d, oid); rerr != nil {
+						return fmt.Errorf("killswitch: set org %q RLS context for operator lookup: %w", oid, rerr)
+					}
+					err = tx.QueryRowContext(ctx, q, principalID).Scan(&status)
+					if err == nil {
+						found = true
+						break
+					}
+					if !errors.Is(err, sql.ErrNoRows) {
+						return fmt.Errorf("killswitch: verify org-bound operator principal: %w", err)
+					}
+				}
+			}
+			if rerr := setScopeRLSTx(ctx, tx, d, orgID); rerr != nil {
+				return rerr
+			}
 		}
+		if !found {
+			return port.ErrNotFound
+		}
+		if status != "ACTIVE" {
+			return fmt.Errorf("%w: principal %q is not ACTIVE (status=%s)", port.ErrInvalidInput, principalID, status)
+		}
+		return nil
+	}
+
+	if orgID == "" {
+		return ErrPermissionDenied
+	}
+	if err := port.SetOrgRLSTx(ctx, tx, d, orgID); err != nil {
+		return fmt.Errorf("killswitch: set membership RLS context: %w", err)
 	}
 	var (
 		pOrgID sql.NullString
 		status string
 	)
-	err := tx.QueryRowContext(ctx, port.Rebind(d, `SELECT org_id, status FROM principals WHERE id = ?`), principalID).Scan(&pOrgID, &status)
+	err = tx.QueryRowContext(ctx, port.Rebind(d, `SELECT org_id, status FROM principals WHERE id = ? AND org_id = ?`), principalID, orgID).Scan(&pOrgID, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return port.ErrNotFound
 	}
@@ -1165,16 +1261,6 @@ func verifyPrincipalMembershipForScopeTx(ctx context.Context, tx *sql.Tx, d port
 	if status != "ACTIVE" {
 		return fmt.Errorf("%w: principal %q is not ACTIVE (status=%s)", port.ErrInvalidInput, principalID, status)
 	}
-	opCount, err := countInstanceOperatorRoleTx(ctx, tx, d, principalID)
-	if err != nil {
-		return err
-	}
-	if opCount > 0 {
-		return nil
-	}
-	if orgID == "" {
-		return ErrPermissionDenied
-	}
 	if !pOrgID.Valid || pOrgID.String != orgID {
 		return port.ErrNotFound
 	}
@@ -1182,10 +1268,8 @@ func verifyPrincipalMembershipForScopeTx(ctx context.Context, tx *sql.Tx, d port
 }
 
 func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, d port.Dialect, orgID string, level Level, targetID, principalID string) error {
-	if d == port.DialectPostgres {
-		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.is_instance_operator', 'true', true), set_config('app.current_org_id', $1, true)`, orgID); err != nil {
-			return fmt.Errorf("killswitch: set role RLS context: %w", err)
-		}
+	if err := port.SetOperatorRLSTx(ctx, tx, d); err != nil {
+		return fmt.Errorf("killswitch: set operator role RLS context: %w", err)
 	}
 	opCount, err := countInstanceOperatorRoleTx(ctx, tx, d, principalID)
 	if err != nil {
@@ -1196,6 +1280,9 @@ func verifyPrincipalRoleForScopeTx(ctx context.Context, tx *sql.Tx, d port.Diale
 	}
 	if orgID == "" {
 		return ErrPermissionDenied
+	}
+	if err := port.SetOrgRLSTx(ctx, tx, d, orgID); err != nil {
+		return fmt.Errorf("killswitch: set role RLS context: %w", err)
 	}
 
 	var orgRoleCount int
@@ -1255,7 +1342,11 @@ func countInstanceOperatorRoleTx(ctx context.Context, tx *sql.Tx, d port.Dialect
 	var opCount int
 	if err := tx.QueryRowContext(ctx, port.Rebind(d, `
 		SELECT COUNT(*) FROM role_bindings
-		WHERE principal_id = ? AND scope_type = 'INSTANCE' AND role_name = 'OPERATOR'`),
+		WHERE principal_id = ?
+		  AND org_id IS NULL
+		  AND scope_type = 'INSTANCE'
+		  AND scope_id = 'instance'
+		  AND role_name = 'OPERATOR'`),
 		principalID,
 	).Scan(&opCount); err != nil {
 		return 0, fmt.Errorf("killswitch: verify operator role binding: %w", err)

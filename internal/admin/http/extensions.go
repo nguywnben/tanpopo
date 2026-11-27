@@ -1340,7 +1340,7 @@ func (s *Server) cancelPendingInstallationTx(ctx context.Context, insID string, 
 	return tx.Commit()
 }
 
-func (s *Server) isFourEyesSelfApproval(ctx context.Context, _ string, insID, actorID string) (bool, error) {
+func (s *Server) isFourEyesSelfApproval(ctx context.Context, orgID string, insID, actorID string) (bool, error) {
 	var fourEyesOrgs int
 	if err := s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
 		return q.QueryRowContext(ctx, `SELECT COUNT(*) FROM organizations WHERE status NOT IN ('DELETING', 'PENDING_ERASURE') AND require_four_eyes_approval = `+port.BoolExpr(s.dialect, true)).Scan(&fourEyesOrgs)
@@ -1350,21 +1350,63 @@ func (s *Server) isFourEyesSelfApproval(ctx context.Context, _ string, insID, ac
 	if fourEyesOrgs == 0 {
 		return false, nil
 	}
-	var stagerID string
-	err := s.withOperatorReadTx(ctx, func(q adminDBQuerier) error {
-		return q.QueryRowContext(ctx, s.rebind(`
-		SELECT actor_id
+	const stagerQuery = `
+		SELECT actor_id, created_at_ms, seq_no
 		FROM audit_events
 		WHERE target_type = 'extension_installation' AND target_id = ?
 		  AND event_type IN ('extension.staged_pending_approval', 'extension.upgrade_pending_reconsent')
-		ORDER BY created_at_ms DESC, seq_no DESC LIMIT 1`), insID,
-		).Scan(&stagerID)
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		ORDER BY created_at_ms DESC, seq_no DESC LIMIT 1`
+	var (
+		stagerID string
+		bestMs   int64
+		bestSeq  int64
+		found    bool
+	)
+	checkRow := func(q adminDBQuerier) error {
+		var (
+			id  string
+			ms  int64
+			seq int64
+		)
+		err := q.QueryRowContext(ctx, s.rebind(stagerQuery), insID).Scan(&id, &ms, &seq)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !found || ms > bestMs || (ms == bestMs && seq > bestSeq) {
+			stagerID = id
+			bestMs = ms
+			bestSeq = seq
+			found = true
+		}
+		return nil
 	}
-	if err != nil {
+	if err := s.withOperatorReadTx(ctx, checkRow); err != nil {
 		return true, err
+	}
+	if s.dialect == port.DialectPostgres {
+		tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return true, err
+		}
+		defer func() { _ = tx.Rollback() }()
+		orgIDs, lerr := port.ListOrgIDsTx(ctx, tx, s.dialect)
+		if lerr != nil {
+			return true, lerr
+		}
+		for _, oid := range orgIDs {
+			if rerr := port.SetOrgRLSTx(ctx, tx, s.dialect, oid); rerr != nil {
+				return true, rerr
+			}
+			if cerr := checkRow(tx); cerr != nil {
+				return true, cerr
+			}
+		}
+	}
+	if !found {
+		return false, nil
 	}
 	return strings.TrimSpace(stagerID) == strings.TrimSpace(actorID), nil
 }
