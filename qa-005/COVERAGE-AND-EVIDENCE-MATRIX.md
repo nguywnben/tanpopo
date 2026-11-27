@@ -93,6 +93,14 @@ Evidence: [CP93](checkpoints/CP93-def054-teamadmin-routes-policy-error.md), [san
 
 | Workflow | Status | Evidence-backed scope | Remaining coverage |
 |---|---|---|---|
-| Owner Routes & Policies when switching between populated environments and organization-only scope | PASS (scoped) | Exact RC7 SQLite/Chromium. Two distinct populated environment scopes returned HTTP 200 with 3 and 4 route rows respectively; IDs/slugs matched the UI. Organization-only scope showed a scope prompt and zero rows without an environment-filtered collection request. Returning to the initial QA environment restored the same three route rows. | Held-response race, hard refresh/navigation, rapid transitions/stale actions, other roles, PostgreSQL/Valkey, WebKit/Firefox. Organization-wide inventory contract is not inferred. |
+| Owner Routes & Policies when switching between populated environments and organization-only scope, including held stale response | PASS (scoped) | Exact RC7 SQLite/Chromium. Two distinct populated environment scopes returned HTTP 200 with 3 and 4 route rows respectively; IDs/slugs matched the UI. Organization-only scope showed a scope prompt and zero rows without an environment-filtered collection request. Returning to the initial QA environment restored the same three route rows. CP95 held a genuine four-row old-scope response, switched to another populated environment and rendered its three rows, then released the old response; no contamination occurred. | Hard refresh/navigation, rapid repeated transitions/stale actions, other roles, PostgreSQL/Valkey, WebKit/Firefox. Organization-wide inventory contract is not inferred. |
 
 Evidence: [CP94 checkpoint](checkpoints/CP94-def030-route-scope-switch.md), [sanitized JSON](evidence/CP94-def030-route-scope-switch.json), and four visually inspected scope screenshots.
+
+## CP95 — DEF-030 held prior-scope response race
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Delayed real route collection response released after switching to a populated scope | PASS (scoped) | Exact RC7 Owner/SQLite/Chromium. A genuine HTTP 200 four-row Initial Project response was held in the browser, a real three-row QA project response then rendered, and release of the old response did not alter current rows. | Hard refresh/navigation, rapid repeated transitions, stale actions, roles/backends/browsers. |
+
+Evidence: [CP95 checkpoint](checkpoints/CP95-def030-held-route-response.md), [sanitized JSON](evidence/CP95-def030-held-route-response.json), and three visually inspected race screenshots.
