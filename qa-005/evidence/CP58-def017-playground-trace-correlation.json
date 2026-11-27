@@ -1,0 +1,163 @@
+{
+  "checkpoint": "CP58",
+  "finding": "DEF-017",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "artifact": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "vcs_modified": false
+  },
+  "runtime": "Frozen Linux/amd64 binary; isolated SQLite Control/Data Plane 127.0.0.1:18145; Chromium; synthetic ORG_OWNER; tenant QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev.",
+  "entities": {
+    "project_id": "prj_01m8d6dbtxe008w7fphkgp2e24",
+    "environment_id": "env_01m8d6f78xe00a9w53vt41rnqg",
+    "extension_id": "ext_01m8d820ete00a5aq3t4qtx5np",
+    "adapter_id": "adp_01m8d85x7pe00b2tmww9ggd56j",
+    "connection_id": "con_01m8d8dcq8e00btwge95yss78p",
+    "deployment_id": "dpl_01m8d8egp7e009x1f05pfsf2nr",
+    "route_id": "rte_01m8d8f3wxe00bbak58gsew8ch",
+    "virtual_key_id": "vky_01m8d8fs62e008teb429cajd88"
+  },
+  "fixture": {
+    "type": "synthetic OpenAI-compatible HTTP fixture on 127.0.0.1:19090",
+    "probe": {
+      "http_status": 200,
+      "valid": true,
+      "detected_model_ids": [
+        "qa005-model"
+      ],
+      "connection_state": "ACTIVE"
+    },
+    "protocol_probe": {
+      "http_status": 200,
+      "content_type": "text/event-stream",
+      "data_frames": 5,
+      "terminal_done_frame": true,
+      "token_usage_included": true
+    },
+    "network_scope": "Provider extension permission reviewed through the actual Extensions Console; explicit private/loopback permission; provider connection allow_private_ip=true and CIDR 127.0.0.1/32. No external or paid provider."
+  },
+  "reproduction_steps": [
+    "On the isolated Owner Console, activate the catalogued @tanpopo/openai-compatible adapter after reviewing the staged permission diff.",
+    "Create a project-scoped connection to the synthetic fixture on 127.0.0.1:19090, explicitly constrain CIDR to 127.0.0.1/32, classify as SELF_HOSTED_INFRA / ON_PREM, and live-probe it.",
+    "Create a zero-rate self-hosted deployment for qa005-model and a route qa005-playground-openai.",
+    "In Chromium Playground, select that route, set a 5,000,000 micro-USD session cap, submit a synthetic prompt, visually inspect the response and Execution traces card, then use Inspect trace.",
+    "Read the displayed trc_ identifier directly through GET /admin/v1/traces/{id}. Confirm persisted trace route, deployment, status, error, accuracy, cost and payload minimization.",
+    "Revoke all temporary Playground session Virtual Keys through Access & Keys; verify each state REVOKED/version 2."
+  ],
+  "playground": {
+    "request_http_status": 200,
+    "response_text": "QA005 streamed fixture response",
+    "visible_trace_id": "trc_01m8d8fs6be00ab3qe5m6bv25m",
+    "trace_lookup_http_status": 200,
+    "trace_record": {
+      "request_id": "trc_01m8d8fs6be00ab3qe5m6bv25m",
+      "plane": "PROVIDER",
+      "env_id": "env_01m8d6f78xe00a9w53vt41rnqg",
+      "virtual_key_id": "vky_01m8d8fs62e008teb429cajd88",
+      "route_slug": "qa005-playground-openai",
+      "deployment_id": "dpl_01m8d8egp7e009x1f05pfsf2nr",
+      "data_region": "ON_PREM",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "ttft_ms": 3,
+      "duration_ms": 5,
+      "has_debug_payload": false,
+      "waterfall_stages": [
+        {
+          "stage": "Policy",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "ExtensionHook",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "Egress",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "RouteAttempt",
+          "duration_ms": 0,
+          "outcome": ""
+        }
+      ],
+      "created_at": "2026-11-27T01:04:03.281Z"
+    },
+    "network": {
+      "responses": [
+        {
+          "path": "/admin/v1/playground/sessions",
+          "method": "POST",
+          "status": 201
+        },
+        {
+          "path": "/v1/chat/completions",
+          "method": "POST",
+          "status": 200
+        }
+      ],
+      "traceLookups": [
+        {
+          "path": "/admin/v1/traces/trc_01m8d8fs6be00ab3qe5m6bv25m",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/traces/trc_01m8d8fs6be00ab3qe5m6bv25m",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/traces/trc_01m8d8fs6be00ab3qe5m6bv25m",
+          "status": 200
+        }
+      ],
+      "pageErrors": []
+    },
+    "temporary_key_cleanup": {
+      "state": "REVOKED",
+      "version": 2,
+      "active_streams_severed": 0
+    }
+  },
+  "classification": {
+    "status": "PASS (scoped)",
+    "result": "On this exact RC7 path, Playground displayed a trc_ identifier, performed direct trace lookups successfully, and Inspect trace opened the same persisted record; the historical req_/trc_ mismatch did not reproduce.",
+    "limitations": [
+      "One Chromium Linux runtime, Owner, SQLite, OpenAI-compatible adapter, short SSE stream, and one synthetic model/route.",
+      "Other adapters, failed/canceled/long-running streams, Firefox/WebKit, roles, concurrent sessions, and persistence after browser restart remain UNVERIFIED.",
+      "This scoped pass does not erase historical failures or close DEF-017 globally."
+    ]
+  },
+  "exploratory_non_product_failures": [
+    {
+      "status": "PARTIAL exploratory setup failure; not classified as a product defect",
+      "case": "Attempted Playground through the existing @tanpopo/ollama adapter but pointed it at the native Ollama fixture. Playground returned 502 upstream_malformed_response, persisted a trc_ trace (direct GET 200), and Inspect trace opened it. This fixture only serves native Ollama /api paths, while the test needed an OpenAI-compatible SSE endpoint. A protocol-matched OpenAI fixture and adapter subsequently passed."
+    },
+    {
+      "status": "PASS scoped error behavior",
+      "case": "Two Playground calls on the exhausted original project scope returned 429 project_budget_exceeded/Unsettled; both rendered trc_ identifiers, direct trace lookups returned 200, and Inspect trace resolved them. These requests exercised budget rejection; no provider inference occurred."
+    }
+  ],
+  "visual_evidence": [
+    "evidence/screenshots/CP58-openai-extension-review.png",
+    "evidence/screenshots/CP58-openai-connection-form.png",
+    "evidence/screenshots/CP58-openai-connection-created.png",
+    "evidence/screenshots/CP58-openai-probed.png",
+    "evidence/screenshots/CP58-openai-deployment-form.png",
+    "evidence/screenshots/CP58-openai-deployment-created.png",
+    "evidence/screenshots/CP58-openai-route-form.png",
+    "evidence/screenshots/CP58-openai-route-created.png",
+    "evidence/screenshots/CP58-openai-playground-prompt.png",
+    "evidence/screenshots/CP58-openai-playground-result.png",
+    "evidence/screenshots/CP58-openai-playground-inspect-trace.png",
+    "evidence/screenshots/CP58-all-playground-session-keys-revoked.png",
+    "evidence/screenshots/CP58-playground-budgetless-result.png",
+    "evidence/screenshots/CP58-playground-result.png"
+  ],
+  "no_secrets_committed": true
+}
