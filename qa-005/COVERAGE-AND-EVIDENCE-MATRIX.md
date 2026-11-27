@@ -158,3 +158,12 @@ Evidence: [CP100 checkpoint](checkpoints/CP100-def027-route-target-identity.md),
 | Overview active-alert rendering at 375px and 320px | FAIL — new DEF-084 (Low) | Exact RC7 Owner Console/SQLite/Chromium 156. The loaded synthetic budget alert widened document and body scroll width to 413px: 38px beyond 375px and 93px beyond 320px after a hard refresh. Screenshot shows the long identifier clipped. Summary API returned 200; no API/page errors or writes. | Other alerts and identifier types/locales, keyboard/screen readers, dynamic updates, WebKit/Firefox, backend variants, and desktop comparison. |
 
 Evidence: [CP101 checkpoint](checkpoints/CP101-overview-mobile-alert-overflow.md), [sanitized geometry/API JSON](evidence/CP101-overview-mobile-alert-overflow.json), and visually inspected [375px](evidence/screenshots/CP101-overview-mobile-375.png) / [320px](evidence/screenshots/CP101-overview-mobile-320.png) screenshots.
+
+
+## CP102 — DEF-078 RC7 budget/chargeback reconciliation
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Monthly budget ledger versus same-project November Chargeback summary | PARTIAL | Exact RC7 Owner Console/SQLite/Chromium. For one existing synthetic project, monthly budget UI/API and Chargeback UI plus `usage/summary?from=2026-11-01` all agreed at 3,000,000 exact / 0 estimated micro-USD; APIs returned 200. No writes or provider calls. | QA-004 historical default-project mismatch remains unreconciled by this different fixture. Need fresh budget-active exact+estimated settlements, request-level attribution, boundary admission, concurrency, rollover and backend matrix. |
+
+Evidence: [CP102 checkpoint](checkpoints/CP102-def078-rc7-budget-chargeback-reconciliation.md), [sanitized API readback](evidence/CP102-def078-rc7-reconciliation.json), and visually inspected [Budget & Holds](evidence/screenshots/CP102-finops-initial.png) / [Chargeback](evidence/screenshots/CP102-finops-chargeback.png) screenshots.
