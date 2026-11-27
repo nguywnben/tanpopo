@@ -261,10 +261,15 @@ export function RoutingPage({
     const dep = deploymentById.get(tg.deployment_id);
     return !dep || (allowedRegions.length > 0 && !allowedRegions.includes(dep.data_region));
   });
-  const routeMissingToolCalling = targets.some(tg => {
-    const dep = deploymentById.get(tg.deployment_id);
-    return modelById.get(dep?.logical_model_id ?? '')?.capabilities.tool_calling !== true;
-  });
+  const targetsMissingToolCalling = targets
+    .map(tg => {
+      const dep = deploymentById.get(tg.deployment_id);
+      if (!dep) return null;
+      return modelById.get(dep.logical_model_id)?.capabilities.tool_calling === true
+        ? null
+        : dep.upstream_model_name || dep.id;
+    })
+    .filter((name): name is string => Boolean(name));
 
   async function saveRoute() {
     if (!canManage || !slug.trim() || targets.length === 0 || (isWeighted(strategy) && totalWeight !== 100) || routeHasInvalidRegion) return;
@@ -960,8 +965,8 @@ export function RoutingPage({
         {routeHasInvalidRegion ? (
           <Banner tone="danger">{t('routing.errInvalidRegion')}</Banner>
         ) : null}
-        {routeMissingToolCalling ? (
-          <Banner tone="warn">{t('routing.warnToolCalling')}</Banner>
+        {targetsMissingToolCalling.length > 0 ? (
+          <Banner tone="warn">{t('routing.warnToolCallingTargets', {targets: targetsMissingToolCalling.join(', ')})}</Banner>
         ) : null}
       </Drawer>
 

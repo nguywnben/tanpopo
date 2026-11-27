@@ -139,7 +139,12 @@ components:
       schema:
         type: string
     X-Tanpopo-Usage-Accuracy:
-      description: Settlement fidelity tier recorded in the two-phase micro-USD ledger.
+      description: >
+        Settlement fidelity tier recorded in the two-phase micro-USD ledger.
+        Emitted as a standard HTTP response header on non-streaming JSON responses,
+        and predeclared via `Trailer: X-Tanpopo-Usage-Accuracy` then emitted as an
+        HTTP trailing header after stream settlement on `text/event-stream` and
+        `application/x-ndjson` streams.
       schema:
         type: string
         enum: [EXACT, ESTIMATED, UNMETERED_FLAGGED]
@@ -764,6 +769,8 @@ components:
         sub_budget_hold_micros: { type: integer, minimum: 0 }
         reservation_id: { type: string }
         settled_cost_micros: { type: integer, minimum: 0 }
+        downstream_cancel_status: { type: string, enum: [pending, acknowledged, unsupported, rejected, unreachable, local_only] }
+        downstream_cancel_detail: { type: string }
         artifacts:
           type: array
           items: { type: object }

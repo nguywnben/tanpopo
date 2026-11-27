@@ -124,24 +124,26 @@ api.use({
     return new Request(request, {headers});
   },
   onResponse({request, response}) {
-    if (response.status !== 401) return response;
     const pathname = new URL(request.url).pathname;
-    if (
+    const isProtectedAdminApi =
       pathname.startsWith('/admin/v1/')
       && !pathname.startsWith('/admin/v1/auth/login')
       && !pathname.startsWith('/admin/v1/auth/enroll')
       && !pathname.startsWith('/admin/v1/auth/oidc/')
-      && !pathname.startsWith('/admin/v1/bootstrap/')
-    ) {
+      && !pathname.startsWith('/admin/v1/bootstrap/');
+    if (isProtectedAdminApi && response.status === 401) {
       clearCsrfToken();
       purgeOrgScopedClientState();
       notifyUnauthorized();
+    } else if (isProtectedAdminApi && response.status === 403) {
+      notifyForbidden();
     }
     return response;
   },
 });
 
 const unauthorizedListeners = new Set<() => void>();
+const forbiddenListeners = new Set<() => void>();
 const crossTabLogoutListeners = new Set<() => void>();
 const AUTH_BROADCAST_CHANNEL = 'tanpopo.auth';
 const AUTH_STORAGE_EVENT_KEY = 'tanpopo.auth.logout_ts';
@@ -205,6 +207,11 @@ export function subscribeUnauthorized(listener: () => void): () => void {
   return () => { unauthorizedListeners.delete(listener); };
 }
 
+export function subscribeForbidden(listener: () => void): () => void {
+  forbiddenListeners.add(listener);
+  return () => { forbiddenListeners.delete(listener); };
+}
+
 export function subscribeCrossTabLogout(listener: () => void): () => void {
   ensureCrossTabAuthListeners();
   crossTabLogoutListeners.add(listener);
@@ -218,6 +225,16 @@ function notifyUnauthorized() {
       listener();
     } catch {
       // Ignore individual subscriber errors during session teardown.
+    }
+  }
+}
+
+function notifyForbidden() {
+  for (const listener of forbiddenListeners) {
+    try {
+      listener();
+    } catch {
+      // Ignore individual subscriber errors during permission revalidation.
     }
   }
 }

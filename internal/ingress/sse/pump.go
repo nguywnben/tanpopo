@@ -505,6 +505,7 @@ func writeSSEHeaders(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Add("Trailer", "X-Tanpopo-Usage-Accuracy")
 	w.WriteHeader(http.StatusOK)
 }
 

@@ -46,7 +46,7 @@ So mainstream SDK libraries connect immediately by changing only `base_url` and 
    - Concurrent duplicate arrival while the first execution is still `in_flight` returns `409 request_in_progress`.
 2. **Standardized Request & Response Headers ([`openapi/dataplane-v1.yaml`](../../openapi/dataplane-v1.yaml)):**
    - Request: `X-Tanpopo-Timeout-Ms`, `Idempotency-Key`, `X-Tanpopo-Data-Region`, `x-tanpopo-request-id`, `X-Tanpopo-Trace-Root`, `X-Tanpopo-No-Cache`.
-   - Response: `x-tanpopo-request-id`, `X-Tanpopo-Usage-Accuracy` (`EXACT | ESTIMATED | UNMETERED_FLAGGED`), `Retry-After`, `X-RateLimit-Remaining-Requests`, `X-RateLimit-Remaining-Tokens`, `X-RateLimit-Remaining-Streams`.
+   - Response: `x-tanpopo-request-id`, `X-Tanpopo-Usage-Accuracy` (`EXACT | ESTIMATED | UNMETERED_FLAGGED`, sent as a response header on non-streaming responses and as an HTTP trailer declared via `Trailer: X-Tanpopo-Usage-Accuracy` after stream settlement on `text/event-stream` / `application/x-ndjson` streams), `Retry-After`, `X-RateLimit-Remaining-Requests`, `X-RateLimit-Remaining-Tokens`, `X-RateLimit-Remaining-Streams`.
 
 ---
 

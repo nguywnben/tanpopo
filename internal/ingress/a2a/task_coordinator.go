@@ -95,14 +95,33 @@ type TaskView struct {
 	CallChainIDs        []string         `json:"call_chain_ids,omitempty"`
 	TraceRootID         string           `json:"trace_root_id,omitempty"`
 	EnforcedRegion      string           `json:"enforced_region,omitempty"`
-	SubBudgetHoldMicros int64            `json:"sub_budget_hold_micros"`
-	ReservationID       string           `json:"reservation_id,omitempty"`
-	SettledCostMicros   int64            `json:"settled_cost_micros,omitempty"`
-	Artifacts           []map[string]any `json:"artifacts,omitempty"`
-	Version             int64            `json:"version"`
-	CreatedAt           string           `json:"created_at"`
-	UpdatedAt           string           `json:"updated_at"`
-	CompletedAt         string           `json:"completed_at,omitempty"`
+	SubBudgetHoldMicros    int64            `json:"sub_budget_hold_micros"`
+	ReservationID          string           `json:"reservation_id,omitempty"`
+	SettledCostMicros      int64            `json:"settled_cost_micros,omitempty"`
+	DownstreamCancelStatus string           `json:"downstream_cancel_status,omitempty"`
+	DownstreamCancelDetail string           `json:"downstream_cancel_detail,omitempty"`
+	Artifacts              []map[string]any `json:"artifacts,omitempty"`
+	Version                int64            `json:"version"`
+	CreatedAt              string           `json:"created_at"`
+	UpdatedAt              string           `json:"updated_at"`
+	CompletedAt            string           `json:"completed_at,omitempty"`
+}
+
+const (
+	CancelStatusPending      = "pending"
+	CancelStatusAcknowledged = "acknowledged"
+	CancelStatusUnsupported  = "unsupported"
+	CancelStatusRejected     = "rejected"
+	CancelStatusUnreachable  = "unreachable"
+	CancelStatusLocalOnly    = "local_only"
+)
+
+// DownstreamCancelResult records whether a downstream agent endpoint acknowledged
+// cancellation, whether partial spend was reported, or why cancellation was local-only.
+type DownstreamCancelResult struct {
+	Status      string `json:"status"`
+	Detail      string `json:"detail,omitempty"`
+	SpentMicros int64  `json:"spent_micros,omitempty"`
 }
 
 // UpstreamTaskResponse captures an agent endpoint's execution verdict and exact micro-USD cost.
@@ -116,6 +135,11 @@ type UpstreamTaskResponse struct {
 // UpstreamTransport dispatches an attenuated delegation envelope to a registered AgentEndpoint.
 type UpstreamTransport interface {
 	DispatchTask(ctx context.Context, agent *AgentEndpoint, task TaskView, inputParts []map[string]any) (UpstreamTaskResponse, error)
+}
+
+// DownstreamCanceler optionally propagates explicit protocol-level cancellation to downstream agents.
+type DownstreamCanceler interface {
+	CancelDownstream(ctx context.Context, agent *AgentEndpoint, task TaskView) (DownstreamCancelResult, error)
 }
 
 // BrokerUpstreamTransport executes outbound A2A task calls strictly through BlindHostCredentialBroker
@@ -187,6 +211,96 @@ func (t *BrokerUpstreamTransport) DispatchTask(ctx context.Context, agent *Agent
 		parsed.State = StateCompleted
 	}
 	return parsed, nil
+}
+
+// CancelDownstream sends a protocol cancellation request POST {endpoint}/tasks/{id}/cancel
+// strictly via BlindHostCredentialBroker and reports whether downstream acknowledged stop.
+func (t *BrokerUpstreamTransport) CancelDownstream(ctx context.Context, agent *AgentEndpoint, task TaskView) (DownstreamCancelResult, error) {
+	if t == nil || t.Broker == nil || agent == nil {
+		return DownstreamCancelResult{Status: CancelStatusUnreachable, Detail: "broker upstream transport unavailable"}, errors.New("a2a: broker upstream transport unavailable")
+	}
+	payload, err := json.Marshal(map[string]any{
+		"task_id":       task.TaskID,
+		"trace_root_id": task.TraceRootID,
+		"reason":        "task_canceled",
+	})
+	if err != nil {
+		return DownstreamCancelResult{Status: CancelStatusUnreachable, Detail: err.Error()}, err
+	}
+	timeout := t.Timeout
+	if timeout <= 0 || timeout > 5*time.Second {
+		timeout = 5 * time.Second
+	}
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var injections []broker.CredentialInjection
+	if agent.CredentialID != "" {
+		injections = []broker.CredentialInjection{{
+			SecretSlotName: AgentBrokerSlotName,
+			Location:       broker.TargetHeader,
+			FieldName:      "Authorization",
+			ValuePrefix:    "Bearer ",
+		}}
+	}
+	resp, err := t.Broker.Execute(callCtx, broker.EgressRequest{
+		OrgID:        agent.OrgID,
+		ConnectionID: agent.ID,
+		RequestID:    task.TaskID + ":cancel",
+		Method:       http.MethodPost,
+		TargetURL:    strings.TrimRight(agent.EndpointURL, "/") + "/tasks/" + url.PathEscape(task.TaskID) + "/cancel",
+		SafeHeaders: map[string]string{
+			"Content-Type":    "application/json",
+			HeaderTraceRoot:   task.TraceRootID,
+			HeaderA2AHopCount: strconv.Itoa(task.HopCount),
+		},
+		BodyBytes:            payload,
+		CredentialInjections: injections,
+		ActorKind:            "VIRTUAL_KEY",
+		EntryPoint:           "a2a_http",
+	})
+	if err != nil {
+		return DownstreamCancelResult{Status: CancelStatusUnreachable, Detail: err.Error()}, err
+	}
+	var cancelBody struct {
+		State       string `json:"state,omitempty"`
+		Message     string `json:"message,omitempty"`
+		SpentMicros int64  `json:"spent_micros,omitempty"`
+	}
+	if len(bytes.TrimSpace(resp.Body)) > 0 {
+		_ = json.Unmarshal(resp.Body, &cancelBody)
+	}
+	switch {
+	case resp.StatusCode >= 200 && resp.StatusCode < 300:
+		detail := strings.TrimSpace(cancelBody.Message)
+		if detail == "" {
+			detail = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		}
+		spent := cancelBody.SpentMicros
+		if spent < 0 {
+			spent = 0
+		}
+		return DownstreamCancelResult{
+			Status:      CancelStatusAcknowledged,
+			Detail:      detail,
+			SpentMicros: spent,
+		}, nil
+	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented:
+		return DownstreamCancelResult{
+			Status: CancelStatusUnsupported,
+			Detail: fmt.Sprintf("downstream cancel endpoint returned HTTP %d", resp.StatusCode),
+		}, nil
+	case resp.StatusCode >= 400 && resp.StatusCode < 500:
+		return DownstreamCancelResult{
+			Status: CancelStatusRejected,
+			Detail: fmt.Sprintf("downstream rejected cancel with HTTP %d", resp.StatusCode),
+		}, nil
+	default:
+		return DownstreamCancelResult{
+			Status: CancelStatusUnreachable,
+			Detail: fmt.Sprintf("downstream cancel failed with HTTP %d", resp.StatusCode),
+		}, fmt.Errorf("a2a downstream cancel returned status %d", resp.StatusCode)
+	}
 }
 
 // CoordinatorConfig configures the A2A Task Coordinator and Data Plane HTTP/SSE handler.
@@ -589,6 +703,9 @@ func (c *TaskCoordinator) CreateTask(ctx context.Context, caller snapshot.KeyMat
 	if req.SubBudgetHoldMicros < 0 {
 		return TaskView{}, fmt.Errorf("%w: sub_budget_hold_micros cannot be negative", ErrPrivilegeOrBudget)
 	}
+	if !req.DispatchAsync && c.cfg.Transport != nil && req.SubBudgetHoldMicros <= 0 {
+		return TaskView{}, fmt.Errorf("%w: sub_budget_hold_micros must be greater than 0 before dispatching downstream A2A task", ErrPrivilegeOrBudget)
+	}
 	if req.HopCount < 0 {
 		return TaskView{}, fmt.Errorf("%w: hop_count cannot be negative", ErrDelegationDepth)
 	}
@@ -732,7 +849,7 @@ func (c *TaskCoordinator) CreateTask(ctx context.Context, caller snapshot.KeyMat
 	// Reserve root task sub-budget in FinOps ledger once before opening any DB tx;
 	// child tasks carve atomically from the locked parent's existing hold without double-reserving.
 	var reservationID string
-	if !hasParent && c.cfg.Ledger != nil && req.SubBudgetHoldMicros > 0 {
+	if !hasParent && c.cfg.Ledger != nil {
 		res, rErr := c.cfg.Ledger.Reserve(ctx, ledger.ReserveRequest{
 			OrgID:        caller.Key.OrgID,
 			ProjectID:    caller.Key.ProjectID,
@@ -823,7 +940,7 @@ func (c *TaskCoordinator) CreateTask(ctx context.Context, caller snapshot.KeyMat
 		view = working
 		upResp, wasCanceled, dErr := c.dispatchTaskCancellable(ctx, caller.Key.OrgID, caller.Key.ProjectID, taskID, agent, view, req.InputParts)
 		if wasCanceled {
-			if latest, lErr := c.GetTask(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID); lErr == nil && latest.State == StateCanceled {
+			if latest, ok := c.awaitSettledCancelView(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID); ok {
 				return latest, nil
 			}
 		}
@@ -852,7 +969,7 @@ func (c *TaskCoordinator) CreateTask(ctx context.Context, caller snapshot.KeyMat
 			Artifacts:     upResp.Artifacts,
 		})
 		if trErr != nil {
-			if latest, lErr := c.GetTask(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID); lErr == nil && latest.State == StateCanceled {
+			if latest, ok := c.awaitSettledCancelView(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID); ok {
 				return latest, nil
 			}
 			if failedView, fErr := c.TransitionTask(context.WithoutCancel(ctx), caller.Key.OrgID, caller.Key.ProjectID, taskID, TaskTransitionRequest{State: StateFailed}); fErr == nil {
@@ -930,7 +1047,8 @@ func (c *TaskCoordinator) ListAdminTasks(ctx context.Context, orgID string, proj
 
 	q := `SELECT t.id, t.agent_endpoint_id, COALESCE(e.agent_slug,''), t.state, t.hop_count, t.call_chain_ids_json,
 	             t.trace_root_id, COALESCE(t.enforced_region,''), t.sub_budget_cap_micros, t.settled_cost_micros,
-	             COALESCE(t.reservation_id,''), t.artifacts_json, t.version, t.created_at_ms, t.updated_at_ms, t.completed_at_ms
+	             COALESCE(t.reservation_id,''), t.artifacts_json, COALESCE(t.downstream_cancel_status,''), COALESCE(t.downstream_cancel_detail,''),
+	             t.version, t.created_at_ms, t.updated_at_ms, t.completed_at_ms
 	      FROM a2a_tasks t
 	      LEFT JOIN agent_endpoints e ON e.org_id = t.org_id AND e.id = t.agent_endpoint_id
 	      WHERE t.org_id = ?`
@@ -952,33 +1070,35 @@ func (c *TaskCoordinator) ListAdminTasks(ctx context.Context, orgID string, proj
 
 	out := []TaskView{}
 	for rows.Next() {
-		var id, agentID, agentSlug, dbState, chainJSON, traceRoot, region, resID, artifactsJSON string
+		var id, agentID, agentSlug, dbState, chainJSON, traceRoot, region, resID, artifactsJSON, cancelStatus, cancelDetail string
 		var hop int
 		var hold, settled, ver, createdMs, updatedMs int64
 		var completedMs sql.NullInt64
-		if err := rows.Scan(&id, &agentID, &agentSlug, &dbState, &hop, &chainJSON, &traceRoot, &region, &hold, &settled, &resID, &artifactsJSON, &ver, &createdMs, &updatedMs, &completedMs); err != nil {
+		if err := rows.Scan(&id, &agentID, &agentSlug, &dbState, &hop, &chainJSON, &traceRoot, &region, &hold, &settled, &resID, &artifactsJSON, &cancelStatus, &cancelDetail, &ver, &createdMs, &updatedMs, &completedMs); err != nil {
 			return nil, err
 		}
 		var chain []string
 		_ = json.Unmarshal([]byte(chainJSON), &chain)
-		var artifacts []map[string]any
-		_ = json.Unmarshal([]byte(artifactsJSON), &artifacts)
+		promptMsg, artifacts := splitPromptAndArtifacts(artifactsJSON)
 		v := TaskView{
-			TaskID:              id,
-			TargetAgentID:       agentID,
-			TargetAgentSlug:     agentSlug,
-			State:               dbStateToAPI(dbState),
-			HopCount:            hop,
-			CallChainIDs:        chain,
-			TraceRootID:         traceRoot,
-			EnforcedRegion:      region,
-			SubBudgetHoldMicros: hold,
-			SettledCostMicros:   settled,
-			ReservationID:       resID,
-			Artifacts:           artifacts,
-			Version:             ver,
-			CreatedAt:           time.UnixMilli(createdMs).UTC().Format(time.RFC3339Nano),
-			UpdatedAt:           time.UnixMilli(updatedMs).UTC().Format(time.RFC3339Nano),
+			TaskID:                 id,
+			TargetAgentID:          agentID,
+			TargetAgentSlug:        agentSlug,
+			State:                  dbStateToAPI(dbState),
+			PromptMessage:          promptMsg,
+			HopCount:               hop,
+			CallChainIDs:           chain,
+			TraceRootID:            traceRoot,
+			EnforcedRegion:         region,
+			SubBudgetHoldMicros:    hold,
+			SettledCostMicros:      settled,
+			ReservationID:          resID,
+			DownstreamCancelStatus: cancelStatus,
+			DownstreamCancelDetail: cancelDetail,
+			Artifacts:              artifacts,
+			Version:                ver,
+			CreatedAt:              time.UnixMilli(createdMs).UTC().Format(time.RFC3339Nano),
+			UpdatedAt:              time.UnixMilli(updatedMs).UTC().Format(time.RFC3339Nano),
 		}
 		if completedMs.Valid {
 			v.CompletedAt = time.UnixMilli(completedMs.Int64).UTC().Format(time.RFC3339Nano)
@@ -1019,7 +1139,8 @@ func (c *TaskCoordinator) ListAdminTasksPage(ctx context.Context, orgID string, 
 
 	q := `SELECT t.id, t.agent_endpoint_id, COALESCE(e.agent_slug,''), t.state, t.hop_count, t.call_chain_ids_json,
 	             t.trace_root_id, COALESCE(t.enforced_region,''), t.sub_budget_cap_micros, t.settled_cost_micros,
-	             COALESCE(t.reservation_id,''), t.artifacts_json, t.version, t.created_at_ms, t.updated_at_ms, t.completed_at_ms
+	             COALESCE(t.reservation_id,''), t.artifacts_json, COALESCE(t.downstream_cancel_status,''), COALESCE(t.downstream_cancel_detail,''),
+	             t.version, t.created_at_ms, t.updated_at_ms, t.completed_at_ms
 	      FROM a2a_tasks t
 	      LEFT JOIN agent_endpoints e ON e.org_id = t.org_id AND e.id = t.agent_endpoint_id
 	      WHERE t.org_id = ?`
@@ -1046,33 +1167,35 @@ func (c *TaskCoordinator) ListAdminTasksPage(ctx context.Context, orgID string, 
 	out := []TaskView{}
 	var timestamps []int64
 	for rows.Next() {
-		var id, agentID, agentSlug, dbState, chainJSON, traceRoot, region, resID, artifactsJSON string
+		var id, agentID, agentSlug, dbState, chainJSON, traceRoot, region, resID, artifactsJSON, cancelStatus, cancelDetail string
 		var hop int
 		var hold, settled, ver, createdMs, updatedMs int64
 		var completedMs sql.NullInt64
-		if err := rows.Scan(&id, &agentID, &agentSlug, &dbState, &hop, &chainJSON, &traceRoot, &region, &hold, &settled, &resID, &artifactsJSON, &ver, &createdMs, &updatedMs, &completedMs); err != nil {
+		if err := rows.Scan(&id, &agentID, &agentSlug, &dbState, &hop, &chainJSON, &traceRoot, &region, &hold, &settled, &resID, &artifactsJSON, &cancelStatus, &cancelDetail, &ver, &createdMs, &updatedMs, &completedMs); err != nil {
 			return AdminTaskPage{}, err
 		}
 		var chain []string
 		_ = json.Unmarshal([]byte(chainJSON), &chain)
 		promptMsg, artifacts := splitPromptAndArtifacts(artifactsJSON)
 		v := TaskView{
-			TaskID:              id,
-			TargetAgentID:       agentID,
-			TargetAgentSlug:     agentSlug,
-			State:               dbStateToAPI(dbState),
-			PromptMessage:       promptMsg,
-			HopCount:            hop,
-			CallChainIDs:        chain,
-			TraceRootID:         traceRoot,
-			EnforcedRegion:      region,
-			SubBudgetHoldMicros: hold,
-			SettledCostMicros:   settled,
-			ReservationID:       resID,
-			Artifacts:           artifacts,
-			Version:             ver,
-			CreatedAt:           time.UnixMilli(createdMs).UTC().Format(time.RFC3339Nano),
-			UpdatedAt:           time.UnixMilli(updatedMs).UTC().Format(time.RFC3339Nano),
+			TaskID:                 id,
+			TargetAgentID:          agentID,
+			TargetAgentSlug:        agentSlug,
+			State:                  dbStateToAPI(dbState),
+			PromptMessage:          promptMsg,
+			HopCount:               hop,
+			CallChainIDs:           chain,
+			TraceRootID:            traceRoot,
+			EnforcedRegion:         region,
+			SubBudgetHoldMicros:    hold,
+			SettledCostMicros:      settled,
+			ReservationID:          resID,
+			DownstreamCancelStatus: cancelStatus,
+			DownstreamCancelDetail: cancelDetail,
+			Artifacts:              artifacts,
+			Version:                ver,
+			CreatedAt:              time.UnixMilli(createdMs).UTC().Format(time.RFC3339Nano),
+			UpdatedAt:              time.UnixMilli(updatedMs).UTC().Format(time.RFC3339Nano),
 		}
 		if completedMs.Valid {
 			v.CompletedAt = time.UnixMilli(completedMs.Int64).UTC().Format(time.RFC3339Nano)
@@ -1156,6 +1279,9 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 		return TaskView{}, fmt.Errorf("%w: %s -> %s", ErrInvalidTaskStateMove, cur.State, targetAPI)
 	}
 	subHold := cur.SubBudgetHoldMicros
+	if cur.State == StateInputRequired && targetAPI == StateWorking && len(req.InputParts) > 0 && c.cfg.Transport != nil && subHold <= 0 {
+		return TaskView{}, fmt.Errorf("%w: sub_budget_hold_micros must be greater than 0 before dispatching downstream A2A task", ErrPrivilegeOrBudget)
+	}
 	if req.SpentMicros > subHold {
 		return TaskView{}, fmt.Errorf("%w: spent_micros %d exceeds sub_budget_hold_micros %d", ErrPrivilegeOrBudget, req.SpentMicros, subHold)
 	}
@@ -1249,8 +1375,12 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 		return TaskView{}, port.ErrVersionConflict
 	}
 	if targetAPI == StateCanceled {
-		if err := c.cascadeCancelDescendantsTx(ctx, tx, orgID, taskID, nowMs); err != nil {
-			return TaskView{}, err
+		cascadedIDs, cerr := c.cascadeCancelDescendantsTx(ctx, tx, orgID, taskID, nowMs)
+		if cerr != nil {
+			return TaskView{}, cerr
+		}
+		for _, cid := range cascadedIDs {
+			c.cancelActiveDispatch(orgID, cid)
 		}
 	}
 	actorID := strings.TrimSpace(auditMeta.actorID)
@@ -1301,7 +1431,7 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 		}
 		upResp, wasCanceled, dErr := c.dispatchTaskCancellable(ctx, orgID, projectID, taskID, ep, updated, req.InputParts)
 		if wasCanceled {
-			if latest, lErr := c.GetTask(context.WithoutCancel(ctx), orgID, projectID, taskID); lErr == nil && latest.State == StateCanceled {
+			if latest, ok := c.awaitSettledCancelView(context.WithoutCancel(ctx), orgID, projectID, taskID); ok {
 				return latest, nil
 			}
 		}
@@ -1329,7 +1459,7 @@ func (c *TaskCoordinator) transitionTaskInternal(ctx context.Context, orgID, pro
 			Artifacts:     upResp.Artifacts,
 		})
 		if trErr != nil {
-			if latest, lErr := c.GetTask(context.WithoutCancel(ctx), orgID, projectID, taskID); lErr == nil && latest.State == StateCanceled {
+			if latest, ok := c.awaitSettledCancelView(context.WithoutCancel(ctx), orgID, projectID, taskID); ok {
 				return latest, nil
 			}
 			if failedView, fErr := c.transitionTaskInternal(context.WithoutCancel(ctx), orgID, projectID, taskID, requiredCallerKeyID, auditMeta, TaskTransitionRequest{State: StateFailed}); fErr == nil {
@@ -1358,6 +1488,9 @@ func (c *TaskCoordinator) ResumeTask(ctx context.Context, caller snapshot.KeyMat
 	if cur.State != StateInputRequired {
 		return TaskView{}, fmt.Errorf("%w: task in state %s cannot be resumed (expected input-required)", ErrInvalidTaskStateMove, cur.State)
 	}
+	if c.cfg.Transport != nil && cur.SubBudgetHoldMicros <= 0 {
+		return TaskView{}, fmt.Errorf("%w: sub_budget_hold_micros must be greater than 0 before resuming downstream A2A task", ErrPrivilegeOrBudget)
+	}
 	if !routeAllowlistPermitsA2A(caller.Key.AllowedRoutes, "/a2a/tasks/"+taskID+"/resume") {
 		return TaskView{}, fmt.Errorf("%w: virtual key route allowlist does not permit resuming task", ErrPrivilegeOrBudget)
 	}
@@ -1384,6 +1517,9 @@ func (c *TaskCoordinator) ResumeAdminTask(ctx context.Context, orgID, projectID,
 	if cur.State != StateInputRequired {
 		return TaskView{}, fmt.Errorf("%w: task in state %s cannot be resumed (expected input-required)", ErrInvalidTaskStateMove, cur.State)
 	}
+	if c.cfg.Transport != nil && cur.SubBudgetHoldMicros <= 0 {
+		return TaskView{}, fmt.Errorf("%w: sub_budget_hold_micros must be greater than 0 before resuming downstream A2A task", ErrPrivilegeOrBudget)
+	}
 	return c.transitionTaskInternal(ctx, orgID, projectID, taskID, "", taskAuditAttribution{
 		actorID:    actorID,
 		actorKind:  "PRINCIPAL",
@@ -1395,27 +1531,285 @@ func (c *TaskCoordinator) ResumeAdminTask(ctx context.Context, orgID, projectID,
 	})
 }
 
-// CancelAdminTask cancels a non-terminal A2A task from Control Plane Admin API within verified project scope.
+// CancelAdminTask cancels a non-terminal A2A task from Control Plane Admin API within verified project scope,
+// signals downstream cancellation when supported, and settles partial spend or releases unused budget hold.
 func (c *TaskCoordinator) CancelAdminTask(ctx context.Context, orgID, projectID, taskID, actorID string) (TaskView, error) {
-	view, err := c.transitionTaskInternal(ctx, orgID, projectID, taskID, "", taskAuditAttribution{
+	return c.cancelTaskAndPropagate(ctx, orgID, projectID, taskID, "", taskAuditAttribution{
 		actorID:    actorID,
 		actorKind:  "PRINCIPAL",
 		entryPoint: port.AuditEntryPointAdminAPI,
 		eventType:  "a2a.task.canceled_by_admin",
-	}, TaskTransitionRequest{State: StateCanceled})
-	if err == nil {
-		c.cancelActiveDispatch(orgID, taskID)
-	}
-	return view, err
+	})
 }
 
-// CancelTask cancels a non-terminal A2A task owned by callerVKeyID and releases any held sub-budget.
+// CancelTask cancels a non-terminal A2A task owned by callerVKeyID, signals downstream cancellation
+// when supported, and settles partial spend or releases unused budget hold.
 func (c *TaskCoordinator) CancelTask(ctx context.Context, orgID, projectID, taskID, callerVKeyID string) (TaskView, error) {
-	view, err := c.transitionTaskInternal(ctx, orgID, projectID, taskID, strings.TrimSpace(callerVKeyID), defaultDataPlaneTaskAudit(), TaskTransitionRequest{State: StateCanceled})
-	if err == nil {
-		c.cancelActiveDispatch(orgID, taskID)
+	return c.cancelTaskAndPropagate(ctx, orgID, projectID, taskID, strings.TrimSpace(callerVKeyID), defaultDataPlaneTaskAudit())
+}
+
+func (c *TaskCoordinator) cancelTaskAndPropagate(
+	ctx context.Context,
+	orgID, projectID, taskID, requiredCallerKeyID string,
+	auditMeta taskAuditAttribution,
+) (TaskView, error) {
+	nowMs := c.now().UTC().UnixMilli()
+
+	// Step 1: Read current task state & validate caller ownership + SM-09 cancelability.
+	var (
+		cur                       TaskView
+		callerVKeyID, envID, slug string
+	)
+	{
+		rtx, err := c.cfg.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+		if err != nil {
+			return TaskView{}, err
+		}
+		if err := port.SetOrgRLSTx(ctx, rtx, c.dialect, orgID); err != nil {
+			_ = rtx.Rollback()
+			return TaskView{}, err
+		}
+		cur, callerVKeyID, envID, slug, err = c.loadTaskWithMetaTx(ctx, rtx, orgID, projectID, taskID, false)
+		_ = rtx.Rollback()
+		if err != nil {
+			return TaskView{}, err
+		}
 	}
-	return view, err
+	if requiredCallerKeyID != "" && callerVKeyID != requiredCallerKeyID {
+		return TaskView{}, port.ErrNotFound
+	}
+	resumingPending := cur.State == StateCanceled && cur.DownstreamCancelStatus == CancelStatusPending
+	if !resumingPending && !validSM09Transition(cur.State, StateCanceled) {
+		return TaskView{}, fmt.Errorf("%w: %s -> %s", ErrInvalidTaskStateMove, cur.State, StateCanceled)
+	}
+
+	shouldPropagate := c.cfg.Transport != nil && (resumingPending || cur.State == StateWorking || cur.State == StateInputRequired || c.hasActiveDispatch(orgID, taskID))
+	initialStatus := CancelStatusLocalOnly
+	if shouldPropagate {
+		initialStatus = CancelStatusPending
+	}
+
+	// Step 2: Commit local CANCELED transition & cascade immediately (unless resuming a task
+	// whose cancel transition already committed while Step 3/4 ledger settlement retry remained).
+	var childIDs []string
+	if !resumingPending {
+		tx, err := c.cfg.DB.BeginTx(ctx, nil)
+		if err != nil {
+			return TaskView{}, err
+		}
+		defer func() { _ = tx.Rollback() }()
+		if err := port.SetOrgRLSTx(ctx, tx, c.dialect, orgID); err != nil {
+			return TaskView{}, err
+		}
+		res, err := tx.ExecContext(ctx, port.Rebind(c.dialect, `
+			UPDATE a2a_tasks
+			SET state = ?, downstream_cancel_status = ?, downstream_cancel_detail = '',
+			    version = version + 1, updated_at_ms = ?, completed_at_ms = COALESCE(completed_at_ms, ?)
+			WHERE org_id = ? AND id = ? AND version = ?`),
+			dbStateCanceled, initialStatus, nowMs, nowMs, orgID, taskID, cur.Version,
+		)
+		if err != nil {
+			return TaskView{}, err
+		}
+		if aff, _ := res.RowsAffected(); aff == 0 {
+			return TaskView{}, port.ErrVersionConflict
+		}
+		childIDs, err = c.cascadeCancelDescendantsTx(ctx, tx, orgID, taskID, nowMs)
+		if err != nil {
+			return TaskView{}, err
+		}
+		actorID := strings.TrimSpace(auditMeta.actorID)
+		if actorID == "" {
+			actorID = callerVKeyID
+		}
+		actorKind := strings.TrimSpace(auditMeta.actorKind)
+		if actorKind == "" {
+			actorKind = "VIRTUAL_KEY"
+		}
+		entryPoint := auditMeta.entryPoint
+		if entryPoint == "" {
+			entryPoint = port.AuditEntryPointDataPlaneGuard
+		}
+		eventType := strings.TrimSpace(auditMeta.eventType)
+		if eventType == "" {
+			eventType = "a2a.task.transitioned"
+		}
+		if err := c.reg.appendAudit(ctx, tx, orgID, actorID, actorKind, entryPoint,
+			eventType, "a2a_task", taskID, taskID, map[string]any{
+				"from_state":               cur.State,
+				"to_state":                 StateCanceled,
+				"downstream_cancel_status": initialStatus,
+			}); err != nil {
+			return TaskView{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return TaskView{}, err
+		}
+	}
+
+	// Interrupt in-process active dispatches immediately on this node.
+	c.cancelActiveDispatch(orgID, taskID)
+	for _, cid := range childIDs {
+		c.cancelActiveDispatch(orgID, cid)
+	}
+
+	// Step 3: Propagate explicit downstream A2A cancellation when applicable and settle or release hold.
+	bgCtx := context.WithoutCancel(ctx)
+	cancelRes := DownstreamCancelResult{
+		Status: CancelStatusLocalOnly,
+		Detail: "task had no active downstream protocol cancel target",
+	}
+	if shouldPropagate {
+		if canceler, ok := c.cfg.Transport.(DownstreamCanceler); ok {
+			ep, epErr := c.reg.GetAgentInProject(bgCtx, orgID, projectID, cur.TargetAgentID)
+			if epErr != nil {
+				cancelRes = DownstreamCancelResult{
+					Status: CancelStatusUnreachable,
+					Detail: fmt.Sprintf("resolve target agent endpoint failed: %v", epErr),
+				}
+			} else {
+				propCtx, propCancel := context.WithTimeout(bgCtx, 5*time.Second)
+				res, pErr := canceler.CancelDownstream(propCtx, ep, cur)
+				propCancel()
+				cancelRes = res
+				if cancelRes.Status == "" {
+					if pErr != nil {
+						cancelRes.Status = CancelStatusUnreachable
+					} else {
+						cancelRes.Status = CancelStatusLocalOnly
+					}
+				}
+				if cancelRes.Detail == "" && pErr != nil {
+					cancelRes.Detail = pErr.Error()
+				}
+			}
+		} else {
+			cancelRes = DownstreamCancelResult{
+				Status: CancelStatusLocalOnly,
+				Detail: "downstream transport interrupted locally without protocol cancel support",
+			}
+		}
+	}
+
+	settledCost := cur.SettledCostMicros
+	overHoldRejected := false
+	if cancelRes.Status == CancelStatusAcknowledged && cancelRes.SpentMicros > 0 {
+		if cancelRes.SpentMicros > cur.SubBudgetHoldMicros {
+			overHoldRejected = true
+			if cancelRes.Detail != "" {
+				cancelRes.Detail += "; "
+			}
+			cancelRes.Detail += fmt.Sprintf("partial spent_micros %d exceeded sub_budget_hold_micros %d; rejected over-hold charge", cancelRes.SpentMicros, cur.SubBudgetHoldMicros)
+		} else if c.cfg.Ledger != nil {
+			sRes, sErr := c.cfg.Ledger.Settle(bgCtx, ledger.SettleRequest{
+				OrgID:            orgID,
+				ReservationID:    cur.ReservationID,
+				RequestID:        taskID,
+				ProjectID:        projectID,
+				EnvID:            envID,
+				VirtualKeyID:     callerVKeyID,
+				Plane:            ledger.PlaneA2A,
+				DeploymentID:     cur.TargetAgentID,
+				LogicalModelSlug: slug,
+				Rate:             pricing.RateCard{BillingMode: pricing.BillingModeCommercialAPI},
+				Usage: pricing.UsageInput{
+					DirectMicroUSD:       cancelRes.SpentMicros,
+					UpstreamUsagePresent: true,
+					UpstreamAccuracy:     "EXACT",
+				},
+			})
+			if sErr != nil {
+				return TaskView{}, fmt.Errorf("a2a: settle canceled partial spend failed: %w", sErr)
+			}
+			if sRes != nil {
+				settledCost = sRes.TotalCostMicros
+			}
+		} else {
+			settledCost = cancelRes.SpentMicros
+		}
+	}
+	if cur.ReservationID != "" && c.cfg.Ledger != nil && (overHoldRejected || !(cancelRes.Status == CancelStatusAcknowledged && cancelRes.SpentMicros > 0)) {
+		if _, rErr := c.cfg.Ledger.Release(bgCtx, orgID, cur.ReservationID); rErr != nil {
+			return TaskView{}, fmt.Errorf("a2a: release ledger hold failed: %w", rErr)
+		}
+	}
+
+	// Step 4: Persist final downstream_cancel_status, downstream_cancel_detail, settled_cost_micros, and audit record.
+	finalMs := c.now().UTC().UnixMilli()
+	{
+		tx, err := c.cfg.DB.BeginTx(bgCtx, nil)
+		if err != nil {
+			return TaskView{}, err
+		}
+		defer func() { _ = tx.Rollback() }()
+		if err := port.SetOrgRLSTx(bgCtx, tx, c.dialect, orgID); err != nil {
+			return TaskView{}, err
+		}
+		if _, err := tx.ExecContext(bgCtx, port.Rebind(c.dialect, `
+			UPDATE a2a_tasks
+			SET settled_cost_micros = ?, downstream_cancel_status = ?, downstream_cancel_detail = ?,
+			    version = version + 1, updated_at_ms = ?
+			WHERE org_id = ? AND id = ?`),
+			settledCost, cancelRes.Status, cancelRes.Detail, finalMs, orgID, taskID,
+		); err != nil {
+			return TaskView{}, err
+		}
+		actorID := strings.TrimSpace(auditMeta.actorID)
+		if actorID == "" {
+			actorID = callerVKeyID
+		}
+		actorKind := strings.TrimSpace(auditMeta.actorKind)
+		if actorKind == "" {
+			actorKind = "VIRTUAL_KEY"
+		}
+		entryPoint := auditMeta.entryPoint
+		if entryPoint == "" {
+			entryPoint = port.AuditEntryPointDataPlaneGuard
+		}
+		if err := c.reg.appendAudit(bgCtx, tx, orgID, actorID, actorKind, entryPoint,
+			"a2a.task.cancel_propagated", "a2a_task", taskID, taskID, map[string]any{
+				"downstream_cancel_status": cancelRes.Status,
+				"downstream_cancel_detail": cancelRes.Detail,
+				"settled_cost_micros":      settledCost,
+				"over_hold_rejected":       overHoldRejected,
+			}); err != nil {
+			return TaskView{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return TaskView{}, err
+		}
+	}
+
+	finalView, err := c.GetTask(bgCtx, orgID, projectID, taskID)
+	if err != nil {
+		return TaskView{}, err
+	}
+	c.broadcastTask(finalView)
+	return finalView, nil
+}
+
+func (c *TaskCoordinator) hasActiveDispatch(orgID, taskID string) bool {
+	if c == nil {
+		return false
+	}
+	c.activeMu.Lock()
+	_, ok := c.activeCancels[activeDispatchKey(orgID, taskID)]
+	c.activeMu.Unlock()
+	return ok
+}
+
+func (c *TaskCoordinator) awaitSettledCancelView(ctx context.Context, orgID, projectID, taskID string) (TaskView, bool) {
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for {
+		latest, err := c.GetTask(ctx, orgID, projectID, taskID)
+		if err != nil || latest.State != StateCanceled {
+			return TaskView{}, false
+		}
+		if latest.DownstreamCancelStatus != CancelStatusPending || time.Now().After(deadline) {
+			return latest, true
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
 }
 
 func activeDispatchKey(orgID, taskID string) string {
@@ -1487,6 +1881,9 @@ func (c *TaskCoordinator) dispatchTaskCancellable(
 	task TaskView,
 	inputParts []map[string]any,
 ) (UpstreamTaskResponse, bool, error) {
+	if task.SubBudgetHoldMicros <= 0 {
+		return UpstreamTaskResponse{}, false, fmt.Errorf("%w: sub_budget_hold_micros must be greater than 0 before dispatching downstream A2A task", ErrPrivilegeOrBudget)
+	}
 	dispatchCtx, cancelDispatch := context.WithCancel(ctx)
 	defer cancelDispatch()
 	c.registerActiveDispatch(orgID, taskID, cancelDispatch)
@@ -1496,7 +1893,7 @@ func (c *TaskCoordinator) dispatchTaskCancellable(
 	watchStop := make(chan struct{})
 	go func() {
 		defer close(watchDone)
-		ticker := time.NewTicker(100 * time.Millisecond)
+		ticker := time.NewTicker(20 * time.Millisecond)
 		defer ticker.Stop()
 		for {
 			select {
@@ -1573,7 +1970,8 @@ func (c *TaskCoordinator) loadTaskWithMetaTx(ctx context.Context, tx *sql.Tx, or
 	q := `SELECT t.id, t.project_id, t.env_id, t.agent_endpoint_id, COALESCE(e.agent_slug,''),
 	             t.caller_virtual_key_id, t.trace_root_id, t.hop_count, t.call_chain_ids_json,
 	             t.sub_budget_cap_micros, t.settled_cost_micros, COALESCE(t.reservation_id,''), COALESCE(t.enforced_region,''),
-	             t.artifacts_json, t.state, t.version, t.created_at_ms, t.updated_at_ms, t.completed_at_ms
+	             t.artifacts_json, COALESCE(t.downstream_cancel_status,''), COALESCE(t.downstream_cancel_detail,''),
+	             t.state, t.version, t.created_at_ms, t.updated_at_ms, t.completed_at_ms
 	      FROM a2a_tasks t
 	      LEFT JOIN agent_endpoints e ON e.org_id = t.org_id AND e.id = t.agent_endpoint_id
 	      WHERE t.org_id = ? AND t.id = ?`
@@ -1585,13 +1983,13 @@ func (c *TaskCoordinator) loadTaskWithMetaTx(ctx context.Context, tx *sql.Tx, or
 	if forUpdate && c.dialect == port.DialectPostgres {
 		q += ` FOR UPDATE OF t`
 	}
-	var id, pID, envID, agentID, agentSlug, vkeyID, traceRoot, chainJSON, resID, region, artifactsJSON, dbState string
+	var id, pID, envID, agentID, agentSlug, vkeyID, traceRoot, chainJSON, resID, region, artifactsJSON, cancelStatus, cancelDetail, dbState string
 	var hop int
 	var hold, settled, ver, createdMs, updatedMs int64
 	var completedMs sql.NullInt64
 	err := tx.QueryRowContext(ctx, port.Rebind(c.dialect, q), args...).Scan(
 		&id, &pID, &envID, &agentID, &agentSlug, &vkeyID, &traceRoot, &hop, &chainJSON,
-		&hold, &settled, &resID, &region, &artifactsJSON, &dbState, &ver, &createdMs, &updatedMs, &completedMs,
+		&hold, &settled, &resID, &region, &artifactsJSON, &cancelStatus, &cancelDetail, &dbState, &ver, &createdMs, &updatedMs, &completedMs,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TaskView{}, "", "", "", port.ErrNotFound
@@ -1603,22 +2001,24 @@ func (c *TaskCoordinator) loadTaskWithMetaTx(ctx context.Context, tx *sql.Tx, or
 	_ = json.Unmarshal([]byte(chainJSON), &chain)
 	promptMsg, artifacts := splitPromptAndArtifacts(artifactsJSON)
 	v := TaskView{
-		TaskID:              id,
-		TargetAgentID:       agentID,
-		TargetAgentSlug:     agentSlug,
-		State:               dbStateToAPI(dbState),
-		PromptMessage:       promptMsg,
-		HopCount:            hop,
-		CallChainIDs:        chain,
-		TraceRootID:         traceRoot,
-		EnforcedRegion:      region,
-		SubBudgetHoldMicros: hold,
-		SettledCostMicros:   settled,
-		ReservationID:       resID,
-		Artifacts:           artifacts,
-		Version:             ver,
-		CreatedAt:           time.UnixMilli(createdMs).UTC().Format(time.RFC3339Nano),
-		UpdatedAt:           time.UnixMilli(updatedMs).UTC().Format(time.RFC3339Nano),
+		TaskID:                 id,
+		TargetAgentID:          agentID,
+		TargetAgentSlug:        agentSlug,
+		State:                  dbStateToAPI(dbState),
+		PromptMessage:          promptMsg,
+		HopCount:               hop,
+		CallChainIDs:           chain,
+		TraceRootID:            traceRoot,
+		EnforcedRegion:         region,
+		SubBudgetHoldMicros:    hold,
+		SettledCostMicros:      settled,
+		ReservationID:          resID,
+		DownstreamCancelStatus: cancelStatus,
+		DownstreamCancelDetail: cancelDetail,
+		Artifacts:              artifacts,
+		Version:                ver,
+		CreatedAt:              time.UnixMilli(createdMs).UTC().Format(time.RFC3339Nano),
+		UpdatedAt:              time.UnixMilli(updatedMs).UTC().Format(time.RFC3339Nano),
 	}
 	if completedMs.Valid {
 		v.CompletedAt = time.UnixMilli(completedMs.Int64).UTC().Format(time.RFC3339Nano)
@@ -2074,8 +2474,43 @@ func (c *TaskCoordinator) ensureNoActiveChildrenTx(ctx context.Context, tx *sql.
 	return nil
 }
 
-func (c *TaskCoordinator) cascadeCancelDescendantsTx(ctx context.Context, tx *sql.Tx, orgID, rootTaskID string, nowMs int64) error {
-	_, err := tx.ExecContext(ctx, port.Rebind(c.dialect, `
+func (c *TaskCoordinator) cascadeCancelDescendantsTx(ctx context.Context, tx *sql.Tx, orgID, rootTaskID string, nowMs int64) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, port.Rebind(c.dialect, `
+		WITH RECURSIVE tree AS (
+			SELECT id FROM a2a_tasks WHERE org_id = ? AND parent_task_id = ?
+			UNION ALL
+			SELECT t.id FROM a2a_tasks t
+			JOIN tree ON t.parent_task_id = tree.id
+			WHERE t.org_id = ?
+		)
+		SELECT id FROM a2a_tasks
+		WHERE org_id = ?
+		  AND id IN (SELECT id FROM tree)
+		  AND state NOT IN ('COMPLETED', 'FAILED', 'CANCELED')`),
+		orgID, rootTaskID, orgID, orgID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if scanErr := rows.Scan(&id); scanErr != nil {
+			_ = rows.Close()
+			return nil, scanErr
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if _, err := tx.ExecContext(ctx, port.Rebind(c.dialect, `
 		WITH RECURSIVE tree AS (
 			SELECT id FROM a2a_tasks WHERE org_id = ? AND parent_task_id = ?
 			UNION ALL
@@ -2085,6 +2520,7 @@ func (c *TaskCoordinator) cascadeCancelDescendantsTx(ctx context.Context, tx *sq
 		)
 		UPDATE a2a_tasks
 		SET state = 'CANCELED',
+		    downstream_cancel_status = CASE WHEN downstream_cancel_status = '' THEN 'local_only' ELSE downstream_cancel_status END,
 		    version = version + 1,
 		    updated_at_ms = ?,
 		    completed_at_ms = COALESCE(completed_at_ms, ?)
@@ -2092,6 +2528,8 @@ func (c *TaskCoordinator) cascadeCancelDescendantsTx(ctx context.Context, tx *sq
 		  AND id IN (SELECT id FROM tree)
 		  AND state NOT IN ('COMPLETED', 'FAILED', 'CANCELED')`),
 		orgID, rootTaskID, orgID, nowMs, nowMs, orgID,
-	)
-	return err
+	); err != nil {
+		return nil, err
+	}
+	return ids, nil
 }

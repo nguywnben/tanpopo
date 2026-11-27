@@ -284,6 +284,10 @@ func (s *Server) handleUpdateBudget(w http.ResponseWriter, r *http.Request) {
 		writeErrorEnvelope(w, r, http.StatusNotFound, "resource_not_found", "not_found_error", "budget not found", false, nil)
 		return
 	}
+	if len(budgetID) > 128 {
+		writeErrorEnvelope(w, r, http.StatusBadRequest, "invalid_request", "invalid_request_error", "budgetId must be at most 128 characters", false, nil)
+		return
+	}
 	var req updateBudgetRequest
 	if !s.decodeJSONAndCheckOrgSpoofing(w, r, sc, &req) {
 		return

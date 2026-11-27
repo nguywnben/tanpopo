@@ -872,9 +872,11 @@ CREATE TABLE a2a_tasks (
     sub_budget_cap_micros BIGINT NOT NULL CHECK (sub_budget_cap_micros >= 0),
     settled_cost_micros   BIGINT NOT NULL DEFAULT 0 CHECK (settled_cost_micros >= 0),
     reservation_id        VARCHAR(40),
-    enforced_region       VARCHAR(32),
-    artifacts_json        JSONB NOT NULL DEFAULT '[]'::jsonb,
-    state                 VARCHAR(24) NOT NULL DEFAULT 'SUBMITTED'
+    enforced_region          VARCHAR(32),
+    artifacts_json           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    downstream_cancel_status VARCHAR(32) NOT NULL DEFAULT '',
+    downstream_cancel_detail TEXT NOT NULL DEFAULT '',
+    state                    VARCHAR(24) NOT NULL DEFAULT 'SUBMITTED'
                           CHECK (state IN (
                               'SUBMITTED',
                               'WORKING',
@@ -1020,10 +1022,10 @@ CREATE INDEX idx_webhook_event_outbox_pending ON webhook_event_outbox (created_a
 -- 25. Two-Phase Budget Ledger, Valkey Checkpoints, Settlements & Rollups
 -- -----------------------------------------------------------------------------
 CREATE TABLE budget_ledgers (
-    id                             VARCHAR(40) NOT NULL, -- 'bdg_<26_base32>'
+    id                             VARCHAR(128) NOT NULL, -- 'bdg_<26_base32>' or 'bgt_<scope>_<id>_<period>'
     org_id                         VARCHAR(40) NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     scope_type                     VARCHAR(16) NOT NULL CHECK (scope_type IN ('ORG', 'PROJECT', 'ENV', 'VIRTUAL_KEY')),
-    scope_id                       VARCHAR(40) NOT NULL,
+    scope_id                       VARCHAR(128) NOT NULL,
     period_kind                    VARCHAR(16) NOT NULL CHECK (period_kind IN ('MONTHLY', 'DAILY', 'TOTAL_LIFETIME')),
     period_start_ms                BIGINT NOT NULL,
     period_end_ms                  BIGINT NOT NULL CHECK (period_end_ms > period_start_ms),
@@ -1071,7 +1073,7 @@ CREATE TABLE budget_reservations (
 CREATE TABLE budget_reservation_ledgers (
     org_id         VARCHAR(40) NOT NULL,
     reservation_id VARCHAR(40) NOT NULL,
-    ledger_id      VARCHAR(40) NOT NULL,
+    ledger_id      VARCHAR(128) NOT NULL,
     held_micros    BIGINT NOT NULL CHECK (held_micros >= 0),
     PRIMARY KEY (org_id, reservation_id, ledger_id),
     FOREIGN KEY (org_id, reservation_id) REFERENCES budget_reservations(org_id, id) ON DELETE CASCADE,
@@ -1080,7 +1082,7 @@ CREATE TABLE budget_reservation_ledgers (
 
 CREATE TABLE valkey_hold_checkpoints (
     org_id                  VARCHAR(40) NOT NULL,
-    ledger_id               VARCHAR(40) NOT NULL,
+    ledger_id               VARCHAR(128) NOT NULL,
     node_id                 VARCHAR(64) NOT NULL,
     active_hold_micro_usd   BIGINT NOT NULL DEFAULT 0 CHECK (active_hold_micro_usd >= 0),
     active_inflight_streams INTEGER NOT NULL DEFAULT 0 CHECK (active_inflight_streams >= 0),
@@ -1215,7 +1217,7 @@ CREATE TABLE audit_events (
                   CHECK (entry_point IN ('admin_api', 'cli', 'gitops_boot', 'system_reaper', 'data_plane_guard')),
     event_type    VARCHAR(64) NOT NULL,
     target_type   VARCHAR(32) NOT NULL,
-    target_id     VARCHAR(64) NOT NULL,
+    target_id     VARCHAR(128) NOT NULL,
     request_id    VARCHAR(40),
     metadata_json JSONB NOT NULL,       -- Canonicalized via RFC 8785 JCS prior to hashing
     prev_hash     CHAR(64) NOT NULL,    -- seq_no=1: SHA-256("tanpopo:audit:genesis:v1:" + chain_key)
@@ -1265,7 +1267,7 @@ CREATE TABLE config_changelog (
     config_epoch  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     org_id        VARCHAR(40),
     entity_kind   VARCHAR(32) NOT NULL,
-    entity_id     VARCHAR(64) NOT NULL,
+    entity_id     VARCHAR(128) NOT NULL,
     mutation_type VARCHAR(24) NOT NULL
                   CHECK (mutation_type IN ('UPSERT', 'DELETE', 'REVOKE', 'QUARANTINE', 'KEY_ROTATE', 'SHRED')),
     emergency     BOOLEAN NOT NULL DEFAULT FALSE,

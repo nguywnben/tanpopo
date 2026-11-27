@@ -470,119 +470,15 @@ func (r *Repository) CreateProviderAdapter(ctx context.Context, params CreatePro
 // for an active SM-01 extension installation (used during activation, upgrade,
 // rollback, and reinstall so allowed_hosts, dialects, and native_prefix stay current).
 func (r *Repository) UpsertProviderAdapter(ctx context.Context, params CreateProviderAdapterParams) (*ProviderAdapter, error) {
-	if strings.TrimSpace(params.InstallationID) == "" || strings.TrimSpace(params.AdapterSlug) == "" {
-		return nil, fmt.Errorf("%w: installation_id and adapter_slug are required", port.ErrInvalidInput)
-	}
-	if len(params.AllowedHosts) == 0 {
-		return nil, fmt.Errorf("%w: allowed_hosts must not be empty (default-deny CT-14)", port.ErrInvalidInput)
-	}
-	for _, h := range params.AllowedHosts {
-		if err := validateHostEntry(h); err != nil {
-			return nil, err
-		}
-	}
-	dialectsJSON, err := marshalStringSlice(params.SupportedDialects)
-	if err != nil {
-		return nil, err
-	}
-	hostsJSON, err := marshalStringSlice(params.AllowedHosts)
-	if err != nil {
-		return nil, err
-	}
 	now := r.nowMs()
-	slug := strings.TrimSpace(params.AdapterSlug)
 	var targetID string
-
 	if err := r.withOperatorTx(ctx, func(tx *sql.Tx) error {
-		gov, err := r.loadAdapterExtensionGovernance(ctx, tx, params.InstallationID)
+		id, _, err := r.upsertProviderAdapterTx(ctx, tx, params, now, false)
 		if err != nil {
 			return err
 		}
-		if !isValidAdapterInstallState(gov.InstallState) {
-			return fmt.Errorf("%w: extension installation %q state %s cannot back an adapter", port.ErrInvalidInput, params.InstallationID, gov.InstallState)
-		}
-		if gov.ActiveVersionID == "" {
-			return fmt.Errorf("%w: extension installation %q has no active SM-01 version", port.ErrInvalidInput, params.InstallationID)
-		}
-		if params.ExpectedActiveVersionID != "" && gov.ActiveVersionID != params.ExpectedActiveVersionID {
-			return port.ErrVersionConflict
-		}
-		if params.ExpectedActiveVersionID != "" {
-			var manifestJSON string
-			if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = (SELECT package_id FROM extension_installations WHERE id = ?)`), gov.ActiveVersionID, params.InstallationID).Scan(&manifestJSON); err != nil {
-				return mapDBError(err)
-			}
-			var manifest installer.ExtensionManifest
-			if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
-				return fmt.Errorf("%w: active provider adapter manifest is invalid", port.ErrInvalidInput)
-			}
-			declared := false
-			for _, capability := range manifest.Capabilities {
-				if capability.Type != "provider_adapter" || capability.AdapterSlug != slug {
-					continue
-				}
-				declaredPrefix := strings.TrimSpace(capability.NativePassthroughPrefix)
-				requestedPrefix := ""
-				if params.NativePrefix != nil {
-					requestedPrefix = strings.TrimSpace(*params.NativePrefix)
-				}
-				if declaredPrefix != requestedPrefix || !sameStrings(capability.SupportedDialects, params.SupportedDialects) {
-					return fmt.Errorf("%w: adapter metadata does not match its active manifest capability", port.ErrInvalidInput)
-				}
-				declared = true
-				break
-			}
-			if !declared {
-				return fmt.Errorf("%w: adapter slug is not declared by the active manifest", port.ErrInvalidInput)
-			}
-		}
-		approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
-		if err != nil {
-			return fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
-		}
-		for _, reqHost := range params.AllowedHosts {
-			if !hostPatternPermittedByApproved(reqHost, approved.AllowedHosts, approved.EndpointHostSuffixes) {
-				return fmt.Errorf("%w: adapter allowed_host %q exceeds SM-01 approved networkEgress.allowedHosts", port.ErrInvalidInput, reqHost)
-			}
-		}
-
-		err = tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT id FROM provider_adapters WHERE installation_id = ? AND adapter_slug = ?`), params.InstallationID, slug).Scan(&targetID)
-		switch {
-		case err == nil:
-			if _, uerr := tx.ExecContext(ctx, port.Rebind(r.dialect, `
-				UPDATE provider_adapters
-				SET native_prefix = ?, supported_dialects_json = ?, allowed_hosts_json = ?, version = version + 1
-				WHERE id = ?`),
-				nullStrPtr(params.NativePrefix), dialectsJSON, hostsJSON, targetID,
-			); uerr != nil {
-				return mapWriteDBError(uerr)
-			}
-		case errors.Is(err, sql.ErrNoRows):
-			id, idErr := resolveID(params.ID, idgen.PrefixAdapter)
-			if idErr != nil {
-				return idErr
-			}
-			targetID = id
-			if _, ierr := tx.ExecContext(ctx, port.Rebind(r.dialect, `
-				INSERT INTO provider_adapters (
-					id, installation_id, adapter_slug, native_prefix,
-					supported_dialects_json, allowed_hosts_json, version, created_at_ms
-				) VALUES (?, ?, ?, ?, ?, ?, 1, ?)`),
-				targetID, params.InstallationID, slug, nullStrPtr(params.NativePrefix),
-				dialectsJSON, hostsJSON, now,
-			); ierr != nil {
-				return mapWriteDBError(ierr)
-			}
-		default:
-			return mapDBError(err)
-		}
-		if err := r.appendChangelogTx(ctx, tx, nil, "provider_adapter", targetID, port.MutationUpsert, false, now); err != nil {
-			return err
-		}
-		return r.emitAuditTx(ctx, tx, nil, "provider_adapter.synced", "provider_adapter", targetID, map[string]any{
-			"adapter_slug":    slug,
-			"installation_id": params.InstallationID,
-		}, now)
+		targetID = id
+		return nil
 	}); err != nil {
 		return nil, err
 	}
@@ -591,6 +487,320 @@ func (r *Repository) UpsertProviderAdapter(ctx context.Context, params CreatePro
 		return nil, err
 	}
 	return r.GetProviderAdapter(ctx, targetID)
+}
+
+// SyncExtensionProviderAdapters synchronizes all provider_adapter capabilities declared
+// by an active installation's pinned manifest idempotently and refreshes serving snapshots.
+func (r *Repository) SyncExtensionProviderAdapters(ctx context.Context, installationID string) error {
+	if strings.TrimSpace(installationID) == "" {
+		return nil
+	}
+	now := r.nowMs()
+	var changed int
+	if err := r.withOperatorTx(ctx, func(tx *sql.Tx) error {
+		n, err := r.syncExtensionProviderAdaptersTx(ctx, tx, installationID, now, true)
+		if err != nil {
+			return err
+		}
+		changed = n
+		return nil
+	}); err != nil {
+		return err
+	}
+	if changed > 0 {
+		return r.syncSnapshot(ctx)
+	}
+	return nil
+}
+
+// SyncExtensionProviderAdaptersTx synchronizes provider_adapter rows for installationID
+// inside an active SQL transaction before commit so extension activation/upgrade/enable/
+// rollback and adapter registration commit atomically.
+func (r *Repository) SyncExtensionProviderAdaptersTx(ctx context.Context, tx *sql.Tx, installationID string, nowMs int64) error {
+	_, err := r.syncExtensionProviderAdaptersTx(ctx, tx, installationID, nowMs, true)
+	return err
+}
+
+// ReconcileMissingProviderAdapters heals any active extensions whose provider_adapters
+// rows are missing or out of date (e.g. from prior non-atomic crashes/failures) at startup.
+func (r *Repository) ReconcileMissingProviderAdapters(ctx context.Context) (int, error) {
+	now := r.nowMs()
+	total := 0
+	if err := r.withOperatorTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, port.Rebind(r.dialect, `
+			SELECT id
+			FROM extension_installations
+			WHERE state IN ('ENABLED_ACTIVE', 'ROLLED_BACK', 'UPDATING_PENDING_RECONSENT')
+			  AND active_version_id IS NOT NULL`))
+		if err != nil {
+			return mapDBError(err)
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			if scanErr := rows.Scan(&id); scanErr != nil {
+				_ = rows.Close()
+				return scanErr
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			n, syncErr := r.syncExtensionProviderAdaptersTx(ctx, tx, id, now, true)
+			if syncErr != nil {
+				return syncErr
+			}
+			total += n
+		}
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	if total > 0 {
+		if err := r.syncSnapshot(ctx); err != nil {
+			return total, err
+		}
+	}
+	return total, nil
+}
+
+func (r *Repository) syncExtensionProviderAdaptersTx(ctx context.Context, tx *sql.Tx, installationID string, nowMs int64, skipIfUnchanged bool) (int, error) {
+	if strings.TrimSpace(installationID) == "" {
+		return 0, nil
+	}
+	if err := port.SetOperatorRLSTx(ctx, tx, r.dialect); err != nil {
+		return 0, err
+	}
+	var (
+		state           string
+		activeVersionID sql.NullString
+		manifestJSON    sql.NullString
+	)
+	err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `
+		SELECT ei.state, ei.active_version_id, ev.manifest_json
+		FROM extension_installations ei
+		LEFT JOIN extension_versions ev ON ev.id = ei.active_version_id
+		WHERE ei.id = ?`), installationID,
+	).Scan(&state, &activeVersionID, &manifestJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, mapDBError(err)
+	}
+	if !activeVersionID.Valid || strings.TrimSpace(activeVersionID.String) == "" ||
+		!manifestJSON.Valid || strings.TrimSpace(manifestJSON.String) == "" {
+		return 0, nil
+	}
+	switch state {
+	case installer.StateEnabledActive, installer.StateRolledBack, installer.StateUpdatingPendingReconsent:
+	default:
+		return 0, nil
+	}
+
+	var manifest installer.ExtensionManifest
+	if err := json.Unmarshal([]byte(manifestJSON.String), &manifest); err != nil {
+		return 0, fmt.Errorf("decode extension manifest for adapter sync: %w", err)
+	}
+	allowedHosts := normalizeAdapterHostList(manifest.Permissions.NetworkEgress.AllowedHosts)
+	if len(allowedHosts) == 0 {
+		return 0, nil
+	}
+
+	changed := 0
+	for _, capItem := range manifest.Capabilities {
+		if strings.TrimSpace(capItem.Type) != "provider_adapter" {
+			continue
+		}
+		slug := strings.TrimSpace(capItem.AdapterSlug)
+		if slug == "" {
+			continue
+		}
+		var nativePrefix *string
+		if p := strings.TrimSpace(capItem.NativePassthroughPrefix); p != "" {
+			nativePrefix = &p
+		}
+		_, updated, cerr := r.upsertProviderAdapterTx(ctx, tx, CreateProviderAdapterParams{
+			InstallationID:          installationID,
+			ExpectedActiveVersionID: activeVersionID.String,
+			AdapterSlug:             slug,
+			NativePrefix:            nativePrefix,
+			SupportedDialects:       capItem.SupportedDialects,
+			AllowedHosts:            allowedHosts,
+		}, nowMs, skipIfUnchanged)
+		if cerr != nil {
+			return changed, cerr
+		}
+		if updated {
+			changed++
+		}
+	}
+	return changed, nil
+}
+
+func (r *Repository) upsertProviderAdapterTx(ctx context.Context, tx *sql.Tx, params CreateProviderAdapterParams, now int64, skipIfUnchanged bool) (string, bool, error) {
+	if strings.TrimSpace(params.InstallationID) == "" || strings.TrimSpace(params.AdapterSlug) == "" {
+		return "", false, fmt.Errorf("%w: installation_id and adapter_slug are required", port.ErrInvalidInput)
+	}
+	if len(params.AllowedHosts) == 0 {
+		return "", false, fmt.Errorf("%w: allowed_hosts must not be empty (default-deny CT-14)", port.ErrInvalidInput)
+	}
+	for _, h := range params.AllowedHosts {
+		if err := validateHostEntry(h); err != nil {
+			return "", false, err
+		}
+	}
+	dialectsJSON, err := marshalStringSlice(params.SupportedDialects)
+	if err != nil {
+		return "", false, err
+	}
+	hostsJSON, err := marshalStringSlice(params.AllowedHosts)
+	if err != nil {
+		return "", false, err
+	}
+	slug := strings.TrimSpace(params.AdapterSlug)
+
+	gov, err := r.loadAdapterExtensionGovernance(ctx, tx, params.InstallationID)
+	if err != nil {
+		return "", false, err
+	}
+	if !isValidAdapterInstallState(gov.InstallState) {
+		return "", false, fmt.Errorf("%w: extension installation %q state %s cannot back an adapter", port.ErrInvalidInput, params.InstallationID, gov.InstallState)
+	}
+	if gov.ActiveVersionID == "" {
+		return "", false, fmt.Errorf("%w: extension installation %q has no active SM-01 version", port.ErrInvalidInput, params.InstallationID)
+	}
+	if params.ExpectedActiveVersionID != "" && gov.ActiveVersionID != params.ExpectedActiveVersionID {
+		return "", false, port.ErrVersionConflict
+	}
+	if params.ExpectedActiveVersionID != "" {
+		var manifestJSON string
+		if err := tx.QueryRowContext(ctx, port.Rebind(r.dialect, `SELECT manifest_json FROM extension_versions WHERE id = ? AND package_id = (SELECT package_id FROM extension_installations WHERE id = ?)`), gov.ActiveVersionID, params.InstallationID).Scan(&manifestJSON); err != nil {
+			return "", false, mapDBError(err)
+		}
+		var manifest installer.ExtensionManifest
+		if err := json.Unmarshal([]byte(manifestJSON), &manifest); err != nil {
+			return "", false, fmt.Errorf("%w: active provider adapter manifest is invalid", port.ErrInvalidInput)
+		}
+		declared := false
+		for _, capability := range manifest.Capabilities {
+			if capability.Type != "provider_adapter" || capability.AdapterSlug != slug {
+				continue
+			}
+			declaredPrefix := strings.TrimSpace(capability.NativePassthroughPrefix)
+			requestedPrefix := ""
+			if params.NativePrefix != nil {
+				requestedPrefix = strings.TrimSpace(*params.NativePrefix)
+			}
+			if declaredPrefix != requestedPrefix || !sameStrings(capability.SupportedDialects, params.SupportedDialects) {
+				return "", false, fmt.Errorf("%w: adapter metadata does not match its active manifest capability", port.ErrInvalidInput)
+			}
+			declared = true
+			break
+		}
+		if !declared {
+			return "", false, fmt.Errorf("%w: adapter slug is not declared by the active manifest", port.ErrInvalidInput)
+		}
+	}
+	approved, err := decodeApprovedPermissionsStrict(gov.ApprovedPermissionsJSON)
+	if err != nil {
+		return "", false, fmt.Errorf("%w: %w", port.ErrInvalidInput, err)
+	}
+	for _, reqHost := range params.AllowedHosts {
+		if !hostPatternPermittedByApproved(reqHost, approved.AllowedHosts, approved.EndpointHostSuffixes) {
+			return "", false, fmt.Errorf("%w: adapter allowed_host %q exceeds SM-01 approved networkEgress.allowedHosts", port.ErrInvalidInput, reqHost)
+		}
+	}
+
+	var (
+		targetID            string
+		existingPrefix      sql.NullString
+		existingDialectsRaw sql.NullString
+		existingHostsRaw    sql.NullString
+	)
+	err = tx.QueryRowContext(ctx, port.Rebind(r.dialect, `
+		SELECT id, native_prefix, supported_dialects_json, allowed_hosts_json
+		FROM provider_adapters
+		WHERE installation_id = ? AND adapter_slug = ?`), params.InstallationID, slug,
+	).Scan(&targetID, &existingPrefix, &existingDialectsRaw, &existingHostsRaw)
+	switch {
+	case err == nil:
+		if skipIfUnchanged {
+			wantPrefix := ""
+			if params.NativePrefix != nil {
+				wantPrefix = *params.NativePrefix
+			}
+			gotPrefix := ""
+			if existingPrefix.Valid {
+				gotPrefix = existingPrefix.String
+			}
+			var gotDialects, gotHosts []string
+			if existingDialectsRaw.Valid {
+				_ = json.Unmarshal([]byte(existingDialectsRaw.String), &gotDialects)
+			}
+			if existingHostsRaw.Valid {
+				_ = json.Unmarshal([]byte(existingHostsRaw.String), &gotHosts)
+			}
+			if gotPrefix == wantPrefix && sameStrings(gotDialects, params.SupportedDialects) && sameStrings(gotHosts, params.AllowedHosts) {
+				return targetID, false, nil
+			}
+		}
+		if _, uerr := tx.ExecContext(ctx, port.Rebind(r.dialect, `
+			UPDATE provider_adapters
+			SET native_prefix = ?, supported_dialects_json = ?, allowed_hosts_json = ?, version = version + 1
+			WHERE id = ?`),
+			nullStrPtr(params.NativePrefix), dialectsJSON, hostsJSON, targetID,
+		); uerr != nil {
+			return "", false, mapWriteDBError(uerr)
+		}
+	case errors.Is(err, sql.ErrNoRows):
+		id, idErr := resolveID(params.ID, idgen.PrefixAdapter)
+		if idErr != nil {
+			return "", false, idErr
+		}
+		targetID = id
+		if _, ierr := tx.ExecContext(ctx, port.Rebind(r.dialect, `
+			INSERT INTO provider_adapters (
+				id, installation_id, adapter_slug, native_prefix,
+				supported_dialects_json, allowed_hosts_json, version, created_at_ms
+			) VALUES (?, ?, ?, ?, ?, ?, 1, ?)`),
+			targetID, params.InstallationID, slug, nullStrPtr(params.NativePrefix),
+			dialectsJSON, hostsJSON, now,
+		); ierr != nil {
+			return "", false, mapWriteDBError(ierr)
+		}
+	default:
+		return "", false, mapDBError(err)
+	}
+	if err := r.appendChangelogTx(ctx, tx, nil, "provider_adapter", targetID, port.MutationUpsert, false, now); err != nil {
+		return "", false, err
+	}
+	if err := r.emitAuditTx(ctx, tx, nil, "provider_adapter.synced", "provider_adapter", targetID, map[string]any{
+		"adapter_slug":    slug,
+		"installation_id": params.InstallationID,
+	}, now); err != nil {
+		return "", false, err
+	}
+	return targetID, true, nil
+}
+
+func normalizeAdapterHostList(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, h := range in {
+		canon := strings.ToLower(strings.TrimSpace(h))
+		if canon != "" && !seen[canon] {
+			seen[canon] = true
+			out = append(out, canon)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func sameStrings(a, b []string) bool {

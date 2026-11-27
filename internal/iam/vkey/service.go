@@ -1078,6 +1078,19 @@ func (s *Service) RevokeWithReceipt(ctx context.Context, params RevokeParams) (*
 
 // FinalizeExpiredRotations clears elapsed previous_key_hash grace windows cleanly back to CREATED_ACTIVE.
 func (s *Service) FinalizeExpiredRotations(ctx context.Context) (int, error) {
+	return s.finalizeExpiredRotations(ctx, "")
+}
+
+// FinalizeExpiredRotationsForOrg deterministically finalizes elapsed grace windows
+// scoped to a single organization (safe and fast on read/mutation paths under PG RLS).
+func (s *Service) FinalizeExpiredRotationsForOrg(ctx context.Context, orgID string) (int, error) {
+	if s == nil || s.db == nil || strings.TrimSpace(orgID) == "" {
+		return 0, nil
+	}
+	return s.finalizeExpiredRotations(ctx, strings.TrimSpace(orgID))
+}
+
+func (s *Service) finalizeExpiredRotations(ctx context.Context, targetOrgID string) (int, error) {
 	now := s.nowMs()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1087,7 +1100,33 @@ func (s *Service) FinalizeExpiredRotations(ctx context.Context) (int, error) {
 
 	type keyRef struct{ orgID, id string }
 	var due []keyRef
-	if s.dialect == port.DialectPostgres {
+	if targetOrgID != "" {
+		if err := port.SetOrgRLSTx(ctx, tx, s.dialect, targetOrgID); err != nil {
+			return 0, err
+		}
+		rows, err := tx.QueryContext(ctx, port.Rebind(s.dialect, `
+			SELECT id FROM virtual_keys
+			WHERE org_id = ? AND state = 'ROTATING_DUAL_VALID' AND grace_expires_at_ms IS NOT NULL AND grace_expires_at_ms <= ?`),
+			targetOrgID, now)
+		if err != nil {
+			return 0, err
+		}
+		for rows.Next() {
+			var keyID string
+			if scanErr := rows.Scan(&keyID); scanErr != nil {
+				_ = rows.Close()
+				return 0, fmt.Errorf("vkey: scan expired rotation: %w", scanErr)
+			}
+			due = append(due, keyRef{orgID: targetOrgID, id: keyID})
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return 0, fmt.Errorf("vkey: iterate expired rotations: %w", err)
+		}
+		if err := rows.Close(); err != nil {
+			return 0, fmt.Errorf("vkey: close expired rotations cursor: %w", err)
+		}
+	} else if s.dialect == port.DialectPostgres {
 		orgIDs, err := port.ListOrgIDsTx(ctx, tx, s.dialect)
 		if err != nil {
 			return 0, fmt.Errorf("vkey: list org ids: %w", err)

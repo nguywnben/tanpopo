@@ -309,9 +309,18 @@ export function McpHubPage({
     setError('');
     setNotice('');
     try {
-      await cancelA2aTask(task.task_id);
+      const canceled = await cancelA2aTask(task.task_id);
       await refresh();
-      setNotice(t('a2a.taskCanceled'));
+      const status = canceled.downstream_cancel_status;
+      if (status === 'acknowledged') {
+        setNotice(t('a2a.taskCanceledAcknowledged'));
+      } else if (status === 'pending') {
+        setNotice(t('a2a.taskCanceledPending'));
+      } else if (status === 'unsupported' || status === 'rejected' || status === 'unreachable') {
+        setNotice(t('a2a.taskCanceledDownstreamUnconfirmed', {status: t(`a2a.cancelStatus.${status}`)}));
+      } else {
+        setNotice(t('a2a.taskCanceledLocalOnly'));
+      }
     } catch (cause) {
       setError(cause instanceof Error && cause.message ? cause.message : t('a2a.taskCancelFailed'));
     } finally {
@@ -569,7 +578,19 @@ export function McpHubPage({
                     </div>
                   ),
                 },
-                {id: 'state', header: t('common.state'), width: '14%', render: row => <StatusPill tone={a2aTaskTone(row.state)} label={t(`a2a.state.${row.state}`)} />},
+                {
+                  id: 'state',
+                  header: t('common.state'),
+                  width: '16%',
+                  render: row => (
+                    <div className="tp-stack-sm">
+                      <StatusPill tone={a2aTaskTone(row.state)} label={t(`a2a.state.${row.state}`)} />
+                      {row.state === 'canceled' && row.downstream_cancel_status ? (
+                        <span className="tp-muted">{t(`a2a.cancelStatus.${row.downstream_cancel_status}`)}</span>
+                      ) : null}
+                    </div>
+                  ),
+                },
                 {id: 'hops', header: t('a2a.col.hops'), width: '10%', render: row => <span className="num mono">{formatNumber(row.hop_count)} / 5</span>},
                 {id: 'region', header: t('a2a.col.region'), width: '10%', render: row => <span className="mono">{row.enforced_region || '—'}</span>},
                 {id: 'hold', header: t('a2a.col.subBudget'), width: '14%', render: row => <span className="num mono">{formatMicroUSD(row.sub_budget_hold_micros)}</span>},

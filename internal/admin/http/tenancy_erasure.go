@@ -5,6 +5,7 @@ package http
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,10 +138,10 @@ func (s *Server) ResumePendingOrgDeletions(ctx context.Context) error {
 
 func (s *Server) lookupCompletedOrgShredReceipt(ctx context.Context, orgID string) (cryptoShredReceiptDTO, bool) {
 	var createdMs int64
-	var metaJSON string
+	var metaJSON sql.NullString
 	err := s.withOrgReadTx(ctx, orgID, func(dbq adminDBQuerier) error {
 		return dbq.QueryRowContext(ctx, s.rebind(`
-			SELECT created_at_ms, COALESCE(metadata_json, '')
+			SELECT created_at_ms, metadata_json
 			FROM audit_events
 			WHERE chain_key = ? AND event_type = 'organization.crypto_shredded' AND target_id = ?
 			ORDER BY seq_no DESC LIMIT 1`),
@@ -150,12 +151,26 @@ func (s *Server) lookupCompletedOrgShredReceipt(ctx context.Context, orgID strin
 	if err != nil {
 		return cryptoShredReceiptDTO{}, false
 	}
+	destroyedDEK := orgID + ":shredded"
+	revokedKeys := 0
+	if metaJSON.Valid && strings.TrimSpace(metaJSON.String) != "" {
+		var meta struct {
+			DestroyedDEKID string `json:"destroyed_dek_id"`
+			RevokedKeys    int    `json:"revoked_keys"`
+		}
+		if jerr := json.Unmarshal([]byte(metaJSON.String), &meta); jerr == nil {
+			if strings.TrimSpace(meta.DestroyedDEKID) != "" {
+				destroyedDEK = strings.TrimSpace(meta.DestroyedDEKID)
+			}
+			revokedKeys = meta.RevokedKeys
+		}
+	}
 	return cryptoShredReceiptDTO{
 		TargetType:              "ORGANIZATION",
 		TargetID:                orgID,
-		DestroyedDEKID:          orgID + ":shredded",
+		DestroyedDEKID:          destroyedDEK,
 		ShreddedAt:              formatTimeRFC3339Ms(createdMs),
-		RevokedVirtualKeysCount: 0,
+		RevokedVirtualKeysCount: revokedKeys,
 	}, true
 }
 

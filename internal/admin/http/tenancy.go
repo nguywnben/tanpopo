@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/nguywnben/tanpopo/internal/config/snapshot"
 	"github.com/nguywnben/tanpopo/internal/iam/rbac"
 	"github.com/nguywnben/tanpopo/internal/pkg/idgen"
 	"github.com/nguywnben/tanpopo/internal/security/foureyes"
@@ -652,6 +653,10 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 			}
 			destroyedDEK = fmt.Sprintf("%s:v%d:g%d", orgID, meta.DEKVersion, meta.KeyGeneration)
 		} else {
+			if ferr := s.vault.FlushPendingShredCleanups(ctx); ferr != nil {
+				s.orgErasureMu.Unlock()
+				return nil, cryptoShredReceiptDTO{}, false, false, http.StatusInternalServerError, "internal_error", "failed flushing pending vault shred cleanup", nil
+			}
 			s.vault.EvictAllDEKs()
 		}
 	}
@@ -758,9 +763,19 @@ func (s *Server) prepareAndShredOrganizationDeletion(
 		if s.killSwitch != nil && s.killSwitch.Streams() != nil {
 			s.killSwitch.Streams().AbortMatching(killswitch.LevelProjectOrOrgFreeze, orgID, orgID)
 		}
-		for _, pid := range orgPrincipals {
-			s.auth.RevokePrincipalSessions(pid)
+		if s.auth != nil {
+			for _, pid := range orgPrincipals {
+				s.auth.RevokePrincipalSessions(pid)
+			}
 		}
+		s.publishChange(fctx, snapshot.ChangeEvent{
+			ConfigEpoch:  shredEpoch,
+			OrgID:        orgID,
+			EntityKind:   "organization",
+			EntityID:     orgID,
+			MutationType: port.MutationShred,
+			Emergency:    true,
+		})
 
 		return cryptoShredReceiptDTO{
 			TargetType:              "ORGANIZATION",

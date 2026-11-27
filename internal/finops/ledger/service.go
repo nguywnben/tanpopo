@@ -319,8 +319,10 @@ func (s *Service) LeaseTTLMs() int64 {
 // immediately so budget top-ups clear carryover cleanly (AC-3).
 func (s *Service) UpsertLedger(ctx context.Context, params UpsertLedgerParams) (*BudgetLedger, error) {
 	if strings.TrimSpace(params.OrgID) == "" ||
+		len(strings.TrimSpace(params.ID)) > 128 ||
 		!isValidScopeType(params.ScopeType) ||
 		strings.TrimSpace(params.ScopeID) == "" ||
+		len(strings.TrimSpace(params.ScopeID)) > 128 ||
 		(params.ScopeType == ScopeOrg && params.ScopeID != params.OrgID) ||
 		!isValidPeriodKind(params.PeriodKind) ||
 		params.PeriodEndMs <= params.PeriodStartMs ||

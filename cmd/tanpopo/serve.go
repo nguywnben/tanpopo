@@ -711,10 +711,15 @@ func buildRuntimeDetailed(ctx context.Context, role, listen string, beforeSQLite
 			}
 			return recordExtensionWebhookOutbox(ctx, tx, dialect, webhookDispatcher, installationID, "extension.quarantined:"+installationID, "extension.quarantined", payload)
 		},
+		SyncAdaptersTx: catalogRepo.SyncExtensionProviderAdaptersTx,
 	})
 	if err != nil {
 		cleanup()
 		return nil, nil, nil, fmt.Errorf("initialize extension installer: %w", err)
+	}
+	if _, recErr := catalogRepo.ReconcileMissingProviderAdapters(runtimeCtx); recErr != nil {
+		cleanup()
+		return nil, nil, nil, fmt.Errorf("reconcile provider adapters: %w", recErr)
 	}
 	registryStore, err := registry.NewSQLStore(db, time.Now)
 	if err != nil {
@@ -913,7 +918,7 @@ func buildRuntimeDetailed(ctx context.Context, role, listen string, beforeSQLite
 			cleanup()
 			return nil, nil, nil, fmt.Errorf("initialize virtual keys: %w", err)
 		}
-		vkeyReapInterval := 2 * time.Second
+		vkeyReapInterval := 1 * time.Second
 		if rawInterval := strings.TrimSpace(os.Getenv("TANPOPO_VKEY_ROTATION_REAP_INTERVAL")); rawInterval != "" {
 			if parsedInterval, pErr := time.ParseDuration(rawInterval); pErr == nil && parsedInterval > 0 {
 				vkeyReapInterval = parsedInterval
