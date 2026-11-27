@@ -131,3 +131,12 @@ Evidence: [CP97 checkpoint](checkpoints/CP97-def044-active-extension-actions.md)
 | One-primary and two-target Priority failover capability warnings | PARTIAL | Exact RC7 Owner/SQLite/Chromium. Real route form with a single CP58 loopback deployment and then that primary plus an Ollama fallback no longer says “fallback target”; both show a generic tool_calling capability warning. Neither configuration was saved. | Name the affected single target and specific unsupported fallback, independently verify model capability metadata, and exercise unsupported tool-call denial before provider egress through API/Playground. Other strategies, capabilities, roles/backends/browsers. |
 
 Evidence: [CP98 checkpoint](checkpoints/CP98-def050-route-capability-warning.md), [sanitized JSON](evidence/CP98-def050-route-capability-warning.json), and visually inspected screenshots.
+
+
+## CP99 — DEF-031 mobile invalid-CIDR feedback
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| MCP and A2A private registration with malformed / wildcard CIDR at mobile width | PASS (scoped UI validation and feedback) | Exact RC7 SQLite, real Owner Console in Chromium 156 at 375×844. MCP `127.0.0.1/33` and A2A `0.0.0.0/0` each showed inline feedback inside the open drawer, emitted zero registration POSTs, and had zero matching rows in HTTP 200 list readback. Screenshots visually inspected. | Server-side rejection of those exact values; host bits, empty, broad and IPv6 ranges; valid correction retry; keyboard-only, desktop and non-Chromium browser behavior; other roles/backends; DNS rebinding, redirects and data-plane SSRF. |
+
+Evidence: [CP99 checkpoint](checkpoints/CP99-def031-mobile-invalid-cidr-feedback.md), [sanitized JSON](evidence/CP99-def031-mobile-invalid-cidr-feedback.json), and visually inspected MCP/A2A screenshots.
