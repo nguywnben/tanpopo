@@ -42,3 +42,12 @@
 | Pure Team Admin collection boundaries and workspace scope transition | PASS (scoped authorization); PRODUCT_GAP PG-011 | Exact RC7 SQLite, Chromium 156, one pure project-bound Team Admin. Assigned-project enumeration and membership returned 200; cross-organization project enumeration returned generic 404; organization collection, sibling-project members and unscoped members returned 403. Actual UI presented seven authorized project members. After selecting No project / No env, the previously loaded list remained, no new member request was observed, and the heading read “Organization members.” Bound scope restored and retained seven rows. | Nested item-ID substitution, writes, pagination, multiple project assignments, sibling and cross-tenant resource routes, other roles/backends/browser engines, and the intended picker-to-members contract. No cross-scope disclosure was demonstrated. |
 
 Evidence: [CP88 checkpoint](checkpoints/CP88-teamadmin-multiscope-isolation.md), [sanitized response and UI record](evidence/CP88-teamadmin-isolation.json), and visually inspected screenshots `CP88-teamadmin-members-bound-project.png`, `CP88-teamadmin-scope-menu.png`, `CP88-teamadmin-no-project-members.png`, `CP88-teamadmin-bound-restored.png`.
+
+
+## CP89 — Sibling-project nested-resource isolation
+
+| Workflow | Status | Evidence-backed scope | Remaining coverage |
+|---|---|---|---|
+| Team Admin access to sibling project/environment resources | PASS (scoped, read-only) | Owner control reads confirmed that sibling Initial Project contained one environment, one MCP server and one A2A agent. Pure Team Admin attempts to read that project's environments and its environment-filtered models, deployments, Virtual Keys, routes and project budgets all returned 403 `insufficient_role_permission`. Its own unfiltered MCP, A2A-agent and task collections returned 200 with zero rows, while Owner control reads showed sibling MCP/A2A records. | Item-ID routes, writes, pagination, multiple project assignments, roles, organization-owned shared resources, PostgreSQL/Valkey and other browser engines. |
+
+Evidence: [CP89 checkpoint](checkpoints/CP89-teamadmin-nested-resource-isolation.md), [sanitized count-only JSON](evidence/CP89-teamadmin-nested-resource-isolation.json).
