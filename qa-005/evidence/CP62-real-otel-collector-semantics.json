@@ -1,0 +1,81 @@
+{
+  "checkpoint": "CP62",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "tanpopo_artifact": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "build_metadata": "linux/amd64; vcs.revision=737079ddb847d97dbcf832f610ed0048556cb65b; vcs.modified=false"
+  },
+  "collector": {
+    "name": "OpenTelemetry Collector Contrib",
+    "version": "0.130.0",
+    "release_asset": "otelcol-contrib_0.130.0_linux_amd64.tar.gz",
+    "release_repository": "open-telemetry/opentelemetry-collector-releases",
+    "github_release_asset_digest": "sha256:292ac0d698e80282ec3d848238ffd6976c3cb97c3c169dec955754efc2293e71",
+    "transport": "OTLP/HTTP receiver bound to 127.0.0.1:4318",
+    "verification": "Collector reported Everything is ready and debug exporter semantically decoded protobuf signals. Standalone binary and raw collector log were removed/kept outside repository after the run."
+  },
+  "environment": {
+    "runtime": "isolated SQLite clone of populated QA state at 127.0.0.1:18156; clone integrity_check returned ok; runtime stopped after test",
+    "egress": "TANPOPO_OTLP_ALLOWED_CIDRS=127.0.0.1/32 and serve --otlp-allow-private-ip, explicit QA-only receiver permission",
+    "provider": "none",
+    "request": "GET /v1/models without a Virtual Key",
+    "http_status": 401,
+    "sanitized_result": "invalid_virtual_key; request_id req_01m8dajb5se00b34hpkmk8c20j; correlated trace id 5561d48f637b1c63738bddecfcadeeef"
+  },
+  "decoded_signals": {
+    "traces": {
+      "export_batches": 1,
+      "spans": 1,
+      "name": "Ingress",
+      "kind": "Server",
+      "status": "Error / invalid_virtual_key",
+      "resource_service_name": "tanpopo",
+      "scope": "github.com/nguywnben/tanpopo/dataplane",
+      "attributes_observed": ["request_id", "entry_point"],
+      "correlation": "Trace ID matches the trace_id field in the corresponding structured application log."
+    },
+    "logs": {
+      "export_batches": 1,
+      "records": 1,
+      "severity": "WARN",
+      "event": "gateway_request",
+      "http_status": 401,
+      "error_code": "invalid_virtual_key",
+      "route_slug": "/v1/models",
+      "resource_service_name": "tanpopo"
+    },
+    "metrics": {
+      "decoded_export_batches": 22,
+      "descriptors_observed": [
+        "tanpopo_config_snapshot_age_seconds",
+        "tanpopo_http_requests_total",
+        "tanpopo_proxy_overhead_seconds"
+      ],
+      "resource_service_name": "tanpopo"
+    },
+    "privacy_scope": "No canary prompt or auth value was submitted in CP62; zero matching CP61/CP62 marker strings in this collector log is not a privacy test. CP61's raw-byte canary probe remains limited to its synthetic non-decoding sink. Do not infer absence of sensitive attributes from this authorization-error request."
+  },
+  "browser": {
+    "engine": "Chromium 156.0.8078.79 on Linux amd64",
+    "automation": "Playwright with system Chromium executable",
+    "flow": "Loaded the exact runtime unauthorized Data Plane endpoint in a real browser; browser reported HTTP 401 and rendered invalid_virtual_key JSON. This was a separate browser request from the request used for the representative collector span/log correlation.",
+    "screenshot": "evidence/screenshots/CP62-real-collector-unauthorized-browser.png",
+    "visual_inspection": "Inspected the captured screenshot; the visible response is the expected unauthorized error JSON."
+  },
+  "classification": {
+    "DEF-063": "PASS (scoped): exact RC7 server configured via CLI successfully delivered an OTLP trace, accepted and decoded by OpenTelemetry Collector Contrib 0.130.0.",
+    "DEF-064": "PASS (scoped): exact RC7 server delivered trace, log and metric signals as OTLP/HTTP protobuf; the pinned collector decoded all three signal types, and representative resource/scope/metric/span/log fields are documented above.",
+    "remaining": [
+      "Production collector and exporter interoperability beyond pinned Collector Contrib 0.130.0 is unverified.",
+      "TLS/mTLS, exporter authentication, retry/backoff, collector outage, queue saturation, shutdown flushing and remote deployment remain unverified.",
+      "Prompt/credential privacy semantics remain unverified: CP62 did not submit sensitive content and CP61 sink did not decode protobuf.",
+      "Windows/macOS and cluster deployment remain unverified."
+    ]
+  },
+  "limitations": [
+    "The collector configuration used the debug exporter for a local integration check; it does not demonstrate a production telemetry backend.",
+    "Only one synthetic unauthorized request was deliberately generated in CP62; the collector also saw periodic runtime metrics.",
+    "No source/spec modifications or paid provider calls were made."
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "checkpoint": "CP61",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "build_metadata": "linux/amd64; vcs.revision=737079ddb847d97dbcf832f610ed0048556cb65b; vcs.modified=false",
+    "instances": [
+      {"role": "fresh isolated SQLite runtime", "address": "127.0.0.1:18154", "state": "stopped after verification"},
+      {"role": "isolated clone of populated QA SQLite database", "address": "127.0.0.1:18155", "state": "stopped after verification"}
+    ],
+    "external_provider": "none; deterministic local OpenAI-compatible SSE fixture only",
+    "paid_usage": false
+  },
+  "observations": {
+    "cli": "The exact RC7 tanpopo serve --help includes --otlp-endpoint and --otlp-allow-private-ip.",
+    "ssrf_policy": "A startup attempt enabling private-IP access without TANPOPO_OTLP_ALLOWED_CIDRS failed closed with egress_invalid_policy. With explicit TANPOPO_OTLP_ALLOWED_CIDRS=127.0.0.1/32, the loopback collector target was permitted. This is expected protection, not a product defect.",
+    "health": "Both isolated runtimes returned HTTP 200 from healthz and readyz while configured to export to the loopback receiver.",
+    "unauthorized_ingress": "Real Chromium requested /v1/models without a bearer key: HTTP 401 invalid_virtual_key; a trace ID was returned and the receiver observed OTLP signal requests.",
+    "telemetry_receiver": {
+      "kind": "synthetic loopback HTTP receiver; not an OpenTelemetry Collector and does not decode protobuf",
+      "response": "HTTP 200, application/x-protobuf for each POST (receiver implementation behavior)",
+      "requests": {
+        "/v1/metrics": {"count": 306, "payload_bytes_min_max": [267, 3149]},
+        "/v1/traces": {"count": 10, "payload_bytes_min_max": [227, 502]},
+        "/v1/logs": {"count": 27, "payload_bytes_min_max": [556, 2930]}
+      },
+      "all_content_types": "application/x-protobuf",
+      "prompt_canary_byte_matches": 0,
+      "auth_canary_byte_matches": 0,
+      "privacy_limit": "Canary byte absence is only a raw-byte scan of received request bodies. Since protobuf was not semantically decoded, this is not proof that no equivalent or encoded sensitive attribute was exported."
+    },
+    "playground": {
+      "journey": "Owner used real Chromium Playground against the protocol-matched local OpenAI-compatible streamed fixture on the populated isolated clone.",
+      "successful_http_status": 200,
+      "trace_ids": ["trc_01m8d9qqfde00b7f2t6rnzxsgd", "trc_01m8d9rwv9e00ak2ja3bev06bk"],
+      "accuracy_and_cost": "Exact; $0.000000",
+      "persistence": "The canary request trace resolved through direct authenticated admin trace read and the Console Inspect Trace flow using the same trace ID.",
+      "screenshots": [
+        "evidence/screenshots/CP61-otlp-playground-result.png",
+        "evidence/screenshots/CP61-otlp-playground-inspect-trace.png"
+      ]
+    },
+    "cleanup": "Both synthetic Playground session keys were revoked; API state readback confirmed REVOKED. Screenshot: evidence/screenshots/CP61-otlp-playground-keys-revoked.png. Test runtimes were stopped. Receiver and fixture are temporary local-only test infrastructure."
+  },
+  "classification": {
+    "DEF-063": "PASS (scoped): exact RC7 runtime exposes configurable OTLP endpoint and sent trace data to the configured loopback endpoint. Historical RC6 failure remains preserved; real OTel collector compatibility and other deployments remain unverified.",
+    "DEF-064": "PASS (scoped): exact RC7 runtime emitted OTLP protobuf HTTP posts to all three observed signal paths: traces, metrics, and logs. Semantic decoding, a real collector/export backend, delivery retry/backpressure, persistent exporter failure, and metric/log semantics remain unverified.",
+    "privacy": "PARTIAL: no raw canary byte sequences were present; protobuf semantic content and broader data classes were not decoded or verified.",
+    "security_policy": "PASS (scoped): private loopback export remained blocked absent an explicit allowed CIDR and worked after explicit 127.0.0.1/32 authorization.",
+    "limitations": [
+      "The receiver is a synthetic sink that returns 200 and does not validate protobuf wire semantics or collector interoperability.",
+      "The 1-second metrics interval was intentionally used to make metrics observable and generated a high request count; this does not represent default operational volume.",
+      "No Windows/macOS deployment, remote collector, TLS/mTLS, authentication, outage/retry, buffering, or production egress behavior was tested.",
+      "Historical defect reports and results remain retained; these current scoped outcomes do not globally close either defect."
+    ]
+  },
+  "evidence_screenshots": [
+    "evidence/screenshots/CP61-otlp-unauth-browser.png",
+    "evidence/screenshots/CP61-otlp-playground-result.png",
+    "evidence/screenshots/CP61-otlp-playground-inspect-trace.png",
+    "evidence/screenshots/CP61-otlp-playground-keys-revoked.png",
+    "evidence/screenshots/CP61-otlp-collector-summary-compact.png"
+  ]
+}

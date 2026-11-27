@@ -1,0 +1,44 @@
+{
+  "checkpoint": "CP63",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "build_metadata": "linux/amd64; vcs.revision=737079ddb847d97dbcf832f610ed0048556cb65b; vcs.modified=false",
+    "role": "all",
+    "database": "isolated SQLite online-backup clone under /tmp/qa005-runtime/cp63-data; integrity_check=ok",
+    "app_listener": "127.0.0.1:18157",
+    "metrics_listener": "127.0.0.1:19157",
+    "provider": "none"
+  },
+  "configuration": {
+    "cli_flag": "--metrics-listen 127.0.0.1:19157",
+    "scrape_token_environment_variable": "TANPOPO_METRICS_SCRAPE_TOKEN",
+    "token_value": "excluded; synthetic QA-only bearer value",
+    "binding": "ss confirmed both listeners bound only to 127.0.0.1"
+  },
+  "observations": {
+    "no_token": "GET /metrics on the metrics listener returned HTTP 401 JSON error code unauthorized.",
+    "wrong_token": "GET /metrics on the metrics listener with an incorrect synthetic bearer token returned HTTP 401 unauthorized.",
+    "correct_token": "GET /metrics on the metrics listener with the matching synthetic bearer token returned HTTP 200 and Prometheus text exposition, content type text/plain; version=0.0.4; charset=utf-8; escaping=underscores.",
+    "exposition": "The populated response included HELP, TYPE, and a data sample for tanpopo_config_snapshot_age_seconds with sync_channel=\"db_poll\".",
+    "main_listener": "The app listener's /metrics path also returned 401 without auth and 200 with the correct token. It was loopback-bound during this test. Production bind/topology exposure is not inferred.",
+    "health": {"healthz": 200, "readyz": 200},
+    "browser": {
+      "engine": "Chromium 156.0.8078.79 on Linux amd64 via Playwright",
+      "result": "Authorized browser GET returned HTTP 200; visible body contained the Prometheus HELP/TYPE/sample text.",
+      "screenshot": "evidence/screenshots/CP63-authorized-prometheus-scrape.png",
+      "visual_inspection": "Screenshot was opened and visually inspected; it showed the expected metric exposition and no token value."
+    }
+  },
+  "classification": {
+    "DEF-065": "PASS (scoped): exact RC7 accepts a custom metrics-listen address and emits a scrapeable Prometheus response with the configured bearer token; missing and incorrect tokens fail closed.",
+    "additional_observation": "TANPOPO_METRICS_SCRAPE_TOKEN is used by the served runtime but was not found in CLI help or the searched operator documentation. See PRODUCT_GAP PG-009; do not weaken scrape authentication.",
+    "remaining": [
+      "Only Linux amd64, exact-source local build, loopback bind and a SQLite clone were tested.",
+      "Prometheus server ingestion/alert rules, scrape cadence/timeouts, TLS, remote-network deployment, token rotation/restart and multi-role cluster coverage remain unverified.",
+      "The main application listener served the same /metrics route when loopback-bound; behavior and intended exposure for a remotely bound deployment remain unverified.",
+      "Historical QA-004 failure remains preserved and its exact environment may differ."
+    ]
+  }
+}
