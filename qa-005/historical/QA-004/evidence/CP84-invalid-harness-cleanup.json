@@ -1,0 +1,20 @@
+{
+  "active": {
+    "status": 200,
+    "active": []
+  },
+  "key": [
+    {
+      "id": "vky_01m8ahvwnje00atwgawpv6xfqw",
+      "state": "CREATED_ACTIVE"
+    },
+    {
+      "id": "vky_01m8ahtc6ge009h2cgsm3z0wjs",
+      "state": "CREATED_ACTIVE"
+    },
+    {
+      "id": "vky_01m8ahkcf1e009mwkfhy3fhvek",
+      "state": "REVOKED"
+    }
+  ]
+}

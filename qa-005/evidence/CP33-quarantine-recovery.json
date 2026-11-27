@@ -1,0 +1,54 @@
+{
+  "checkpoint": "CP33",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact": "local exact-source Linux amd64 build",
+    "artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "storage": "isolated SQLite",
+    "base_url": "http://127.0.0.1:18149",
+    "browser": "Chromium 1440x1000"
+  },
+  "test_entity": {
+    "package": "@tanpopo/ollama",
+    "installation_id": "ins_01m8cjgmk7e0087j5d1px4jkw3",
+    "initial_state": "ACTIVE",
+    "quarantined_state": "QUARANTINED",
+    "recovered_state": "INSTALLED_DISABLED",
+    "recovered_version": 4
+  },
+  "workflow": [
+    {"action": "Extensions UI quarantine with reason and exact package confirmation", "result": "success; dependent project and connection disclosed"},
+    {"action": "Extensions UI unquarantine with reason", "http_status": 200, "result_state": "INSTALLED_DISABLED", "result_version": 4},
+    {"action": "fresh installation readback", "http_status": 200, "result_state": "INSTALLED_DISABLED"},
+    {"action": "fresh active kill-switch inventory", "http_status": 200, "result": "empty"}
+  ],
+  "audit": {
+    "events": [
+      {"sequence": 6, "type": "extension.quarantined", "target_type": "extension_installation", "target_id": "ins_01m8cjgmk7e0087j5d1px4jkw3"},
+      {"sequence": 7, "type": "extension.unquarantined", "target_type": "extension_installation", "target_id": "ins_01m8cjgmk7e0087j5d1px4jkw3"}
+    ],
+    "chain_valid": true,
+    "verified_events": 240,
+    "orphan_holds_reconciled": 0
+  },
+  "defect_observation": {
+    "id": "DEF-082",
+    "severity": "Low",
+    "result": "FAIL",
+    "expected": "After unquarantine successfully clears the extension-installation kill switch, the Console badge reflects the fresh active inventory.",
+    "actual": "The success screen briefly showed Kill Switch 1 while GET /admin/v1/kill-switches?active_only=true returned an empty list. The badge disappeared after navigating to Security and loading that list.",
+    "reproducible_steps": [
+      "Quarantine the installed extension through Extensions UI.",
+      "Use the Extensions UI unquarantine action and observe its HTTP 200 INSTALLED_DISABLED response.",
+      "Observe the immediate success screen still shows a red Kill Switch 1 badge.",
+      "Navigate to Security → Kill Switches; the active_only=true response is empty and the badge clears."
+    ],
+    "screenshots": ["screenshots/CP33-unquarantined-state.png", "screenshots/CP33-postrecovery-killswitch.png"]
+  },
+  "limitations": [
+    "No external provider call or paid provider usage.",
+    "No explicit permission-review, re-enable, reprobe, or restored-traffic workflow was attempted.",
+    "Stale ETag, unauthorized-role, multi-node, PostgreSQL, and failure-atomicity cases remain unverified.",
+    "Official RC7 release artifact and production signing remain unverified or blocked."
+  ]
+}

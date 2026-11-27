@@ -1,0 +1,19 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "browser": "Chromium",
+  "route": "qa003-cp47-stream-route",
+  "dialect": "Ollama native passthrough /native/ollama/api/chat",
+  "session_creation_status": 201,
+  "key_in_memory": true,
+  "secret_written_to_evidence": false,
+  "native_request": {
+    "status": 405,
+    "content_type": "text/plain; charset=utf-8",
+    "allow": "GET, HEAD",
+    "trace_id": null,
+    "request_id": null,
+    "body": null,
+    "text": "HTTP method not allowed for this console resource.\n"
+  },
+  "trace_page": "Request traces\n\nMetadata-only execution telemetry. Zero prompt or completion bytes stored.\n\nMetadata-Only\nRequest ID lookup\nModel\nError code\nSearch\nRecent requests\n21\nRequest ID\tRoute\tStatus\tError\tMetering\tDuration\tTimestamp\n\ntrc_01m8881vdae00856kdg4rneysd\n\tqa003-cp47-stream-route\t200\t—\tExact\t8 ms\t2:20:14 AM\n\ntrc_01m887wnrde00bx28z6v4x2whg\n\tqa003-cp47-stream-route\t200\t—\tExact\t6 ms\t2:17:25 AM\n\ntrc_01m887vknre009asf41e4ndqxj\n\tqa003-cp47-stream-route\t200\t—\tExact\t13 ms\t2:16:50 AM\n\ntrc_01m887nf48e00apa60jtb8tq3n\n\tqa003-cp47-stream-route\t200\t—\tExact\t13 ms\t2:13:28 AM\n\ntrc_01m8879bxze008d9pc874ps0pa\n\tqa003-cp47-stream-route\t200\t—\tExact\t9 ms\t2:06:52 AM\n\ntrc_01m887752ee00aaszxzjsbgew6\n\tqa003-cp47-stream-route\t200\t—\tExact\t5 ms\t2:05:39 AM\n\ntrc_01m886r571e008re424tp5xrm1\n\tqa003-cp47-stream-route\t200\t—\tExact\t5 ms\t1:57:28 AM\n\ntrc_01m886r4sqe008wxh3gcfjcava\n\tqa003-cp47-stream-route\t200\t—\tExact\t8 ms\t1:57:27 AM\n\ntrc_01m886nd73e00a2yybz2b96p7m\n\tqa003-cp47-stream-route\t200\t—\tExact\t8 ms\t1:55:58 AM\n\ntrc_01m886mnhwe009vh8wx5r9abwn\n\tqa003-cp47-stream-route\t200\t—\tExact\t9 ms\t1:55:34 AM\n\ntrc_01m886hzeqe00amsv01mkr7zxz\n\tqa003-cp47-stream-route\t200\t—\tExact\t27 ms\t1:54:05 AM\n\ntrc_01m8863dkpe008mw5hqmnvjc8j\n\tqa003-cp47-stream-route\t200\t—\tExact\t14 ms\t1:46:08 AM\n\ntrc_01m885s913e00b4zcprezweby7\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t1:40:36 AM\n\ntrc_01m885rvhse008zv27s4c10fa0\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t1:40:22 AM\n\ntrc_01m885rbwqe00ar44kq4q0q5y7\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t1:40:06 AM\n\ntrc_01m885q7ade00bj3kn7a296rfy\n\t/v1/chat/completions\t400\tcapability_not_supported\tExact\t0 ms\t1:39:29 AM\n\ntrc_01m880m8b5e00bfvrjrbss531n\n\t/v1/chat/completions\t503\tno_compliant_deployment_available\tExact\t0 ms\t12:10:29 AM\n\ntrc_01m880k565e"
+}

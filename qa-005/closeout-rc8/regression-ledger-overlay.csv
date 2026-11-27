@@ -1,0 +1,87 @@
+defect_id,CP123_baseline_disposition,RC8_focused_closeout_disposition,RC8_basis
+DEF-001,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-002,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-003,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-004,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-005,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-006,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-007,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-008,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-009,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-010,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-011,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-012,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-013,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-014,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-015,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-016,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-017,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-018,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-019,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-020,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-021,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-022,FAIL,PASS (scoped),"Owner role downgrade invalidated the Team Admin browser session; session check 401, refresh redirected to login."
+DEF-023,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-024,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-025,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-026,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-027,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-028,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-029,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-030,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-031,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-032,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-033,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-034,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-035,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-036,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-037,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-038,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-039,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-040,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-041,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-042,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-043,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-044,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-045,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-046,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-047,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-048,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-049,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-050,PARTIAL,BLOCKED / UNVERIFIED,No compliant local deployment candidate; native request returned 503 before fixture dispatch. Unified stream trailer path was not reached.
+DEF-051,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-052,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-053,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-054,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-055,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-056,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-057,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-058,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-059,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-060,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-061,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-062,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-063,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-064,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-065,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-066,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-067,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-068,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-069,FAIL,PASS (scoped),"PostgreSQL/Valkey: acknowledged partial-spend cancellation, unsupported cancellation and two concurrent cancellations reconciled task/hold/settlement state."
+DEF-070,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-071,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-072,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-073,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-074,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-075,FAIL,PASS (scoped),"Old and new credentials both authenticated during 60s grace; after expiry old returned 401, new 200, row became CREATED_ACTIVE v3 and finalization audit event existed."
+DEF-076,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-077,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-078,PARTIAL,NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-079,PASS (scoped),NOT RETESTED,No new independent RC8 execution in this focused closeout; preserve CP123 record and prior evidence.
+DEF-080,FAIL (historical QA-005 finding),UNVERIFIED,No independent RC8 FinOps Viewer retest.
+DEF-081,FAIL (historical QA-005 finding),PARTIAL,PostgreSQL active installation/adapter inventory agreed after restart; fresh activate/re-enable was blocked by emergency stream-barrier failure during prerequisite quarantine.
+DEF-082,FAIL (historical QA-005 finding),BLOCKED,Quarantine prerequisite failed HTTP 503; unquarantine/badge reconciliation could not be reached.
+DEF-083,FAIL (historical QA-005 finding),BLOCKED,No eligible native provider route; HTTP 503 before upstream; unified stream not executed.
+DEF-084,FAIL (historical QA-005 finding),UNVERIFIED,320px no-alert state visually inspected; long-ID active-alert state absent.
+DEF-085,FAIL (historical QA-005 finding),PASS (scoped),Zero-hold A2A request rejected with HTTP 403 before dispatch; fixture call count stayed zero.
+DEF-086,FAIL (historical QA-005 finding),PASS (scoped),"Full source migration verified on isolated PostgreSQL 16; financial references, pricing, settlements and audit parity preserved; live Console/A2A checks passed."

@@ -1,0 +1,36 @@
+[
+  {
+    "name": "Ollama chat",
+    "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+    "endpoint": "/native/ollama/api/chat",
+    "status": 200,
+    "content_type": "application/x-ndjson",
+    "usage_accuracy_header": null,
+    "trace_id": "trc_01m8cygktye009n3mdq0dbfq9b",
+    "line_count": 3,
+    "all_lines_valid_json": true,
+    "frames": [
+      {"done": false, "content_length": 13},
+      {"done": false, "content_length": 22},
+      {"done": true, "prompt_eval_count": 7, "eval_count": 4, "content_length": 0}
+    ],
+    "body_sha256": "387a304125e0d586d9a7020c5b248b2113f6633330fb5478b3299ab06a3b9db9"
+  },
+  {
+    "name": "Ollama generate",
+    "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+    "endpoint": "/native/ollama/api/generate",
+    "status": 200,
+    "content_type": "application/x-ndjson",
+    "usage_accuracy_header": null,
+    "trace_id": "trc_01m8cygkvce00bna8qv1t9s9na",
+    "line_count": 3,
+    "all_lines_valid_json": true,
+    "frames": [
+      {"done": false, "content_length": 13},
+      {"done": false, "content_length": 22},
+      {"done": true, "prompt_eval_count": 8, "eval_count": 5, "content_length": 0}
+    ],
+    "body_sha256": "4b4be58a2416ecc8713ae9309c7f6908b9875d760f45f1d6fc9060f7a0edc96a"
+  }
+]

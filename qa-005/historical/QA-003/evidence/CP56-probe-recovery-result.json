@@ -1,0 +1,27 @@
+{
+  "probeResult": {
+    "status": 200,
+    "body": {
+      "valid": true,
+      "latency_ms": 8,
+      "detected_model_ids": [
+        "qa003-cp56-local"
+      ]
+    }
+  },
+  "upstream": [],
+  "screen": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n1\nVault Secrets\nAdapters\n1\nQA003 CP55 Ollama defaults: probe succeeded in 8 ms.\nConfigured connections\n1\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA003 CP55 Ollama defaults (evra4wnp)\nhttp://127.0.0.1:19272\n\tadp_01m889hrjwe009s44ez08ddy1z\tON_PREM · Self-hosted\tActive\tNone bound\t",
+  "persisted_refresh": {
+    "status": 200,
+    "row": {
+      "id": "con_01m889mse8e00a3mxsevra4wnp",
+      "name": "QA003 CP55 Ollama defaults",
+      "state": "ACTIVE",
+      "version": 9,
+      "billing_mode": "SELF_HOSTED_INFRA",
+      "data_region": "ON_PREM",
+      "allow_private_ip": true
+    }
+  },
+  "fixture_note": "An intermediate mock fixture returned 404 because this adapter probes GET /v1/models; the fixture was corrected to return a deterministic model-list response. This was harness setup, not product behavior."
+}

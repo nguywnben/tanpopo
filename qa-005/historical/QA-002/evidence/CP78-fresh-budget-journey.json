@@ -1,0 +1,18 @@
+{
+  "checkpoint": "CP78",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "127.0.0.1:18084",
+  "fresh_project": {
+    "name": "QA002 CP78 Fresh Budget",
+    "slug": "qa002-cp78-fresh-budget",
+    "id": "prj_01m868q2jte00abmhf75asqts3"
+  },
+  "empty_state_evidence": "CP78-fresh-budget-empty.png",
+  "create_form_evidence": "CP78-fresh-budget-form.png",
+  "created_evidence": "CP78-fresh-budget-created.png",
+  "hard_refresh_evidence": "CP78-fresh-budget-after-refresh.png",
+  "persisted_api_evidence": "CP78-fresh-budget-refresh.json",
+  "result": "Created a project/monthly budget of 2500000 micro-USD on a fresh QA project; after a hard refresh the same scope showed one row and authenticated API GET returned the same ID, scope, period, limit and version 1.",
+  "limitations": "The first post-create runner expected an Overview heading after reloading while the app remained on FinOps; a separate real-browser login/reload/reselect completed persistence verification. The pre-create empty-state API response was not persisted; the newly created project had no prior budget by construction and the screenshot showed zero rows.",
+  "no_inference_or_provider_call": true
+}

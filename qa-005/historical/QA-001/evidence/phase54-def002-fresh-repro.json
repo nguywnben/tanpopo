@@ -1,0 +1,26 @@
+{
+  "connection": {
+    "id": "con_01m84cfsjce008y8re70wd4cse",
+    "name": "qa-cp52-unauthorized-ollama",
+    "state": "DRAFT",
+    "billing_mode": "SELF_HOSTED_INFRA",
+    "data_region": "ON_PREM",
+    "endpoint_base_url": "http://127.0.0.1:19090"
+  },
+  "probe": {
+    "httpStatus": 200,
+    "valid": false,
+    "failureCode": "auth_failed",
+    "fixtureHttpStatus": 401
+  },
+  "deployments": [
+    {
+      "id": "dpl_01m84chcc8e008fjrksjy51tzz",
+      "connection_id": "con_01m84cfsjce008y8re70wd4cse",
+      "state": "ACTIVE_HEALTHY",
+      "logical_model_id": "lmd_01m84bgkere00bvjpk46c3zggb",
+      "upstream_model_name": "llama3.2"
+    }
+  ],
+  "classification": "confirmed product defect reproduces with isolated local endpoint: UI activation accepted a deployment backed by a connection whose most recent probe failed. No Google provider, Cloud egress, or external endpoint is involved."
+}

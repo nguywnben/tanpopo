@@ -1,0 +1,25 @@
+{
+  "scope": "QA-002 A2A Org / No project / No env",
+  "sendDisabled": true,
+  "notice": true,
+  "requestActions": [
+    {
+      "text": "Live Playground",
+      "disabled": false,
+      "ariaDisabled": null,
+      "html": "<button type=\"button\" data-astryx-pressable=\"\" data-astryx-edge-comp=\"\" data-tab-value=\"chat\" role=\"tab\" aria-selected=\"true\" tabindex=\"0\" class=\"astryx-tab x1k57tk5 x1vidyx5 x1t13"
+    },
+    {
+      "text": "SDK Snippets",
+      "disabled": false,
+      "ariaDisabled": null,
+      "html": "<button type=\"button\" data-astryx-pressable=\"\" data-astryx-edge-comp=\"\" data-tab-value=\"snippets\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\" class=\"astryx-tab x1k57tk5 x1vidyx5"
+    },
+    {
+      "text": "Send",
+      "disabled": false,
+      "ariaDisabled": "true",
+      "html": "<button type=\"button\" class=\"astryx-button x1k57tk5 x1vidyx5 x1t137rt x1jhp3zv xx47ajj x16bblx1 x1wfwxd8 x13aywxo x1n2onr6 x3nfvp2 x6s0dn4 xl56j7k x1txdalj xce4md1 xrrkdod x1jxw6zd"
+    }
+  ]
+}

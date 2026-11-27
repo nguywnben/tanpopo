@@ -1,0 +1,23 @@
+{
+  "connections": [
+    {
+      "idSuffix": "0g0485nk",
+      "state": "DISABLED",
+      "version": 6
+    },
+    {
+      "idSuffix": "4hst80xy",
+      "state": "CREATED_UNVERIFIED",
+      "version": 1
+    }
+  ],
+  "deployments": [
+    {
+      "idSuffix": "360js4t4",
+      "state": "PROVISIONED",
+      "connectionState": "DISABLED",
+      "connectionSuffix": "0g0485nk",
+      "version": 1
+    }
+  ]
+}

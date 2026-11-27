@@ -1,0 +1,78 @@
+{
+  "held_request": {
+    "path": "/admin/v1/virtual-keys",
+    "query": "?project_id=prj_01m85ry2gme00an7wydh1pd1gc&env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100",
+    "status": 200,
+    "returned_key_count": 10,
+    "returned_keys": [
+      {
+        "name": "QA002 CP59 A2A authorized input lifecycle",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "QA002 CP59 A2A input lifecycle",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "QA002 CP57 residency enforcement probe",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "QA002 CP55 RPM recovery probe",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "QA002 CP55 RPM isolated",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "QA002 CP55 RPM one request",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "Playground session",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "Playground session",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "Playground session",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      },
+      {
+        "name": "Playground session",
+        "project_id": "prj_01m85ry2gme00an7wydh1pd1gc",
+        "environment_id": "env_01m85ry445e009xg6sr14c5q1z",
+        "state": "REVOKED"
+      }
+    ]
+  },
+  "before_release": {
+    "scope": "No project\n/\nNo env\n(Active workspace scope)",
+    "text": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic."
+  },
+  "after_release": {
+    "scope": "No project\n/\nNo env\n(Active workspace scope)",
+    "text": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\n10\nMembers & Roles\n2\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n10\nName\tPrefix / Last 4\tPlanes / Routes\tState\tCreated\tActions\nQA002 CP59 A2A authorized input lifecycle\tvk_tp_qa002-cp43-env2_…nGUd\t\nA2A\n*\n\tRevoked\tNov 24, 2026, 5:35:13 AM\t\nQA002 CP59 A2A input lifecycle\tvk_tp_qa002-cp43-env2_…U8Rb\t\nPROVIDER, A2A\n*\n\tRevoked\tNov 24, 2026, 5:34:31 AM\t\nQA002 CP57 residency enforcement probe\tvk_tp_qa002-cp43-env2_…8FOk\t\nPROVIDER\n*\n\tRevoked\tNov 24, 2026, 5:20:20 AM\t\nQA002 CP55 RPM recovery probe\tvk_tp_qa002-cp43-env2_…gtnG\t\nPROVIDER\n*\n\tRevoked\tNov 24, 2026, 4:56:54 AM\t\nQA002 CP55 RPM isolated\tvk_tp_qa002-cp43-env2_…vasY\t\nPROVIDER\n*\n\tRevoked\tNov 24, 2026, 4:55:40 AM\t\nQA002 CP55 RPM one request\tvk_tp_qa002-cp43-env2_…f4eF\t\nPROVIDER\n*\n\tRevoked\tNov 24, 2026, 4:54:26 AM\t\nPlayground session\tvk_tp_qa002-cp43-env2_…oYAu\t\nPROVIDER\n*\n\tRevoked\tNov 24, 2026, 4:47:32 AM\t\nPlayground session\tvk_tp_qa002-cp43-env2_…HgKr\t\nPROVIDER\n*\n\tRevoked\tNov 24, 2026, 4:29:23 AM\t\nPlayground session\tvk_tp_qa002-cp43-env2_…luNH\t\nPROVIDER\n*\n\tRevoked\tNov 24, 2026, 4:15:09 AM\t\nPlayground session\tvk_tp_qa002-cp43-env2_…xFAL\t\nPROVIDER\n*\n\tRevoked\tNov 24, 2026, 4:12:38 AM\t"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "browser": "WebKit",
+  "viewport": "375x844",
+  "before": "MCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\n17\nA2A Agents & Active Tasks\n1\nRegistered A2A agents\n1\nQA002 CP59 Input Lifecycle Agent\nqa002-cp59-input-lifecycle\nRegion\nUS\nState\nActive\nDetail (2)\nActive & recent A2A tasks\n0\nNo A2A tasks recorded\nDelegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.",
+  "controls": [
+    {
+      "type": "text",
+      "label": "Agent slug (optional)",
+      "placeholder": "e.g. billing-analyst"
+    },
+    {
+      "type": "text",
+      "label": "Agent name\n∙ Required",
+      "placeholder": "e.g. Billing Analyst"
+    },
+    {
+      "type": "url",
+      "label": "Agent endpoint URL\n∙ Required",
+      "placeholder": "https://agent.example.com"
+    },
+    {
+      "type": "checkbox",
+      "label": "Allow private or loopback endpoint",
+      "placeholder": ""
+    }
+  ],
+  "form": "Agent slug (optional)\nAgent name\n∙ Required\nAgent endpoint URL\n∙ Required\nRegion\nUS\nMax hops\n5\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal A2A agents.\nAllowed CIDRs\n∙ Required",
+  "api": [
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "https://127.0.0.1:18445/admin/v1/a2a/agents?limit=100",
+      "body": null
+    },
+    {
+      "method": "POST",
+      "status": 400,
+      "url": "https://127.0.0.1:18445/admin/v1/a2a/agents",
+      "body": "{\"project_id\":\"prj_01m85ry2gme00an7wydh1pd1gc\",\"agent_slug\":\"qa002-cp67-invalid-cidr\",\"name\":\"QA002 CP67 invalid CIDR\",\"endpoint_url\":\"http://127.0.0.1:19997/agent\",\"data_region\":\"US\",\"max_delegation_hops\":5,\"allow_private_ip\":true,\"allowed_cidrs\":[\"127.0.0.1/33\"]}"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "https://127.0.0.1:18445/admin/v1/a2a/agents",
+      "body": null
+    }
+  ],
+  "status": 400,
+  "response": {
+    "error": {
+      "code": "invalid_request",
+      "type": "invalid_request_error",
+      "message": "allowed_cidrs must contain valid non-wildcard CIDR prefixes",
+      "request_id": "req_01m863tzeke00bzm3wxwhvr8ca",
+      "retryable": false
+    }
+  },
+  "error_evidence": {
+    "text": "Register A2A agent\nEnforces HTTPS egress validation, regional residency pinning, and max delegation depth <= 5.\nAgent slug (optional)\nAgent name\n∙ Required\nAgent endpoint URL\n∙ Required\nRegion\nUS\nMax hops\n5\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal A2A agents.\nAllowed CIDRs\n∙ Required\nCancel\nRegister agent",
+    "rect": {
+      "x": 57,
+      "y": 0,
+      "width": 318,
+      "height": 843.984375
+    },
+    "insideForm": false,
+    "hit": {
+      "tag": "LABEL",
+      "text": "Max hops"
+    },
+    "visible": "visible",
+    "display": "flex"
+  },
+  "visible_tail": "ary Project / qa002-cp43-env2 (Active workspace scope)\nJump\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\n17\nA2A Agents & Active Tasks\n1\nallowed_cidrs must contain valid non-wildcard CIDR prefixes\nRegistered A2A agents\n1\nQA002 CP59 Input Lifecycle Agent\nqa002-cp59-input-lifecycle\nRegion\nUS\nState\nActive\nDetail (2)\nActive & recent A2A tasks\n0\nNo A2A tasks recorded\nDelegated agent tasks appear here with hop depth, enforced region, and sub-budget holds.\nRegister A2A agent\nEnforces HTTPS egress validation, regional residency pinning, and max delegation depth <= 5.\nAgent slug (optional)\nAgent name\n∙ Required\nAgent endpoint URL\n∙ Required\nRegion\nUS\nMax hops\n5\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal A2A agents.\nAllowed CIDRs\n∙ Required\nCancel\nRegister agent",
+  "list": {
+    "status": 200,
+    "slug_found": false,
+    "count": 1
+  },
+  "external_contact": false
+}

@@ -1,0 +1,24 @@
+{
+  "checkpoint": "CP20",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "browser": "Playwright Firefox 153.0, build 1538",
+  "binary_download": "PASS to temporary QA cache /tmp/qa002-pw-browsers/firefox-1538",
+  "launch_attempts": 5,
+  "last_attempt_timeout_ms": 20000,
+  "browser_process_created": true,
+  "control_channel_established": false,
+  "environment_errors": [
+    "Sandbox cannot write /proc/self/uid_map: EROFS",
+    "RenderCompositorSWGL failed mapping default framebuffer"
+  ],
+  "mitigations_attempted": [
+    "writable XDG_CACHE_HOME under /tmp",
+    "headless mode",
+    "software-rendering/WebRender preferences",
+    "MOZ_DISABLE_CONTENT_SANDBOX test-only launch environment"
+  ],
+  "app_navigation_reached": false,
+  "screenshots_captured": false,
+  "qa_status": "UNVERIFIED",
+  "source_or_dependency_files_changed": false
+}

@@ -1,0 +1,62 @@
+{
+  "credential_scope": {
+    "allowed_planes": [
+      "MCP"
+    ],
+    "allowed_routes": [
+      "*"
+    ],
+    "secret_omitted": true
+  },
+  "initialize": {
+    "status": 200,
+    "protocol": "2025-03-26",
+    "session_header_present": true
+  },
+  "initialized_notification": {
+    "status": 202
+  },
+  "tools_list": {
+    "status": 200,
+    "tools": [
+      "qa005-mcp-fixture__qa_status"
+    ]
+  },
+  "tool_call": {
+    "status": 200,
+    "result": {
+      "content": [
+        {
+          "text": "QA005 fixture status: ready",
+          "type": "text"
+        }
+      ],
+      "isError": false,
+      "structuredContent": {
+        "query": "readiness",
+        "status": "ready"
+      }
+    }
+  },
+  "provider_plane_denial": {
+    "http_status": 403,
+    "error_code": "scope_or_plane_denied"
+  },
+  "revocation": {
+    "ui_status": "Revoked; 0 active streams severed",
+    "post_revoke_mcp_initialize": {
+      "http_status": 401,
+      "error_code": "invalid_virtual_key"
+    }
+  },
+  "audit_verification": {
+    "storage_engine": "sqlite",
+    "audit_chain_valid": true,
+    "events_verified": 204,
+    "orphan_holds_reconciled": 0
+  },
+  "limitations": [
+    "Read-only tool only; mutating/HITL flows and schema drift after pin are unverified.",
+    "External MCP interoperability, SSE/cancellation and concurrent behavior are unverified."
+  ]
+}

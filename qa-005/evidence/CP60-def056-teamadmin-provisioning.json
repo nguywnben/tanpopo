@@ -1,0 +1,113 @@
+{
+  "checkpoint": "CP60",
+  "historical_defect": "DEF-056",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "vcs_modified": false,
+    "control_data_plane": "127.0.0.1:18145",
+    "storage": "isolated SQLite",
+    "browser": "Chromium Linux",
+    "identity": "synthetic Team Admin only",
+    "scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev"
+  },
+  "member": {
+    "email": "qa005-teamadmin-def056@example.invalid",
+    "roles": [
+      "TEAM_ADMIN"
+    ],
+    "project_ids": [
+      "prj_01m8d6dbtxe008w7fphkgp2e24"
+    ],
+    "created_and_activated_through": "real Owner invitation and enrollment UI",
+    "credentials_or_invitation_token_in_repo": false
+  },
+  "model": {
+    "slug": "qa005-teamadmin-def056-probe",
+    "display_name": "QA005 Team Admin DEF056 Probe",
+    "id": "lmd_01m8d98pdte00b47zwj5xtfa5e",
+    "create_http_status": 201,
+    "assurance_tier": "DECLARED",
+    "context_window": 8192,
+    "max_output_tokens": 2048,
+    "capabilities": {
+      "streaming": false,
+      "tool_calling": false,
+      "parallel_tool_calls": false,
+      "strict_json_schema": false,
+      "json_object": false,
+      "vision": false,
+      "audio_input": false,
+      "document_input": false,
+      "reasoning": false,
+      "prompt_caching": false,
+      "embeddings": false,
+      "rerank": false
+    },
+    "post_hard_reload_api_read": {
+      "http_status": 200,
+      "persisted": true
+    },
+    "post_hard_reload_ui_row": true
+  },
+  "deployment": {
+    "id": "dpl_01m8d9cfnfe0095faym1t0t22t",
+    "create_http_status": 201,
+    "state": "ACTIVE_HEALTHY",
+    "connection_state": "ACTIVE",
+    "connection_id": "con_01m8d6menqe009w07sshr38yc9",
+    "upstream_model_name": "qa005-native:latest",
+    "rate_card": {
+      "input_token_nano_usd": 0,
+      "output_token_nano_usd": 0,
+      "cache_read_token_nano_usd": 0,
+      "cache_write_token_nano_usd": 0,
+      "reasoning_token_nano_usd": 0,
+      "image_unit_nano_usd": 0,
+      "audio_sec_nano_usd": 0,
+      "document_page_nano_usd": 0,
+      "self_hosted_zero_rate": true,
+      "token_rate_unit": "NANO_USD_PER_TOKEN"
+    },
+    "post_hard_reload_api_read": {
+      "http_status": 200,
+      "persisted": true,
+      "state": "ACTIVE_HEALTHY"
+    },
+    "post_hard_reload_ui_row": true
+  },
+  "steps": [
+    "Owner used the actual Access & Keys → Members & Roles form to add the synthetic identity with Team Admin only and QA005 No Budget Project scope.",
+    "The invite was activated through the real enrollment screen. Team Admin identity and project scope were verified in the real Console; invitation token/password remain mode-0600 outside the repository.",
+    "As Team Admin, opened the visible Register model action and submitted a new synthetic model. The actual request returned HTTP 201; UI success toast appeared.",
+    "Navigated to Logical Models, hard-reloaded, and verified UI row plus authenticated GET /admin/v1/models readback preserved id, slug, display name, DECLARED tier, dimensions and capabilities.",
+    "As the same Team Admin, used Add deployment with the existing active QA loopback Ollama connection, zero-rate self-hosted declaration and no provider dispatch. POST returned HTTP 201 and ACTIVE_HEALTHY.",
+    "Hard-reloaded and verified deployment remained Healthy in Console and authenticated GET /admin/v1/deployments returned the same deployment, ACTIVE_HEALTHY state, active connection, model and all-zero rate card."
+  ],
+  "visual_evidence": [
+    "evidence/screenshots/CP60-teamadmin-only-invite-form.png",
+    "evidence/screenshots/CP60-teamadmin-enrollment-screen.png",
+    "evidence/screenshots/CP60-teamadmin-activated.png",
+    "evidence/screenshots/CP60-teamadmin-model-screen.png",
+    "evidence/screenshots/CP60-teamadmin-model-form.png",
+    "evidence/screenshots/CP60-teamadmin-model-result.png",
+    "evidence/screenshots/CP60-teamadmin-model-persisted-after-reload.png",
+    "evidence/screenshots/CP60-teamadmin-deployment-form.png",
+    "evidence/screenshots/CP60-teamadmin-deployment-result.png",
+    "evidence/screenshots/CP60-teamadmin-deployment-persisted.png"
+  ],
+  "classification": {
+    "status": "PASS (scoped)",
+    "finding": "Current exact RC7 behavior contradicts the historical QA-004 Team Admin registration denial: Team Admin-only scoped account created and persisted a logical model and active healthy deployment through the real Console.",
+    "historical_conflict": "Historical QA-004 HTTP 403 remains preserved and is not erased. Current result is exact frozen RC7 on isolated SQLite, so the scoped current-baseline slice passes.",
+    "limitations": [
+      "Only one pure Team Admin identity, one project scope, one SQLite runtime and Chromium were tested.",
+      "No cross-project/organization scope, edit/delete, deployment failure, nonzero pricing, other model capabilities, or other roles/backends/browsers tested.",
+      "No inference was sent; provider connection is a local deterministic fixture; deployment is explicitly zero-rate.",
+      "The logical model retirement action was not present in the registry UI; PG-004 covers missing model retirement controls, so the test model/deployment remain isolated test data."
+    ]
+  },
+  "no_product_or_spec_change": true,
+  "no_paid_provider_usage": true,
+  "gate": "GATE-REL-07 remains BLOCKED"
+}

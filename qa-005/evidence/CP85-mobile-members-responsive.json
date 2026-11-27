@@ -1,0 +1,60 @@
+{
+  "checkpoint": "CP85",
+  "workflow": "Owner Console \u2192 Access & Keys \u2192 Members & Roles; open Add member form, no submission",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated SQLite at 127.0.0.1:18162",
+  "browser": "Chromium 156",
+  "at_320px": {
+    "viewport_width": 320,
+    "document_scroll_width": 320,
+    "body_scroll_width": 320,
+    "main_width": 320,
+    "main_scroll_width": 320,
+    "member_rows": 12,
+    "tablist_initial_scroll_left": 15,
+    "tablist_after_horizontal_wheel_left": 0,
+    "tablist_scroll_width": 311,
+    "tablist_client_width": 296,
+    "result": "no page-level horizontal overflow; offscreen Virtual Keys tab was recovered with horizontal wheel input and selected tab remained accessible"
+  },
+  "at_375px": {
+    "viewport_width": 375,
+    "document_scroll_width": 375,
+    "document_client_width": 375,
+    "member_rows": 12,
+    "result": "no page-level horizontal overflow"
+  },
+  "add_member_drawer_320px": {
+    "left": 56,
+    "width": 264,
+    "right": 320,
+    "scroll_width": 263,
+    "client_width": 263,
+    "height": 844,
+    "email_input_visible": true,
+    "role_selector_visible": true,
+    "project_selector_visible": true,
+    "cancel_visible": true,
+    "submit_visible": true,
+    "submitted": false
+  },
+  "page_errors": [],
+  "visual_inspection": "CP85 screenshots at 320px and 375px show stacked member rows, legible statuses and roles, navigation menu control, responsive tab-strip scroll affordance, and an in-viewport Add organization member drawer. Images visually inspected during the browser session.",
+  "evidence": [
+    "evidence/screenshots/CP85-members-320px.png",
+    "evidence/screenshots/CP85-members-375px.png",
+    "evidence/screenshots/CP85-members-320px-tab-scroll.png",
+    "evidence/screenshots/CP85-add-member-320px.png"
+  ],
+  "classification": "PASS (scoped responsive workflow)",
+  "limitations": [
+    "Chromium only; WebKit/Firefox/actual mobile devices not established by this checkpoint",
+    "Keyboard/screen-reader/touch accessibility not assessed",
+    "No member submission was made in this checkpoint",
+    "Other tables, roles and locales remain open"
+  ],
+  "product_code_modified": false,
+  "paid_provider_calls": 0,
+  "gate_rel_07": "BLOCKED"
+}

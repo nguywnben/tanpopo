@@ -1,0 +1,22 @@
+{
+  "checkpoint": "CP130",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 runtime; real Chromium Owner Console",
+  "key_name": "QA004 CP130 Stale Rotation Conflict",
+  "key_id": "vky_01m8b95p6me008kbmz0gb6xzjj",
+  "scope_restrictions": {"plane": "PROVIDER", "routes": ["/v1/models"], "models": ["qa004-cp121-priced-vision"]},
+  "initial_state": {"version": 1, "state": "CREATED_ACTIVE"},
+  "real_ui_rotation": {"http_status": 200, "etag": "\"v2\"", "state": "ROTATING_DUAL_VALID", "version": 2},
+  "stale_replay": {"method": "POST /admin/v1/virtual-keys/{keyId}/rotate", "if_match": "\"v1\"", "http_status": 409, "error": "optimistic_lock_conflict", "message": "resource version conflict: current revision is v2", "response_etag": "\"v2\""},
+  "post_conflict_state": {"state": "ROTATING_DUAL_VALID", "version": 2, "both_current_grace_credentials": [{"http_status": 200, "only_allowed_model_returned": true}, {"http_status": 200, "only_allowed_model_returned": true}]},
+  "revoke": {"mode": "GRACEFUL_DRAIN", "state": "REVOKED", "version": 3, "both_credentials": [{"http_status": 401, "error": "invalid_virtual_key"}, {"http_status": 401, "error": "invalid_virtual_key"}]},
+  "audit_events": [
+    {"seq_no": 730, "action": "virtual_key.rotated", "target_id": "vky_01m8b95p6me008kbmz0gb6xzjj", "chain_partition": "org_01m895k8pee008b3aeaswvpshy"},
+    {"seq_no": 731, "action": "virtual_key.revoked", "target_id": "vky_01m8b95p6me008kbmz0gb6xzjj", "chain_partition": "org_01m895k8pee008b3aeaswvpshy"}
+  ],
+  "screenshots": ["CP130-stale-rotation-conflict-state.png", "CP130-stale-rotation-revoked.png"],
+  "credential_handling": "Plaintext credentials remained in memory only and were not printed or persisted.",
+  "classification": "PASS (scoped optimistic-lock conflict preserves rotation state and credential validity; linked revoke audit and cleanup verified).",
+  "product_source_modified": false,
+  "gate": "GATE-REL-07 BLOCKED"
+}

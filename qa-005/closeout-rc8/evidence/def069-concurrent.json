@@ -1,0 +1,32 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "environment": "exact RC8 release binary, isolated PostgreSQL 16, two concurrent loopback A2A tasks with separate 1000 micro-USD reservations",
+  "result": {
+    "task_ids": [
+      "tsk_01m8er6x0re00a79mb0fjsm7ja",
+      "tsk_01m8er6x0se009xvgzb82j6d5t"
+    ],
+    "request_http": [
+      200,
+      200
+    ],
+    "request_states": [
+      "canceled",
+      "canceled"
+    ],
+    "cancel_statuses": [
+      "acknowledged",
+      "acknowledged"
+    ],
+    "settled_costs": [
+      350,
+      350
+    ],
+    "cancel_http": [
+      200,
+      200
+    ],
+    "fixture_concurrent_dispatch_count": 4,
+    "fixture_cancel_count": 4
+  }
+}

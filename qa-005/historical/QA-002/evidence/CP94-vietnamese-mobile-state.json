@@ -1,0 +1,28 @@
+{
+  "role": "Organization Owner",
+  "viewport": "375x844",
+  "drawerText": "Tanpopo\nGiám sát\nTổng quan\nDấu vết\nFinOps\nCổng AI\nNhà cung cấp\nMô hình\nTuyến & Chính sách\nHệ sinh thái\nTiện ích mở rộng\nMCP Hub\nThử nghiệm\nQuản trị\nTruy cập & Khóa\nBảo mật\nVận hành\nNgôn ngữ\nTiếng Việt\nqa-002-a2a-owner@example.invalid\nVận hành viên, Chủ tổ chức",
+  "overviewText": "Tổng quan\n\nCập nhật 09:51:28 · 0 yêu cầu chưa đo lường\n\n1h\n24h\n7d\n30d\nLàm mới\nYêu cầu\n2\nKhung: 24h\nTỷ lệ lỗi\n50,00%\nNội bộ & upstream\nĐộ trễ proxy p95\n5,517 ms\nĐộ trễ do cổng thêm vào\nChi phí đã chốt\n$0,012001\nTạm giữ hiện tại: $0,000000\nCảnh báo hiện tại\n0\nMọi hệ thống đều ổn định\nKhông có cảnh báo vận hành nào đang mở hoặc mục cần khắc phục.",
+  "overviewMetrics": {
+    "vw": 375,
+    "doc": 375,
+    "lang": "vi",
+    "bg": "rgb(17, 17, 19)"
+  },
+  "providers": "Nhà cung cấp\n\nKết nối nhà cung cấp upstream, kho bí mật chỉ ghi và bộ chuyển đổi giao thức.\n\nNiêm phong bí mật\nTạo kết nối\nKết nối\n5\nKho bí mật\n1\nBộ chuyển đổi\n2\nKết nối đã cấu hình\n5\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\nVùng / Thanh toán\nON_PREM · Tự vận hành\nTrạng thái\nChưa xác minh\nChi tiết (2)\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\nVùng / Thanh toán\nUS · Thương mại\nTrạng thái\nChưa xác minh\nChi tiết (2)\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\nVùng / Thanh toán\nUS · Thương mại\nTrạng thái\nChưa xác minh\nChi tiết (2)\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\nVùng / Thanh toán\nON_PREM · Tự vận hành\nTrạng thái\nChưa xác minh\nChi tiết (2)\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\nVùng / Thanh toán\nON_PREM · Tự vận hành\nTrạng thái\nĐang hoạt động\nChi tiết (2)",
+  "providerMetrics": {
+    "vw": 375,
+    "doc": 375
+  },
+  "finops": "FinOps\n\nSổ cái số nguyên micro-USD tách biệt chi phí chính xác, ước tính, tạm giữ và chưa đo lường.\n\nXuất CSV\nXuất JSON\nTạo ngân sách\nNgân sách & Tạm giữ\n1\nPhân bổ chi phí\nĐã chốt (chính xác)\n$0,012001\nTheo báo cáo nhà cung cấp\nĐã chốt (ước tính)\n$0,000000\nƯớc lượng token dự phòng\nTạm giữ hiện tại\n$0,000000\nKhoản đặt chỗ đang xử lý\nYêu cầu chưa đo lường\n0\nĐánh dấu để đối soát\nTrần ngân sách\n1\nPROJECT\nprj_01m868q2jte00abmhf75asqts3\nChu kỳ\nMONTHLY\nĐã chốt chính xác\n$0,000000\nChi tiết (3)",
+  "finopsMetrics": {
+    "vw": 375,
+    "doc": 375
+  },
+  "persisted": {
+    "vw": 375,
+    "doc": 375,
+    "lang": "vi",
+    "bg": "rgb(17, 17, 19)"
+  }
+}

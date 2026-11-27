@@ -1,0 +1,35 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "read_method": "read-only SQLite access to isolated runtime DB",
+  "settlement": {
+    "request_id": "trc_01m8cyctaze0099w7jq4vqzjs2",
+    "plane": "PROVIDER",
+    "logical_model_slug": "qa005-native-vision",
+    "billing_mode": "SELF_HOSTED_INFRA",
+    "usage_accuracy": "EXACT",
+    "input_tokens": 7,
+    "output_tokens": 4,
+    "cache_read_tokens": 0,
+    "cache_write_tokens": 0,
+    "reasoning_tokens": 0,
+    "media_usage_json": {
+      "image_count": 1
+    },
+    "applied_pricing_snapshot_json": {
+      "pricing_schema_version": 2,
+      "token_rate_unit": "nano_usd_per_token",
+      "input_token_nano_usd": 1000,
+      "output_token_nano_usd": 2000,
+      "image_per_unit_nano_usd": 100000000,
+      "billing_mode": "SELF_HOSTED_INFRA"
+    },
+    "total_cost_micros": 100015
+  },
+  "expected_calculation": {
+    "input_nano_usd": 7000,
+    "output_nano_usd": 8000,
+    "image_nano_usd": 100000000,
+    "total_nano_usd": 100015000,
+    "ceil_micro_usd": 100015
+  }
+}

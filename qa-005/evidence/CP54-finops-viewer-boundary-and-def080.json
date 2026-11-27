@@ -1,0 +1,61 @@
+{
+  "checkpoint": "CP54",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": {
+    "runtime": "isolated PostgreSQL 16 / 3-node Valkey 8.1 Cluster; exact-source Control Plane 127.0.0.1:18151",
+    "browser": "Chromium; real Console Owner, invitee enrollment, and FINOPS_VIEWER sessions",
+    "identity": "QA005 CP52 Recovery organization and Recovery Project / dev",
+    "provider": "none; no matching provider route and no paid usage"
+  },
+  "provisioning": {
+    "procedure": "Owner opened Access & Keys > Members & Roles > Add member, selected FINOPS_VIEWER, and inspected the selected-role state before submission. Developer was preselected, so both roles were selected. Owner then used the real Edit roles action to remove Developer and saved a pure FINOPS_VIEWER assignment before redeeming the synthetic one-time invite through the real account activation page.",
+    "final_assigned_role": "FINOPS_VIEWER only",
+    "enrollment": "POST /admin/v1/auth/enroll returned HTTP 200; invite token and password excluded from repository evidence",
+    "observation": "The Add member form's default Developer role remains a product-gap usability observation PG-001, not a defect absent an accepted default-role requirement."
+  },
+  "known_owner_resource": {
+    "resource": "Owner-created environment Virtual Key",
+    "name": "CP54 DEF-080 inventory counterfactual",
+    "last_four": "KeMa",
+    "plane": "PROVIDER",
+    "owner_inventory_state_before_viewer_check": "Active; same organization/project/environment",
+    "secret_material": "not recorded; never included in screenshots or this evidence",
+    "cleanup": "Owner revoked it through Access & Keys after the viewer check; Console confirmed 0 active streams severed and inventory showed Revoked."
+  },
+  "role_authorization": {
+    "expected": "Under accepted TP-IMP-0030 and DEC-050, FINOPS_VIEWER may read FinOps; it must not access trace metadata, trace details/debug payloads, kill-switch operations, Virtual Key inventory, or member inventory.",
+    "finops_ui": "Loaded the real Budgets & Holds screen; the UI's GET /admin/v1/usage/summary and GET /admin/v1/budgets calls returned HTTP 200. Direct GET /admin/v1/budgets also returned 200.",
+    "direct_admin_gets": [
+      {"path": "/admin/v1/traces?limit=10", "http_status": 403, "error": "insufficient_role_permission"},
+      {"path": "/admin/v1/traces/req_qa005_absent", "http_status": 403, "error": "insufficient_role_permission"},
+      {"path": "/admin/v1/traces/req_qa005_absent/debug-payload", "http_status": 403, "error": "insufficient_role_permission"},
+      {"path": "/admin/v1/kill-switches", "http_status": 403, "error": "insufficient_role_permission"},
+      {"path": "/admin/v1/virtual-keys", "http_status": 403, "error": "insufficient_role_permission"},
+      {"path": "/admin/v1/members?limit=100", "http_status": 403, "error": "insufficient_role_permission"}
+    ],
+    "ui_restricted_routes": {"traces": "Access restricted", "security": "Access restricted"},
+    "classification": "PASS (scoped accepted FINOPS_VIEWER boundary; no mutation or unauthorized resource data was accessed)"
+  },
+  "def080": {
+    "owner_proof": "Owner's Access & Keys UI showed one active Virtual Key in the same environment with last four KeMa.",
+    "viewer_result": "GET /admin/v1/virtual-keys returned HTTP 403 insufficient_role_permission; Access & Keys simultaneously rendered a red 'Virtual keys: insufficient role permission' alert, 'Environment Virtual Keys 0', and 'No Virtual Keys in this environment'.",
+    "classification": "DEF-080 remains FAIL; fresh direct reproduction with a known same-scope active key. Authorization correctly denied the data and exposed no secret/key row."
+  },
+  "evidence": [
+    "../checkpoints/CP54-finops-viewer-rbac-and-def080.md",
+    "../evidence/screenshots/CP54-finops-invite-form.png",
+    "../evidence/screenshots/CP54-member-roles.png",
+    "../evidence/screenshots/CP54-finops-enrollment-result.png",
+    "../evidence/screenshots/CP54-owner-virtual-key-inventory.png",
+    "../evidence/screenshots/CP54-finops-viewer-finops.png",
+    "../evidence/screenshots/CP54-finops-viewer-traces-route.png",
+    "../evidence/screenshots/CP54-finops-viewer-security-route.png",
+    "../evidence/screenshots/CP54-finops-viewer-key-inventory.png",
+    "../evidence/screenshots/CP54-owner-key-revoked.png"
+  ],
+  "new_defect": false,
+  "new_gap": "PG-001 evidence expanded; no new product-gap ID",
+  "historical_defect_counts_changed": false,
+  "release_gate": "GATE-REL-07 remains BLOCKED"
+}

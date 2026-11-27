@@ -1,0 +1,51 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "role": "ORG_OWNER",
+  "browser": "Chromium 1440x1000",
+  "scope": "QA004 Test Root Org\n/\nQA-004 Isolated Canary\n/\nNo env\n(Active workspace scope)",
+  "page_text": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nRoutes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, US, APAC, ON_PREM\tOrganization floor\nAllowed models\t*\tProject policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hooks\tNone attached\tProject policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy",
+  "action_buttons": [
+    "RoutesRoutes",
+    "Route ExplainRoute Explain",
+    "PoliciesPolicies",
+    "Project",
+    "Any approved",
+    "Declared",
+    "Fail closed",
+    "Attach guardrail",
+    "Discard changes",
+    "Save policy",
+    "",
+    "Priority failover",
+    "Select deployment",
+    "Add target",
+    "Cancel",
+    "Create route",
+    "Cancel",
+    "Delete route",
+    "Cancel",
+    "Confirm and save policy",
+    "",
+    "Close",
+    "Adopt latest version & keep draft"
+  ],
+  "project_effective_policy_api": {
+    "status": 200,
+    "error": null,
+    "document_keys": [
+      "id",
+      "scope_tier",
+      "scope_id",
+      "allowed_data_regions",
+      "min_plugin_trust",
+      "min_capability_assurance",
+      "version"
+    ],
+    "policy_id": "pol_3112gkza8edq5knszveedcd7n8",
+    "scope_type": null,
+    "scope_id": "org_01m895k8pee008b3aeaswvpshy",
+    "etag": "\"v1\""
+  },
+  "screenshot": "CP81-policy-page-project-no-env.png",
+  "mutation_performed": false
+}

@@ -1,0 +1,41 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "RC6 exact-source isolated offline runtime 127.0.0.1:18132",
+  "actor_role": "ORG_OWNER",
+  "workflow": "Access & Keys / Members & Roles at organization-only scope",
+  "before_refresh": {
+    "scope": "QA-004 Scope Invite Org / No project / No env",
+    "ui_members_count": 5,
+    "ui_members": [
+      "qa004-cp51-teamadmin-only-added@example.invalid",
+      "qa004-cp51-teamadmin-only@example.invalid",
+      "qa004-cp50-project-dev@example.invalid",
+      "qa004-cp49-teamadmin@example.invalid",
+      "qa004-cp49-owner@example.invalid"
+    ],
+    "member_list_requests": [
+      {"method": "GET", "path": "/admin/v1/members?limit=100", "status": 200},
+      {"method": "GET", "path": "/admin/v1/members?limit=100", "status": 200}
+    ],
+    "api_count": 5
+  },
+  "after_refresh": {
+    "scope": "QA-004 Scope Invite Org / QA004 CP57 Project Recovery / qa004-cp59-mcp-test",
+    "ui_members_count": 5,
+    "api_status": 200,
+    "api_count": 5
+  },
+  "visual_review": [
+    "Organization-only Members & Roles screenshot visually inspected.",
+    "Post-refresh populated Members & Roles screenshot visually inspected."
+  ],
+  "classification": {
+    "DEF-023": "PASS (scoped): organization member inventory was visible at no-project/no-environment scope and remained visible after refresh.",
+    "new_defect": false
+  },
+  "remaining_gaps": [
+    "Sibling-project filtering with different membership sets.",
+    "Team Admin and Security Reviewer behavior at organization-only scope.",
+    "Membership changes during scope switching, pagination, and concurrent refresh."
+  ]
+}

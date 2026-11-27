@@ -1,0 +1,483 @@
+{
+  "runtime": "isolated exact RC6 SQLite 18128",
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "session_status": 200,
+  "org_id_present": true,
+  "virtual_key_events": [
+    {
+      "id": "vky_01m8be37d8e008vn93v9ph3d6n",
+      "events": [
+        {
+          "seq_no": 811,
+          "action": "virtual_key.created",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8be37d8e008vn93v9ph3d6n",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "allowed_planes": "PROVIDER",
+            "env_id": "env_01m895k8pee008b5ah423mhysr"
+          },
+          "created_at": "2026-11-26T08:03:34.44Z"
+        },
+        {
+          "seq_no": 812,
+          "action": "virtual_key.revoked",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8be37d8e008vn93v9ph3d6n",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "mode": "STANDARD",
+            "reason": "Graceful drain revocation"
+          },
+          "created_at": "2026-11-26T08:03:39.493Z"
+        }
+      ]
+    },
+    {
+      "id": "vky_01m8begdfbe008ewkj97w2679s",
+      "events": [
+        {
+          "seq_no": 821,
+          "action": "virtual_key.created",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8begdfbe008ewkj97w2679s",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "allowed_planes": "PROVIDER",
+            "env_id": "env_01m895k8pee008b5ah423mhysr"
+          },
+          "created_at": "2026-11-26T08:10:46.635Z"
+        },
+        {
+          "seq_no": 825,
+          "action": "virtual_key.revoked",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8begdfbe008ewkj97w2679s",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "mode": "STANDARD",
+            "reason": "Graceful drain revocation"
+          },
+          "created_at": "2026-11-26T08:11:45.247Z"
+        }
+      ]
+    },
+    {
+      "id": "vky_01m8begf54e009jz6xzvshf5tv",
+      "events": [
+        {
+          "seq_no": 822,
+          "action": "virtual_key.created",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8begf54e009jz6xzvshf5tv",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "allowed_planes": "PROVIDER",
+            "env_id": "env_01m895k8pee008b5ah423mhysr"
+          },
+          "created_at": "2026-11-26T08:10:48.356Z"
+        },
+        {
+          "seq_no": 826,
+          "action": "virtual_key.revoked",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8begf54e009jz6xzvshf5tv",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "mode": "STANDARD",
+            "reason": "Graceful drain revocation"
+          },
+          "created_at": "2026-11-26T08:11:47.037Z"
+        }
+      ]
+    },
+    {
+      "id": "vky_01m8beggqqe008x8xga61xr5cp",
+      "events": [
+        {
+          "seq_no": 823,
+          "action": "virtual_key.created",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8beggqqe008x8xga61xr5cp",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "allowed_planes": "PROVIDER",
+            "env_id": "env_01m895k8pee008b5ah423mhysr"
+          },
+          "created_at": "2026-11-26T08:10:49.975Z"
+        },
+        {
+          "seq_no": 827,
+          "action": "virtual_key.revoked",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8beggqqe008x8xga61xr5cp",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "mode": "STANDARD",
+            "reason": "Graceful drain revocation"
+          },
+          "created_at": "2026-11-26T08:11:48.746Z"
+        }
+      ]
+    },
+    {
+      "id": "vky_01m8bepkqne009seaex7pjh6w8",
+      "events": [
+        {
+          "seq_no": 831,
+          "action": "virtual_key.created",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8bepkqne009seaex7pjh6w8",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "allowed_planes": "PROVIDER",
+            "env_id": "env_01m895k8pee008b5ah423mhysr"
+          },
+          "created_at": "2026-11-26T08:14:09.653Z"
+        },
+        {
+          "seq_no": 833,
+          "action": "virtual_key.revoked",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8bepkqne009seaex7pjh6w8",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "mode": "STANDARD",
+            "reason": "Graceful drain revocation"
+          },
+          "created_at": "2026-11-26T08:14:16.401Z"
+        }
+      ]
+    },
+    {
+      "id": "vky_01m8bepne9e00aqwrpfrv8mj6k",
+      "events": [
+        {
+          "seq_no": 832,
+          "action": "virtual_key.created",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8bepne9e00aqwrpfrv8mj6k",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "allowed_planes": "PROVIDER",
+            "env_id": "env_01m895k8pee008b5ah423mhysr"
+          },
+          "created_at": "2026-11-26T08:14:11.401Z"
+        },
+        {
+          "seq_no": 834,
+          "action": "virtual_key.revoked",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8bepne9e00aqwrpfrv8mj6k",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "mode": "STANDARD",
+            "reason": "Graceful drain revocation"
+          },
+          "created_at": "2026-11-26T08:14:18.049Z"
+        }
+      ]
+    },
+    {
+      "id": "vky_01m8bf4z7re00ap4xtsr60wqj6",
+      "events": [
+        {
+          "seq_no": 841,
+          "action": "virtual_key.created",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8bf4z7re00ap4xtsr60wqj6",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "allowed_planes": "PROVIDER",
+            "env_id": "env_01m895k8pee008b5ah423mhysr"
+          },
+          "created_at": "2026-11-26T08:22:00.184Z"
+        },
+        {
+          "seq_no": 842,
+          "action": "virtual_key.revoked",
+          "target_type": "virtual_key",
+          "target_id": "vky_01m8bf4z7re00ap4xtsr60wqj6",
+          "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+          "metadata": {
+            "mode": "STANDARD",
+            "reason": "Graceful drain revocation"
+          },
+          "created_at": "2026-11-26T08:22:04.224Z"
+        }
+      ]
+    }
+  ],
+  "budget_update_events": [
+    {
+      "seq_no": 843,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T08:22:05.398Z"
+    },
+    {
+      "seq_no": 840,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 2058,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T08:21:58.482Z"
+    },
+    {
+      "seq_no": 835,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T08:14:19.181Z"
+    },
+    {
+      "seq_no": 830,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T08:14:08.149Z"
+    },
+    {
+      "seq_no": 828,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T08:11:50.706Z"
+    },
+    {
+      "seq_no": 820,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T08:10:45.182Z"
+    },
+    {
+      "seq_no": 813,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T08:03:40.968Z"
+    },
+    {
+      "seq_no": 810,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T08:03:32.502Z"
+    },
+    {
+      "seq_no": 806,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T07:59:19.628Z"
+    },
+    {
+      "seq_no": 799,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T07:55:36.374Z"
+    },
+    {
+      "seq_no": 777,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T07:29:32.221Z"
+    },
+    {
+      "seq_no": 773,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T07:29:24.509Z"
+    },
+    {
+      "seq_no": 771,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T07:29:13.047Z"
+    },
+    {
+      "seq_no": 769,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T07:29:07.856Z"
+    },
+    {
+      "seq_no": 713,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T06:10:03.168Z"
+    },
+    {
+      "seq_no": 710,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T06:08:51.621Z"
+    },
+    {
+      "seq_no": 709,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T06:05:35.038Z"
+    },
+    {
+      "seq_no": 705,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T06:04:18.949Z"
+    },
+    {
+      "seq_no": 702,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T05:55:43.225Z"
+    },
+    {
+      "seq_no": 697,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 5000,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-26T05:51:03.782Z"
+    },
+    {
+      "seq_no": 25,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 100,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-25T11:29:05.73Z"
+    },
+    {
+      "seq_no": 24,
+      "action": "budget.updated",
+      "target_type": "budget_ledger",
+      "target_id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+      "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+      "metadata": {
+        "hard_limit_micros": 1,
+        "period": "MONTHLY"
+      },
+      "created_at": "2026-11-25T11:28:41.466Z"
+    }
+  ],
+  "api_statuses": {
+    "virtual_key.created": 200,
+    "virtual_key.revoked": 200,
+    "budget.updated": 200
+  },
+  "audit_ui": "Visually verified in CP144 screenshot: RFC 8785 JCS chain intact across 853 events"
+}

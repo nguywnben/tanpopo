@@ -1,0 +1,103 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 SQLite clone on 127.0.0.1:18133; source was SQLite-backup copied from runtime 18128",
+  "product_source_modified": false,
+  "injection": "SQLite BEFORE INSERT trigger aborting only audit_events rows whose event_type is organization.crypto_shredded",
+  "canary": {
+    "organization_id": "org_01m8ackgw6e00bqkcbp8cssnvw",
+    "slug": "qa004-cp73-def041-20261125",
+    "project_id": "prj_01m8acq8f4e009xhjwr5n93kch",
+    "environment_id": "env_01m8acq9tye00b63cdcabk4efw",
+    "virtual_key_id": "vky_01m8acwsy6e00acbq02qcvwtte",
+    "all_values_are_synthetic": true
+  },
+  "before_failure": {
+    "organization_status": "ACTIVE",
+    "counts": {
+      "organizations": 1,
+      "org_encryption_keys": 1,
+      "projects": 1,
+      "environments": 1,
+      "project_encryption_keys": 1,
+      "virtual_keys": 1,
+      "secret_credentials": 0,
+      "vault_shred_requests": 0,
+      "audit_events": 4
+    },
+    "audit_event_types": [
+      "organization.created",
+      "project.created",
+      "environment.created",
+      "virtual_key.created"
+    ]
+  },
+  "failed_console_crypto_shred": {
+    "http_status": 500,
+    "error_code": "internal_error",
+    "error_message": "failed recording shred audit event",
+    "organization_status_after": "DELETING",
+    "counts_after": {
+      "organizations": 1,
+      "org_encryption_keys": 0,
+      "projects": 1,
+      "environments": 1,
+      "project_encryption_keys": 0,
+      "virtual_keys": 1,
+      "secret_credentials": 0,
+      "vault_shred_requests": 1,
+      "audit_events": 4
+    },
+    "shred_request_states": [
+      {"status": "COMPLETED", "count": 1}
+    ],
+    "tombstone_event_present": false,
+    "console_state": {
+      "row_label": "Deleting (pending erasure)",
+      "banner_title": "Organization erasure pending finalization",
+      "banner": "One or more organizations finished key destruction but did not complete deletion finalization. Retry finalization before creating or switching tenants.",
+      "row_action": "Retry finalization",
+      "original_confirmation_dialog_stayed_open": true,
+      "dialog_still_offered": "Crypto-shred"
+    }
+  },
+  "retry_after_test_trigger_removed": {
+    "trigger_removed_from_test_clone_only": true,
+    "initiated_by_real_console_action": "Retry finalization",
+    "http_method": "POST",
+    "http_path": "/admin/v1/organizations/org_01m8ackgw6e00bqkcbp8cssnvw/finalize-erasure",
+    "http_status": 200,
+    "receipt_visible": true,
+    "virtual_keys_revoked_count": 1,
+    "post_retry_counts": {
+      "organizations": 0,
+      "org_encryption_keys": 0,
+      "projects": 0,
+      "environments": 0,
+      "project_encryption_keys": 0,
+      "virtual_keys": 0,
+      "secret_credentials": 0,
+      "vault_shred_requests": 1,
+      "audit_events": 5
+    },
+    "audit_event_types": [
+      "organization.created",
+      "project.created",
+      "environment.created",
+      "virtual_key.created",
+      "organization.crypto_shredded"
+    ],
+    "audit_event_readback": {
+      "http_status": 200,
+      "count": 1,
+      "sequence": 5,
+      "target_id_matches_canary": true
+    },
+    "audit_chain_verify": {
+      "http_status": 200,
+      "intact": true,
+      "checked_events_count": 5
+    }
+  },
+  "classification": "DEF-041 is PARTIAL on exact RC6. The previously reported unlabeled DELETING state is now clearly labeled and has an explicit retry-finalization action; actual retry completed the purge and emitted an intact terminal receipt. Residual metadata categories are not itemized in the banner, the original confirmation dialog remains open with its Crypto-shred action after failure, and automated/restart/concurrent/PostgreSQL/Valkey recovery remain unverified. No new defect is assigned from this isolated slice.",
+  "sensitive_artifact_handling": "An initial local screenshot briefly contained the synthetic-only one-time Virtual Key plaintext. That file was deleted immediately and excluded from the QA branch; the credential and value are not present in this evidence package. No provider, production or real-user credential was used."
+}

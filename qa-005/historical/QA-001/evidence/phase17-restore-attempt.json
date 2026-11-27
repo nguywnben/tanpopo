@@ -1,0 +1,15 @@
+{
+  "archive": "tanpopo-backup-9e639b2d0ddafc2a1c7114d03ce5f225.tpop.enc",
+  "destination": "/tmp/qa-tanpopo/restore-phase16-keyed",
+  "master_key_source": "TANPOPO_MASTER_KEY_FILE=/tmp/qa-tanpopo/master-key (path only; key value not recorded)",
+  "verify_secrets_decrypt": true,
+  "exit_code": 14,
+  "result": "failed_before_publish",
+  "error": "Backup restore failed: initialized organization \"org_01m83wyz0qe008ch01tnv1jht8\" has no verifiable audit history",
+  "destination_created": false,
+  "preliminary_attempt": {
+    "exit_code": 14,
+    "error": "Could not initialize backup restore: neither TANPOPO_MASTER_KEY nor TANPOPO_MASTER_KEY_FILE is configured; not an archive result"
+  },
+  "active_database_modified": false
+}

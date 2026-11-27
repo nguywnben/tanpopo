@@ -1,0 +1,8 @@
+{
+  "database_read_only": true,
+  "key_name": "qa-cp36-key-rotation",
+  "state": "REVOKED",
+  "version": 3,
+  "allowed_planes": "PROVIDER",
+  "probe_limit": "Only final state is retained; no old/new token result from the earlier attempt is claimed."
+}

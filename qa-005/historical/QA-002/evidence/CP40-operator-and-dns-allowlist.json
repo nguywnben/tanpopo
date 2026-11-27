@@ -1,0 +1,110 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "operator_session": {
+    "roles": [
+      "OPERATOR"
+    ],
+    "org_role_binding": false,
+    "members_ui_api_status": 200,
+    "member_count": 1
+  },
+  "direct_members_api_without_org_context": 403,
+  "mcp_dns_cases": {
+    "localhost_resolution": [
+      "::1",
+      "127.0.0.1"
+    ],
+    "fixtures": {
+      "deny_fixture_requests": [],
+      "dual_stack_fixture_positive_peer": "::1",
+      "ipv6_fixture_requests": [
+        "initialize",
+        "notifications/initialized",
+        "tools/list"
+      ]
+    },
+    "results": [
+      {
+        "slug": "qa002-cp40-host-deny",
+        "allowed_cidrs": [
+          "127.0.0.2/32"
+        ],
+        "sync_status": 502,
+        "fixture_requests": 0
+      },
+      {
+        "slug": "qa002-cp40-host-allow",
+        "allowed_cidrs": [
+          "127.0.0.1/32",
+          "::1/128"
+        ],
+        "sync_status": 200,
+        "fixture_peer": "::1",
+        "fixture_requests": 3,
+        "tools_discovered": 1
+      },
+      {
+        "slug": "qa002-cp40-host-v4-only",
+        "allowed_cidrs": [
+          "127.0.0.1/32"
+        ],
+        "sync_status": 502,
+        "fixture_requests": 0
+      },
+      {
+        "slug": "qa002-cp40-host-v6-only",
+        "allowed_cidrs": [
+          "::1/128"
+        ],
+        "sync_status": 200,
+        "fixture_peer": "::1",
+        "fixture_requests": 3,
+        "tools_discovered": 1
+      }
+    ]
+  },
+  "persisted_servers": [
+    {
+      "server_slug": "qa002-cp40-host-deny",
+      "endpoint_url": "http://localhost:19110/mcp",
+      "allow_private_ip": 1,
+      "status": "ACTIVE",
+      "tool_count": 0,
+      "allowed_cidrs": [
+        "127.0.0.2/32"
+      ]
+    },
+    {
+      "server_slug": "qa002-cp40-host-allow",
+      "endpoint_url": "http://localhost:19115/mcp",
+      "allow_private_ip": 1,
+      "status": "ACTIVE",
+      "tool_count": 1,
+      "allowed_cidrs": [
+        "127.0.0.1/32",
+        "::1/128"
+      ]
+    },
+    {
+      "server_slug": "qa002-cp40-host-v4-only",
+      "endpoint_url": "http://localhost:19115/mcp",
+      "allow_private_ip": 1,
+      "status": "ACTIVE",
+      "tool_count": 0,
+      "allowed_cidrs": [
+        "127.0.0.1/32"
+      ]
+    },
+    {
+      "server_slug": "qa002-cp40-host-v6-only",
+      "endpoint_url": "http://localhost:19115/mcp",
+      "allow_private_ip": 1,
+      "status": "ACTIVE",
+      "tool_count": 1,
+      "allowed_cidrs": [
+        "::1/128"
+      ]
+    }
+  ],
+  "classification": "SCOPED PASS: selected private resolved address is checked against configured CIDRs; unauthorized/mismatched cases did not reach fixture. DNS rebinding, redirects, mixed-address endpoint behavior beyond localhost, and other runtimes remain UNVERIFIED."
+}

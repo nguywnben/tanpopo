@@ -1,0 +1,22 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "environment": "isolated SQLite runtime 127.0.0.1:18084; loopback synthetic A2A endpoint explicitly allowlisted as 127.0.0.1/32",
+  "agent": {"id": "agt_01m84zb2t8e008warmz4mb1b72", "registration_status": 201},
+  "cidr_validation": {"wildcard": {"cidr": "0.0.0.0/0", "result": "rejected in UI; no registration request"}, "explicit_loopback": {"cidr": "127.0.0.1/32", "result": "registration HTTP 201"}},
+  "key_scope_checks": [
+    {"scope": "A2A /a2a/*", "action": "GET /a2a/agents", "status": 200},
+    {"scope": "A2A /a2a/*", "action": "GET /.well-known/agent.json", "status": 200},
+    {"scope": "PROVIDER *", "action": "GET /a2a/agents and task", "status": 403, "code": "scope_or_plane_denied"},
+    {"scope": "revoked A2A key", "action": "GET /a2a/agents", "status": 401, "code": "invalid_virtual_key"}
+  ],
+  "tasks": [
+    {"id": "tsk_01m84ze0n3e00b47xbhs0f25v4", "journey": "input-required then authorized API resume", "states": ["input-required", "completed"], "resume_status": 200, "same_id": true, "settled_cost_micros": 3000, "reservation_state": "SETTLED_EXACT", "terminal_resume": {"status": 409, "code": "task_not_resumable"}, "terminal_cancel": {"status": 409, "code": "invalid_state_transition"}},
+    {"id": "tsk_01m84ze0nne009x63agbdxx9xd", "journey": "input-required then cancellation", "cancel_status": 200, "state_after_cancel": "canceled", "get_preserves_state": true, "reservation_state": "RELEASED_UNUSED", "resume_after_cancel": {"status": 409, "code": "task_not_resumable"}},
+    {"id": "tsk_01m84zevvte00bjjwaznfxc2nd", "journey": "Console UI resume", "states": ["input-required", "completed"], "console_resume_status": 200, "same_id": true, "settled_cost_micros": 3000, "reservation_state": "SETTLED_EXACT"}
+  ],
+  "upstream_calls": {"count": 5, "authorization_forwarded": false, "trace_root_present": true, "hop": "1"},
+  "persistence": {"task_rows": 3, "trace_rows": 0, "audit_chain_intact": true, "budget_ledger_rows": 0},
+  "revocation": {"console_result": "Virtual key revoked. 0 active streams severed.", "recent_trace_derived_request_count": 0, "old_key_status": 401, "active_task_drain": "UNVERIFIED; no concurrent task was held open during revoke"},
+  "limitations": ["MCP CIDR flow untested", "budget/chargeback enforcement untested", "rotation and cross-role key provisioning untested", "trace-derived request count contract for A2A unverified"],
+  "screenshots": ["CP08-a2a-agents-empty.png", "CP08-a2a-register-form.png", "CP08-a2a-register-form-valid.png", "CP08-a2a-agent-persisted.png", "CP08-vkey-issue-form.png", "CP08-vkey-a2a-scope-selection.png", "CP08-vkey-a2a-persisted.png", "CP08-vkey-provider-default-persisted.png", "CP08-a2a-task-input-required.png", "CP08-a2a-task-resume-form.png", "CP08-a2a-task-completed-ui.png", "CP08-vkey-revoke-confirm.png", "CP08-vkey-revoked.png"]
+}

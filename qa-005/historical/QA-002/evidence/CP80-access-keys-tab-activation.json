@@ -1,0 +1,30 @@
+{
+  "members": {
+    "active": "Members & Roles",
+    "tabs": [
+      {
+        "text": "Virtual Keys",
+        "selected": "false"
+      },
+      {
+        "text": "Members & Roles",
+        "selected": "true"
+      }
+    ],
+    "main": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nOrganization members\n0\nNo members found"
+  },
+  "keys": {
+    "active": "Virtual Keys",
+    "tabs": [
+      {
+        "text": "Virtual Keys",
+        "selected": "true"
+      },
+      {
+        "text": "Members & Roles",
+        "selected": "false"
+      }
+    ],
+    "main": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic."
+  }
+}

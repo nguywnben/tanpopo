@@ -1,0 +1,13 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "test_account_setup": "Org Owner created project-scoped Developer+Team Admin through Console. Because member creation has no local invitation/password flow in this isolated runtime, a random password hash was assigned directly to this synthetic principal in the QA SQLite DB using Tanpopo Argon2 helper; secret/hash excluded.",
+  "test_session": {"login": "success", "roles": ["DEVELOPER", "TEAM_ADMIN"], "project_scope": ["prj_01m84ymb7we009px5hb5pfwsns"]},
+  "team_admin_create_member": {"method": "POST", "path": "/admin/v1/members", "status": 201, "roles": ["DEVELOPER"], "project_ids": ["prj_01m84ymb7we009px5hb5pfwsns"]},
+  "console_refresh": {"method": "GET", "path": "/admin/v1/members?limit=100", "status": 403, "error": "insufficient_role_permission", "ui_success_banner": "Member added.", "ui_error_banner": "Members: insufficient role permission", "visible_member_rows": 0},
+  "scoped_readback": {"method": "GET", "path": "/admin/v1/members?project_id=prj_01m84ymb7we009px5hb5pfwsns&limit=100", "status": 200, "includes_created_member": true},
+  "negative_boundaries": [
+    {"attempt": "grant ORG_OWNER within authorized project", "status": 403, "code": "role_escalation_denied", "principal_created": false},
+    {"attempt": "grant DEVELOPER in another project", "status": 403, "code": "insufficient_role_permission", "principal_created": false}
+  ],
+  "screenshots": ["CP14-def006-member-form.png", "CP14-def006-scoped-team-admin-form.png", "CP14-def006-scoped-team-admin-persisted.png", "CP14-def006-team-admin-session.png", "CP14-def006-team-admin-add-form.png", "CP14-def006-team-admin-add-result.png"]
+}

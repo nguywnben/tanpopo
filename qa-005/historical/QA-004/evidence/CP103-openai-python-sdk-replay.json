@@ -1,0 +1,5 @@
+{
+  "status": 401,
+  "type": "AuthenticationError",
+  "message": "Error code: 401 - Virtual Key is invalid, expired, or revoked."
+}

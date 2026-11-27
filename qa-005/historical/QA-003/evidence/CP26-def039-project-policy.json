@@ -1,0 +1,75 @@
+{
+  "policyResponses": [
+    {
+      "url": "/admin/v1/policies/effective?project_id=prj_01m87axgx7e008ehq1d016vqwt",
+      "status": 200
+    },
+    {
+      "url": "/admin/v1/policies/effective",
+      "status": 200
+    },
+    {
+      "url": "/admin/v1/policies/effective?project_id=prj_01m87axgx7e008ehq1d016vqwt",
+      "status": 200
+    }
+  ],
+  "scopeOptions": [
+    "QA003 Operator CP22",
+    "Default Organization",
+    "default",
+    "No project",
+    "dev",
+    "No env",
+    "中文(简体)",
+    "中文(繁體)",
+    "Deutsch",
+    "English",
+    "Español",
+    "Français",
+    "Indonesia",
+    "Italiano",
+    "日本語",
+    "한국어",
+    "Português",
+    "Русский",
+    "ภาษาไทย",
+    "Türkçe",
+    "Tiếng Việt"
+  ],
+  "projectScopeTitle": "Default Organization / default / No env",
+  "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, US, APAC, ON_PREM\tOrganization floor\nAllowed models\t*\tProject policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tProject policy\nTPM ceiling\tUnspecified\tProject policy\nConcurrent streams ceiling\tUnspecified\tProject policy\nGuardrail hooks\tNone attached\tProject policy\nEdit policy scope\nScope to edit\nScope to edit\nProject\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy",
+  "api": {
+    "projectsStatus": 200,
+    "project": {
+      "id": "prj_01m87axgx7e008ehq1d016vqwt",
+      "slug": "default",
+      "name": "default"
+    },
+    "effectiveStatus": 200,
+    "etag": "\"v1\"",
+    "policyKeys": [
+      "id",
+      "scope_tier",
+      "scope_id",
+      "allowed_data_regions",
+      "min_plugin_trust",
+      "min_capability_assurance",
+      "version"
+    ],
+    "regionCount": null,
+    "source": {
+      "id": "pol_cs219zprz6zx6gymja9h9q9z78",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m87axgx7e008ehq1d016vqwt",
+      "allowed_data_regions": [
+        "EU",
+        "US",
+        "APAC",
+        "ON_PREM"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 1
+    }
+  }
+}

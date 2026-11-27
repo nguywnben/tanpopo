@@ -1,0 +1,37 @@
+{
+  "checkpoint": "CP17",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "credential_binding_present": true,
+  "credential_value_recorded": false,
+  "request_path": "configured HTTPS proxy",
+  "results": [
+    {
+      "model": "gemini-2.0-flash",
+      "http_status": 404,
+      "provider_status": "NOT_FOUND",
+      "provider_message": "This model is no longer available; Google recommended gemini-3.8-flash.",
+      "finish_reason": null
+    },
+    {
+      "model": "gemini-2.5-flash",
+      "http_status": 404,
+      "provider_status": "NOT_FOUND",
+      "provider_message": "This model is no longer available to new users; Google recommended gemini-3.8-flash.",
+      "finish_reason": null
+    },
+    {
+      "model": "gemini-3.5-flash-lite",
+      "http_status": 200,
+      "provider_status": null,
+      "finish_reason": "STOP",
+      "response_text": "OK",
+      "prompt_tokens": 7,
+      "candidate_tokens": 1
+    }
+  ],
+  "limitations": [
+    "These direct provider requests do not constitute a Tanpopo inference pass.",
+    "The normal fresh-install wizard had no provider adapter available; the Google setup preset path was not reachable there.",
+    "Tanpopo's configured provider probe remained blocked by runtime egress behavior documented in CP17."
+  ]
+}

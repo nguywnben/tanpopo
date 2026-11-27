@@ -1,0 +1,24 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 SQLite runtime at 127.0.0.1:18128",
+  "browser": "Chromium, 1440x1000, authenticated Org Owner/Operator Console",
+  "product_source_modified": false,
+  "active_scope": {
+    "organization_id": "org_01m895k8pee008b3aeaswvpshy",
+    "project_id": "prj_01m89cf7vce008saenf6dyw8gk",
+    "environment": null,
+    "environment_label": "No env"
+  },
+  "console": {
+    "route": "Models & Deployments",
+    "deployment_heading": "All environment deployments",
+    "deployment_count": 0,
+    "empty_state": "No deployments found"
+  },
+  "deployment_request": {
+    "status": 200,
+    "query": "?project_id=prj_01m89cf7vce008saenf6dyw8gk&limit=100",
+    "rows": 0
+  },
+  "classification": "The selected empty project with No env did not show any sibling-project deployment. This adds a scoped pass slice for project-only/no-environment filtering. DEF-035 remains PARTIAL because the organization-only UI/API behavior is contract-unclear, and other roles, refresh/race, ownership labels and deployment actions remain unverified."
+}

@@ -1,0 +1,76 @@
+{
+  "sdk": "openai Python 3.59.0",
+  "sync": {
+    "id": "chatcmpl-cp102",
+    "object": "chat.completion",
+    "model": "qa004-mock",
+    "content": "Hello from synthetic Ollama.",
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 4,
+      "prompt_tokens": 7,
+      "total_tokens": 11,
+      "completion_tokens_details": null,
+      "prompt_tokens_details": null
+    }
+  },
+  "stream": {
+    "text": "Hello from synthetic Ollama.",
+    "finish_reason": "stop",
+    "usage": {
+      "completion_tokens": 4,
+      "prompt_tokens": 7,
+      "total_tokens": 11,
+      "completion_tokens_details": null,
+      "prompt_tokens_details": null
+    },
+    "chunks": [
+      {
+        "choice_count": 1,
+        "finish_reason": null,
+        "usage": null
+      },
+      {
+        "choice_count": 1,
+        "finish_reason": null,
+        "usage": null
+      },
+      {
+        "choice_count": 1,
+        "finish_reason": "stop",
+        "usage": null
+      },
+      {
+        "choice_count": 0,
+        "finish_reason": null,
+        "usage": {
+          "completion_tokens": 4,
+          "prompt_tokens": 7,
+          "total_tokens": 11,
+          "completion_tokens_details": null,
+          "prompt_tokens_details": null
+        }
+      }
+    ]
+  },
+  "fixture_requests_before": 1,
+  "fixture_requests_after": 3,
+  "fixture": [
+    {
+      "path": "/v1/chat/completions",
+      "model": "qa004-mock",
+      "stream": false,
+      "stream_options": null,
+      "auth_present": false
+    },
+    {
+      "path": "/v1/chat/completions",
+      "model": "qa004-mock",
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "auth_present": false
+    }
+  ]
+}

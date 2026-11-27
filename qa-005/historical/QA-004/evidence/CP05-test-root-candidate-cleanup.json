@@ -1,0 +1,22 @@
+{
+  "discarded": [
+    {
+      "status": 204,
+      "origin": "unverified_external",
+      "signature_verified": false
+    },
+    {
+      "status": 204,
+      "origin": "unverified_external",
+      "signature_verified": false
+    }
+  ],
+  "remaining": [
+    {
+      "id": "ins_01m895ph2ge00a3evn7jxp86st",
+      "state": "PENDING_PERMISSION_APPROVAL",
+      "signature_verified": true,
+      "origin_trust_tier": "official"
+    }
+  ]
+}

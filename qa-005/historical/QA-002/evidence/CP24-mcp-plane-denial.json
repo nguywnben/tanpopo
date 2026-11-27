@@ -1,0 +1,14 @@
+{
+  "method": "POST",
+  "path": "/v1/chat/completions",
+  "status": 403,
+  "body": {
+    "error": {
+      "code": "scope_or_plane_denied",
+      "type": "permission_error",
+      "message": "Virtual Key is not authorized for the PROVIDER plane.",
+      "request_id": "req_01m85802x7e00a1g0w8dm7tcqt",
+      "retryable": false
+    }
+  }
+}

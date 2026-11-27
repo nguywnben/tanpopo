@@ -1,0 +1,109 @@
+{
+  "checkpoints": ["CP48", "CP49"],
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": {
+    "control_plane": "127.0.0.1:18151",
+    "data_planes": ["127.0.0.1:18152", "127.0.0.1:18153"],
+    "storage": "isolated PostgreSQL 16",
+    "fast_state": "three-node Valkey 8.1 Cluster; cluster_state=ok",
+    "a2a_enabled": true,
+    "browser": "Chromium, 1440x1000",
+    "fixture": "deterministic synthetic A2A endpoint at 127.0.0.1:19186",
+    "real_or_paid_provider": false
+  },
+  "cp48_input_required_lifecycle": {
+    "agent": {
+      "id": "agt_01m8d14nhge00asebm58t7dt7z",
+      "slug": "qa005-cp45-input-agent",
+      "state": "ACTIVE",
+      "endpoint": "http://127.0.0.1:19186/a2a",
+      "private_loopback_consent": true,
+      "allowlisted_cidr": "127.0.0.1/32"
+    },
+    "task_id": "tsk_01m8d18rd5e008ahr8wj3q9029",
+    "task": {
+      "initial_state": "input-required",
+      "initial_ui_prompt": "Synthetic agent needs approval input",
+      "initial_hold_micros": 10000,
+      "resume_input": "APPROVED — synthetic QA follow-up",
+      "final_state": "completed",
+      "settled_cost_micros": 3000,
+      "final_ui_artifact": "synthetic task completed after follow-up input",
+      "authorization_plane_scope": "PROVIDER and A2A; not A2A-only",
+      "key_final_state": "REVOKED"
+    },
+    "fixture_observations": [
+      {
+        "path": "/a2a/tasks",
+        "task_id": "tsk_01m8d18rd5e008ahr8wj3q9029",
+        "input_part_count": 1,
+        "approval_marker_present": false,
+        "authorization_forwarded": false,
+        "trace_root_present": true,
+        "hop_count": "1"
+      },
+      {
+        "path": "/a2a/tasks",
+        "task_id": "tsk_01m8d18rd5e008ahr8wj3q9029",
+        "input_part_count": 1,
+        "approval_marker_present": true,
+        "authorization_forwarded": false,
+        "trace_root_present": true,
+        "hop_count": "1"
+      }
+    ],
+    "screenshots": [
+      "screenshots/CP48-a2a-agent-registered.png",
+      "screenshots/CP48-a2a-key-form.png",
+      "screenshots/CP48-a2a-input-required.png",
+      "screenshots/CP48-a2a-resume-form.png",
+      "screenshots/CP48-a2a-completed.png",
+      "screenshots/CP48-a2a-key-revoked.png"
+    ],
+    "visual_inspection": "Input-required row, resume form, completed row/artifact and revoked-key inventory visually inspected."
+  },
+  "cp49_provider_only_a2a_denial": {
+    "tests": [
+      {
+        "key_id": "vky_01m8d1f2jze00bg554ym3z63e2",
+        "last_four": "aQ0E",
+        "allowed_planes": ["PROVIDER"],
+        "get_agents": {"http_status": 403, "error_code": "scope_or_plane_denied"},
+        "post_tasks": {"http_status": 403, "error_code": "scope_or_plane_denied"},
+        "fixture_calls_before": 2,
+        "fixture_calls_after": 2,
+        "final_state": "REVOKED",
+        "final_version": 2
+      },
+      {
+        "key_id": "vky_01m8d1gf0we0082s112sqxqcpg",
+        "last_four": "CHXm",
+        "allowed_planes": ["PROVIDER"],
+        "get_agents": {"http_status": 403, "error_code": "scope_or_plane_denied"},
+        "post_tasks": {"http_status": 403, "error_code": "scope_or_plane_denied"},
+        "fixture_calls_before": 2,
+        "fixture_calls_after": 2,
+        "final_state": "REVOKED",
+        "final_version": 2
+      }
+    ],
+    "screenshots": [
+      "screenshots/CP49-provider-only-key-form.png",
+      "screenshots/CP49-provider-only-key-revoked.png"
+    ],
+    "visual_inspection": "Issue form showed PROVIDER checked and MCP/A2A unchecked; final Access & Keys inventory showed both tested keys in Revoked state."
+  },
+  "classifications": {
+    "cp48_input_required_to_completed": "PASS (scoped synthetic Owner workflow)",
+    "cp49_provider_only_discovery_and_task_denial": "PASS (scoped authorization boundary)",
+    "historical_DEF_069": "FAIL remains open based on CP28; CP48 did not exercise cancellation",
+    "historical_DEF_010": "not adjudicated by this checkpoint"
+  },
+  "limitations": [
+    "Single synthetic agent and synchronous local transport only.",
+    "CP48 key included both PROVIDER and A2A planes; separate CP49 provider-only tests cover A2A denial.",
+    "No parent/child budget, nonzero failure/cancellation settlement, concurrent resume, task expiry/retry, roles, tenant matrix, loop/hop attack, residency boundary or real interoperability coverage.",
+    "No secrets, plaintext keys, database, provider logs or credential material are present in this record."
+  ]
+}

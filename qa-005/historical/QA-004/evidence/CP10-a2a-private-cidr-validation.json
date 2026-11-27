@@ -1,0 +1,10 @@
+{
+  "validation_message": "Register A2A agent\nEnforces HTTPS egress validation, regional residency pinning, and max delegation depth <= 5.\nPrivate upstream access requires explicit non-wildcard CIDRs.\nAgent slug (optional)\nAgent name\n∙ Required\nAgent endpoint URL\n∙ Required\nRegion\nUS\nMax hops\n5\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal A2A agents.\nAllowed CIDRs\n∙ Required\nCancel\nRegister agent",
+  "registry_after_invalid_attempt": {
+    "status": 200,
+    "count": 1,
+    "slugs": [
+      "qa004-a2a-loopback"
+    ]
+  }
+}

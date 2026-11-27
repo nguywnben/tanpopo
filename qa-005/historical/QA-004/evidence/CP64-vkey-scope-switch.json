@@ -1,0 +1,40 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "RC6 exact-source isolated offline runtime 127.0.0.1:18132",
+  "actor_role": "ORG_OWNER",
+  "workflow": "Access & Keys / Virtual Keys across project and environment switch",
+  "populated_scope": {
+    "project": "QA004 CP57 Project Recovery",
+    "project_id": "prj_01m8a2xtnqe00bf5n0b09xqcf9",
+    "environment": "qa004-cp59-mcp-test",
+    "environment_id": "env_01m8a4bc89e00ajtchmvfmqr7a",
+    "ui_virtual_key_count": 1,
+    "ui_environment_key_count": 1,
+    "row": {"id": "vky_01m8a4jxhje00bx6f6fyg3aze1", "name": "QA004 CP59 MCP-only Echo", "state": "REVOKED", "version": 2, "planes": ["MCP"]}
+  },
+  "empty_scope": {
+    "project": "QA004 CP55 Ops Billing",
+    "project_id": "prj_01m8a2ff3te00arpehp0h1hhkj",
+    "environment": "qa004-cp55-staging-west",
+    "environment_id": "env_01m8a2k9jxe0085dgceaze1w4a",
+    "ui_environment_key_count": 0,
+    "ui": "No Virtual Keys in this environment"
+  },
+  "switches": [
+    "CP57 / CP59 populated key -> CP55 / CP55 staging-west empty state.",
+    "CP55 -> CP57 -> CP59 restored the same revoked metadata row; no plaintext key was read or captured."
+  ],
+  "observed_ui_requests": [
+    {"method": "GET", "path": "/admin/v1/virtual-keys?project_id=prj_01m8a2xtnqe00bf5n0b09xqcf9&env_id=env_01m8a4bc89e00ajtchmvfmqr7a&limit=100", "status": 200},
+    {"method": "GET", "path": "/admin/v1/virtual-keys?project_id=prj_01m8a2ff3te00arpehp0h1hhkj&env_id=env_01m8a2k9jxe0085dgceaze1w4a&limit=100", "status": 200},
+    {"method": "GET", "path": "/admin/v1/virtual-keys?project_id=prj_01m8a2xtnqe00bf5n0b09xqcf9&env_id=env_01m8a4bc89e00ajtchmvfmqr7a&limit=100", "status": 200}
+  ],
+  "classification": {
+    "DEF-029": "PASS (scoped): stable Access & Keys lists matched the selected environment; CP59's revoked row disappeared in empty CP55 and reappeared on return.",
+    "new_defect": false
+  },
+  "limitations": [
+    "Only an Org Owner, one populated environment and one empty environment were checked.",
+    "Other roles, concurrent switches, revoked-key deletion/rotation, active keys, pagination, and browser-engine coverage remain unverified."
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": 18084,
+  "terminal_task_id": "tsk_01m86na134e008tk710rvda636",
+  "pre_attempt": {
+    "status": 200,
+    "task": {
+      "state": "completed",
+      "version": 5,
+      "settled_cost_micros": 3000
+    }
+  },
+  "attempt": {
+    "status": 409,
+    "error": "task_not_resumable",
+    "message": "a2a: invalid SM-09 state transition: task in state completed cannot be resumed (expected input-required)"
+  },
+  "response": {
+    "status": 409,
+    "error": "task_not_resumable",
+    "message": "a2a: invalid SM-09 state transition: task in state completed cannot be resumed (expected input-required)"
+  },
+  "post_attempt": {
+    "status": 200,
+    "task": {
+      "state": "completed",
+      "version": 5,
+      "settled_cost_micros": 3000
+    }
+  },
+  "fixture_calls_total": 3,
+  "new_task_fixture_calls": 2,
+  "ui_row": "tsk_01m86na134e008tk710rvda636\nqa002-cp68-private-agent\n\tCompleted\t1 / 5\tUS\t$0.005000\t$0.003000\t—"
+}

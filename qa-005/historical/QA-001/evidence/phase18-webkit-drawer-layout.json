@@ -1,0 +1,33 @@
+{
+  "browser": "WebKit 26.5 via official Playwright 1.62.0 Noble image",
+  "route": "/settings/residency-retention (Operations > Webhooks)",
+  "viewport": {
+    "width": 375,
+    "height": 844
+  },
+  "interaction": "Authenticated QA Org Owner clicked Add webhook. Drawer form labels/buttons remain in the rendered DOM, but the drawer is not visible within the captured viewport.",
+  "drawer_heading_geometry_css_pixels": {
+    "x": 392,
+    "y": 10,
+    "width": 250,
+    "height": 19.59375
+  },
+  "heading_css_visibility": {
+    "display": "block",
+    "visibility": "visible",
+    "opacity": "1",
+    "transform": "none"
+  },
+  "dialog_role_count": 0,
+  "viewport_right_edge_x": 375,
+  "observed": "Drawer heading begins 17px beyond the right edge of the viewport; visual screenshot remains on the webhook empty state. No horizontal document overflow is reported (scrollWidth=375), so horizontal scrolling does not expose the form.",
+  "cross_engine_comparison": {
+    "chromium": "Drawer visible in screenshot at 375x844",
+    "firefox": "Drawer visible in screenshot at 375x844",
+    "webkit": "Drawer DOM content outside visible viewport at 375x844"
+  },
+  "webkit_screenshot": "phase18-webkit-webhooks-375.png",
+  "chromium_screenshot": "phase18-chromium-webhooks-375.png",
+  "firefox_screenshot": "phase18-firefox-webhooks-375.png",
+  "responses": "phase18-ops-cross-engine-mobile.json"
+}

@@ -1,0 +1,39 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source isolated SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156",
+  "principal": "pure TEAM_ADMIN",
+  "project_scope": {
+    "project_id": "prj_01m8d6dbtxe008w7fphkgp2e24",
+    "project_name": "QA005 No Budget Project",
+    "environment_name": "QA005 Budgetless Dev"
+  },
+  "historical_qa004_result": "FAIL on RC6 retained in copied QA-004 evidence; this exact-RC7 scoped retest does not erase it",
+  "fresh_rc7_runs": [
+    {
+      "phase": "hard refresh",
+      "create": {"method": "POST", "path": "/admin/v1/secrets", "http": 201, "credential_id": "sec_01m8ds2b60e00bnvwh09hzb473", "version": 1, "plaintext_returned": false},
+      "immediate_ui": {"visible_test_row": true, "row_count": 1, "screenshot": "CP90-teamadmin-secret-immediate.png"},
+      "after_hard_refresh": {"request": "GET /admin/v1/secrets?project_id=<assigned-project>&limit=100", "http": 200, "count": 1, "plaintext_returned": false, "visible_test_row": true, "screenshot": "CP90-teamadmin-secret-after-refresh.png"},
+      "cleanup": {"delete_http": 204, "remaining_rows": 0, "screenshot": "CP90-teamadmin-secret-deleted.png"}
+    },
+    {
+      "phase": "fresh browser context and new login",
+      "create": {"method": "POST", "path": "/admin/v1/secrets", "http": 201, "credential_id": "sec_01m8ds4pyte00aqh5n9zyes57d", "version": 1, "plaintext_returned": false},
+      "immediate_ui": {"visible_test_row": true, "row_count": 1},
+      "fresh_login_ui": {"visible_test_row": true, "row_count": 1, "screenshot": "CP90-teamadmin-secret-fresh-login.png"},
+      "filtered_api": {"request": "GET /admin/v1/secrets?project_id=<assigned-project>&limit=100", "http": 200, "count": 1, "test_record_present": true, "plaintext_returned": false},
+      "unfiltered_api": {"request": "GET /admin/v1/secrets?limit=100", "http": 403, "code": "insufficient_role_permission"},
+      "cleanup": {"delete_http": 204, "remaining_rows": 0, "success_notice": true, "screenshot": "CP90-teamadmin-secret-cleanup.png"}
+    }
+  ],
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "test_secret_plaintext_retained": false,
+  "session_cookie_or_csrf_token_retained": false,
+  "proxy_note": "Initial loopback TLS proxy mapped browser Origin https://127.0.0.1:19443 against upstream Host 127.0.0.1:18162 and correctly received csrf_validation_failed (403); count-only readback confirmed no row. Re-test used an ephemeral loopback-only proxy on 127.0.0.1:19444 rewriting only its exact local browser Origin to the upstream authority, without changing product code or security settings.",
+  "classification": "PASS (scoped QA-005 fresh RC7 retest of DEF-066)",
+  "remaining_scope": ["other roles", "multiple project assignments", "cross-organization", "referenced-credential deletion", "connection binding and rotation", "PostgreSQL/Valkey", "other browsers", "production proxy CSRF topology"],
+  "gate_rel_07": "BLOCKED"
+}

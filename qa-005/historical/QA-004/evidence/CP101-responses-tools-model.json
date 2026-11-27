@@ -1,0 +1,43 @@
+{
+  "post": {
+    "status": 201,
+    "body": {
+      "id": "lmd_01m8atwecte00ayn637nb1vz21",
+      "slug": "qa004-cp101-responses-tools",
+      "display_name": "QA004 CP101 Responses Tools",
+      "capabilities": {
+        "streaming": false,
+        "tool_calling": true,
+        "parallel_tool_calls": false,
+        "strict_json_schema": false,
+        "json_object": false,
+        "vision": false,
+        "audio_input": false,
+        "document_input": false,
+        "reasoning": false,
+        "prompt_caching": false,
+        "embeddings": false,
+        "rerank": false
+      }
+    }
+  },
+  "read": {
+    "id": "lmd_01m8atwecte00ayn637nb1vz21",
+    "slug": "qa004-cp101-responses-tools",
+    "display_name": "qa004-cp101-responses-tools",
+    "capabilities": {
+      "streaming": false,
+      "tool_calling": true,
+      "parallel_tool_calls": false,
+      "strict_json_schema": false,
+      "json_object": false,
+      "vision": false,
+      "audio_input": false,
+      "document_input": false,
+      "reasoning": false,
+      "prompt_caching": false,
+      "embeddings": false,
+      "rerank": false
+    }
+  }
+}

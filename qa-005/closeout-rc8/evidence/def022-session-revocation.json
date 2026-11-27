@@ -1,0 +1,35 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "runtime": "RC8 artifact Linux amd64, isolated PostgreSQL 16 + Valkey; Owner and Team Admin browser sessions",
+  "result": {
+    "before": {
+      "status": 200,
+      "roles": [
+        "TEAM_ADMIN"
+      ]
+    },
+    "update": {
+      "http": 200,
+      "version_before": 2,
+      "version_after": 3,
+      "roles_after": [
+        "DEVELOPER"
+      ],
+      "error": null
+    },
+    "after_session": {
+      "status": 401,
+      "body": {
+        "error": {
+          "code": "unauthenticated",
+          "type": "authentication_error",
+          "message": "authentication required",
+          "request_id": "req_01m8errmgae00barnwhs2jsb55",
+          "retryable": false
+        }
+      }
+    },
+    "after_reload_url": "http://127.0.0.1:18160/login",
+    "after_reload_main": "Tanpopo\nLanguage\nEnglish\nSign in\n\nUse your local administrator credentials to access the control plane.\n\nSign in\nActivate invite\nEmail address\n∙ Required\nPassword\n∙ Required\nPassword\nSign in\n\nNew instance? Run first-time setup"
+  }
+}

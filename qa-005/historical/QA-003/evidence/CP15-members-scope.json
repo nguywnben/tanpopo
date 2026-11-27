@@ -1,0 +1,130 @@
+{
+  "orgScope": "Default Organization\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+  "orgOnlyMain": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n6\nOrganization members\n6\nPrincipal\tKind\tAssigned roles\tActions\n\nqa003-enrollment-journey-04@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey-03@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey-02@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-local-enroll@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t",
+  "projectScope": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "projectEnvMain": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n6\nOrganization members\n6\nPrincipal\tKind\tAssigned roles\tActions\n\nqa003-enrollment-journey-04@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey-03@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey-02@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-local-enroll@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t",
+  "scopeAfterRefresh": "Default Organization\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "afterRefreshMain": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n6\nOrganization members\n6\nPrincipal\tKind\tAssigned roles\tActions\n\nqa003-enrollment-journey-04@example.invalid\nPassword set\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey-03@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey-02@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-enrollment-journey@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-local-enroll@example.invalid\nPending activation\n\tHUMAN\t\nDeveloper\n\t\n\n\nqa003-owner@example.invalid\nPassword set\n\tHUMAN\t\nOrg Owner\n\t",
+  "memberListResponses": [
+    {
+      "url": "/admin/v1/members?limit=100",
+      "status": 200,
+      "members": [
+        {
+          "id": "prc_01m87cxx29e00amfw5fr9baz6n",
+          "email": "qa003-enrollment-journey-04@example.invalid"
+        },
+        {
+          "id": "prc_01m87cx7v4e00bpq2g6dd7w704",
+          "email": "qa003-enrollment-journey-03@example.invalid"
+        },
+        {
+          "id": "prc_01m87cvrgje00anfrj73jv5zpq",
+          "email": "qa003-enrollment-journey-02@example.invalid"
+        },
+        {
+          "id": "prc_01m87ctbxke008y4vg3v1aew6r",
+          "email": "qa003-enrollment-journey@example.invalid"
+        },
+        {
+          "id": "prc_01m87cryp8e0099gjbaxqw6gv9",
+          "email": "qa003-local-enroll@example.invalid"
+        },
+        {
+          "id": "prc_01m87axgx7e008ek9a2xdp3tfk",
+          "email": "qa003-owner@example.invalid"
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/members?limit=100",
+      "status": 200,
+      "members": [
+        {
+          "id": "prc_01m87cxx29e00amfw5fr9baz6n",
+          "email": "qa003-enrollment-journey-04@example.invalid"
+        },
+        {
+          "id": "prc_01m87cx7v4e00bpq2g6dd7w704",
+          "email": "qa003-enrollment-journey-03@example.invalid"
+        },
+        {
+          "id": "prc_01m87cvrgje00anfrj73jv5zpq",
+          "email": "qa003-enrollment-journey-02@example.invalid"
+        },
+        {
+          "id": "prc_01m87ctbxke008y4vg3v1aew6r",
+          "email": "qa003-enrollment-journey@example.invalid"
+        },
+        {
+          "id": "prc_01m87cryp8e0099gjbaxqw6gv9",
+          "email": "qa003-local-enroll@example.invalid"
+        },
+        {
+          "id": "prc_01m87axgx7e008ek9a2xdp3tfk",
+          "email": "qa003-owner@example.invalid"
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/members?limit=100",
+      "status": 200,
+      "members": [
+        {
+          "id": "prc_01m87cxx29e00amfw5fr9baz6n",
+          "email": "qa003-enrollment-journey-04@example.invalid"
+        },
+        {
+          "id": "prc_01m87cx7v4e00bpq2g6dd7w704",
+          "email": "qa003-enrollment-journey-03@example.invalid"
+        },
+        {
+          "id": "prc_01m87cvrgje00anfrj73jv5zpq",
+          "email": "qa003-enrollment-journey-02@example.invalid"
+        },
+        {
+          "id": "prc_01m87ctbxke008y4vg3v1aew6r",
+          "email": "qa003-enrollment-journey@example.invalid"
+        },
+        {
+          "id": "prc_01m87cryp8e0099gjbaxqw6gv9",
+          "email": "qa003-local-enroll@example.invalid"
+        },
+        {
+          "id": "prc_01m87axgx7e008ek9a2xdp3tfk",
+          "email": "qa003-owner@example.invalid"
+        }
+      ]
+    },
+    {
+      "url": "/admin/v1/members?limit=100",
+      "status": 200,
+      "members": [
+        {
+          "id": "prc_01m87cxx29e00amfw5fr9baz6n",
+          "email": "qa003-enrollment-journey-04@example.invalid"
+        },
+        {
+          "id": "prc_01m87cx7v4e00bpq2g6dd7w704",
+          "email": "qa003-enrollment-journey-03@example.invalid"
+        },
+        {
+          "id": "prc_01m87cvrgje00anfrj73jv5zpq",
+          "email": "qa003-enrollment-journey-02@example.invalid"
+        },
+        {
+          "id": "prc_01m87ctbxke008y4vg3v1aew6r",
+          "email": "qa003-enrollment-journey@example.invalid"
+        },
+        {
+          "id": "prc_01m87cryp8e0099gjbaxqw6gv9",
+          "email": "qa003-local-enroll@example.invalid"
+        },
+        {
+          "id": "prc_01m87axgx7e008ek9a2xdp3tfk",
+          "email": "qa003-owner@example.invalid"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "scope": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+  "source": "Authenticated GET /admin/v1/virtual-keys scoped to the environment after UI revocation",
+  "temporary_keys": [
+    {"id": "vky_01m86grhjje00b7twn9aka5t2g", "name": "QA002 CP96 Native Passthrough Retest", "state": "REVOKED", "allowed_planes": ["PROVIDER"], "allowed_routes": ["/native/*"]},
+    {"id": "vky_01m86gmy2ae009xphsvws4vsra", "name": "QA002 CP96 Ollama native passthrough", "state": "REVOKED", "allowed_planes": ["PROVIDER"], "allowed_routes": ["/native/*"]}
+  ],
+  "secrets_included": false
+}

@@ -1,0 +1,36 @@
+{
+  "checkpoint": "CP44",
+  "historical_defect": "DEF-068",
+  "classification": "PASS (scoped QA-005 retest)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": "exact-source unsigned RC7 Linux runtime, SHA-256 62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": "isolated SQLite clone at 127.0.0.1:18148; Chromium; QA005 Org Owner/Operator; synthetic tenant created only for this test",
+  "steps": [
+    "Authenticate as the QA005 Owner/Operator and open Operations > Organizations.",
+    "Create an isolated synthetic organization and select it as the active workspace.",
+    "Open the active organization's Crypto-shred action, enter an explicit QA reason and exact slug, and confirm.",
+    "Observe the DELETE response, automatic scope switch, visible receipt, organization list readback, then reload the page."
+  ],
+  "results": {
+    "create_status": 201,
+    "crypto_shred_status": 200,
+    "destroyed_dek_id": "org_01m8czh2w1e00akchtn34kkw8c:v1:g1",
+    "revoked_virtual_keys_count": 0,
+    "target_present_in_org_list_after_shred": false,
+    "receipt_visible_after_scope_switch": true,
+    "receipt_visible_after_full_reload": false,
+    "audit_verify_attempt": "403 csrf_validation_failed; the direct request omitted the application CSRF header and establishes no audit result"
+  },
+  "limitations": [
+    "Empty synthetic org only; no project, secret, or virtual keys were created in this retest.",
+    "Fresh target partition audit-chain verification was not established; historical QA-001 and QA-004 evidence remains preserved.",
+    "Receipt persistence after a full reload was not required by the narrow scope-switch acceptance checked here and did not persist in this run.",
+    "Other operators, storage backends, pending/failure states, concurrent shredding, and erasure SLA remain unverified."
+  ],
+  "screenshots": [
+    "evidence/screenshots/CP44-active-shred-confirmation-filled.png",
+    "evidence/screenshots/CP44-active-shred-result.png",
+    "evidence/screenshots/CP44-active-shred-after-reload.png"
+  ],
+  "visual_inspection": "The confirmation, post-scope-switch receipt, and after-reload state screenshots were visually inspected. The receipt visibly reports the destroyed DEK ID and zero revoked keys after scope switch; it is absent after reload."
+}

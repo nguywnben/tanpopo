@@ -1,0 +1,59 @@
+{
+  "checkpoint": "CP94",
+  "finding": "DEF-030",
+  "classification": "PASS (scoped QA-005 retest of ordinary scope-switch behavior)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER (qa005-owner@example.invalid)",
+  "scopes": [
+    {
+      "name": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+      "request": "GET /admin/v1/routes?env_id=env_01m8d6f78xe00a9w53vt41rnqg&limit=100",
+      "http": 200,
+      "api_count": 3,
+      "ui_count": 3,
+      "route_ids": ["rte_01m8d8f3wxe00bbak58gsew8ch", "rte_01m8d7pj4he00bbkndgg05c8tx", "rte_01m8d6s37se00a7q0spwy9wanq"],
+      "route_slugs": ["qa005-playground-openai", "qa005-playground-low", "qa005-budgetless-route"],
+      "screenshot": "CP94-def030-qa-project-routes.png"
+    },
+    {
+      "name": "QA005 Org / Initial Project / dev",
+      "request": "GET /admin/v1/routes?env_id=env_01m8cj8phze00a0t3c590b5mdw&limit=100",
+      "http": 200,
+      "api_count": 4,
+      "ui_count": 4,
+      "route_ids": ["rte_01m8cyc39qe008cr5375x8zp6p", "rte_01m8cxjceje008ycft3x4gjk75", "rte_01m8cm09g4e00bqc83mm7p503s", "rte_01m8ck5n3pe008dvgbcqm7ssjs"],
+      "route_slugs": ["qa005-native-image-unit", "qa005-native-accounting-route", "qa005-priced-route", "qa005-chat-route"],
+      "screenshot": "CP94-def030-initial-project-routes.png"
+    },
+    {
+      "name": "QA005 Org / No project / No env",
+      "request": null,
+      "http": null,
+      "api_count": null,
+      "ui_count": 0,
+      "banner": "Select a project and environment in the top bar to manage routes and policies.",
+      "screenshot": "CP94-def030-no-project-routes.png"
+    },
+    {
+      "name": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev (return)",
+      "request": "GET /admin/v1/routes?env_id=env_01m8d6f78xe00a9w53vt41rnqg&limit=100",
+      "http": 200,
+      "api_count": 3,
+      "ui_count": 3,
+      "route_ids": ["rte_01m8d8f3wxe00bbak58gsew8ch", "rte_01m8d7pj4he00bbkndgg05c8tx", "rte_01m8d6s37se00a7q0spwy9wanq"],
+      "route_slugs": ["qa005-playground-openai", "qa005-playground-low", "qa005-budgetless-route"],
+      "screenshot": "CP94-def030-returned-qa-routes.png"
+    }
+  ],
+  "page_errors": [],
+  "product_writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "historical_qa002_failure_preserved": true,
+  "historical_qa004_partial_preserved": true,
+  "remaining_scope": ["held stale response race", "hard refresh and navigation", "rapid repeated transitions", "stale actions", "other roles", "PostgreSQL/Valkey", "WebKit/Firefox"],
+  "gate_rel_07": "BLOCKED"
+}

@@ -1,0 +1,12 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "binary": "/tmp/tanpopo-qa002-bin/tanpopo",
+  "fixture": "local synthetic HTTP Admin API at 127.0.0.1:19104; no real credential or provider used",
+  "checks": [
+    {"command": "tanpopo --output json config show", "exit": 0, "response": {"window": "24h", "total_requests": 7, "total_spend_micros": 0}},
+    {"command": "tanpopo config --help", "exit": 0, "contains": ["show", "reconcile"]},
+    {"command": "tanpopo config reconcile --desired /tmp/qa002-missing-desired.yaml --applied /tmp/qa002-applied.yaml --lockfile /tmp/qa002-tanpopo.lock", "exit": 14, "result": "failed closed on missing desired config; no applied config or lockfile was created"}
+  ],
+  "classification": "DEF-004 command collision did not reproduce; both commands resolve through the built binary. The successful show used a synthetic response fixture, not a live Tanpopo Admin API or authenticated production session.",
+  "evidence_limit": "Admin authorization, real server response shape, actual valid reconciliation, and persistence remain unverified."
+}

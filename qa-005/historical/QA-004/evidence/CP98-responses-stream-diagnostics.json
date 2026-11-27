@@ -1,0 +1,152 @@
+{
+  "connections": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "con_01m897rgv1e00b2n9vf3w7j125",
+        "name": "QA004 synthetic Ollama 401",
+        "state": "CREATED_UNVERIFIED"
+      },
+      {
+        "id": "con_01m896465xe008d8daqh65qzth",
+        "name": "QA004 synthetic Ollama",
+        "state": "ACTIVE"
+      }
+    ]
+  },
+  "models": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "lmd_01m89pm36ge0098m9n97sy0p1c",
+        "slug": "qa004-embedding-vectors"
+      },
+      {
+        "id": "lmd_01m8967ss0e00a677jz370c3jh",
+        "slug": "qa004-mock"
+      }
+    ]
+  },
+  "deployments": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "dpl_01m89pnes6e009ymwbvpnvr3mj",
+        "state": "ACTIVE_HEALTHY",
+        "connection_id": "con_01m896465xe008d8daqh65qzth"
+      },
+      {
+        "id": "dpl_01m897vpcve008s9jjtnxtxvae",
+        "state": "PROVISIONED",
+        "connection_id": "con_01m897rgv1e00b2n9vf3w7j125"
+      },
+      {
+        "id": "dpl_01m8969kjme00br1mjja9gam7q",
+        "state": "ACTIVE_HEALTHY",
+        "connection_id": "con_01m896465xe008d8daqh65qzth"
+      }
+    ]
+  },
+  "routes": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "rte_01m896capve00bxj3fmedpv16a",
+        "slug": "qa004-loopback"
+      }
+    ]
+  },
+  "traces": {
+    "status": 200,
+    "rows": [
+      {
+        "deployment_id": null,
+        "route_slug": "/v1/responses",
+        "error_code": "no_compliant_deployment_available",
+        "virtual_key_id": "vky_01m8ar2tfpe00bnzzj71ezz93m",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": null,
+        "route_slug": "/v1/chat/completions",
+        "error_code": "no_compliant_deployment_available",
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": null,
+        "route_slug": "/native/{dialect}",
+        "error_code": "no_compliant_deployment_available",
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": null,
+        "route_slug": "/v1/chat/completions",
+        "error_code": "no_compliant_deployment_available",
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": null,
+        "route_slug": "/native/{dialect}",
+        "error_code": "no_compliant_deployment_available",
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+        "route_slug": "qa004-loopback",
+        "error_code": null,
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": "dpl_01m89pnes6e009ymwbvpnvr3mj",
+        "route_slug": "qa004-embedding-vectors",
+        "error_code": null,
+        "virtual_key_id": "vky_01m89pzc3be00bv1xs8bf1hre2",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": null,
+        "route_slug": "qa004-loopback",
+        "error_code": "project_budget_exceeded",
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+        "route_slug": "qa004-loopback",
+        "error_code": null,
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+        "route_slug": "qa004-loopback",
+        "error_code": null,
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      },
+      {
+        "deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+        "route_slug": "qa004-loopback",
+        "error_code": null,
+        "virtual_key_id": "vky_01m896f11de00b7tr6bbb8b715",
+        "usage_accuracy": "EXACT",
+        "total_cost_micros": 0
+      }
+    ]
+  }
+}

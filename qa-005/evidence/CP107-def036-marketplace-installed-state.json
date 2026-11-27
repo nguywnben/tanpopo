@@ -1,0 +1,42 @@
+{
+  "checkpoint": "CP107",
+  "defect": "DEF-036",
+  "status": "PARTIAL",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source RC7 isolated SQLite on 18145; real Console TLS proxy on 19444",
+  "browser": "Chromium 156 via Playwright, 1440x1000",
+  "principal": "Org Owner",
+  "steps": [
+    "Open Extensions > Installed in the real Console; inspect active official extension inventory.",
+    "Open Marketplace and inspect the catalog row matching the installed Ollama adapter.",
+    "Cross-check the actual catalog and installation GET responses and state without staging or mutating an extension."
+  ],
+  "observations": {
+    "installed_inventory_http_status": 200,
+    "marketplace_catalog_http_status": 200,
+    "installed_count": 2,
+    "target_package": "@tanpopo/ollama",
+    "catalog_version": "0.1.0",
+    "active_version": "0.1.0",
+    "installation_state": "ENABLED_ACTIVE",
+    "candidate_version": null,
+    "publisher_signature_verified": true,
+    "marketplace_action": "Installed; Stage for review is absent for the installed same version.",
+    "writes": 0,
+    "page_or_api_errors": 0,
+    "provider_calls": 0,
+    "paid_usage": 0
+  },
+  "limitations": [
+    "The historical already-active Gemini duplicate-action error is no longer reachable on the current fixture because the row has no duplicate Stage action.",
+    "No newer catalog version was available, so supported upgrade and permission-diff behavior remains unverified.",
+    "Duplicate race, direct API conflict error presentation, other extension states, roles, backends and browsers remain unverified."
+  ],
+  "screenshots_visually_inspected": true,
+  "screenshot_sha256": {
+    "evidence/screenshots/CP107-def036-installed-state.png": "55647615fbdbeb965efb9809e60526e161a296121ca40a95148565d433972aff",
+    "evidence/screenshots/CP107-def036-marketplace-installed-package.png": "a6d3c031cc38d277e64aeb575893d2ec22415c161121084b993e7b1c9917faa6",
+    "evidence/screenshots/CP107-marketplace-inventory.png": "2fc5ed6c86027a24d88eeec7fe2400981968443d159b11a7102bea1c389df001"
+  }
+}

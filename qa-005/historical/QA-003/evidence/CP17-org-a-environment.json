@@ -1,0 +1,12 @@
+{
+  "scope": "QA003 Multi-shred A\n/\nQA003 Shred A Project\n/\nqa003-a-env\n(Active workspace scope)",
+  "posts": [
+    {
+      "status": 201,
+      "idSuffix": "0s5yxt3s",
+      "name": "QA003 A Environment",
+      "slug": "qa003-a-env"
+    }
+  ],
+  "main": "Overview\n\nUpdated 8:52:25 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items."
+}

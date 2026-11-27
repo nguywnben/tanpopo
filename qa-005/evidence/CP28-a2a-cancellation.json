@@ -1,0 +1,49 @@
+{
+  "checkpoint": "CP28",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated exact-source SQLite clone at 127.0.0.1:18148; TANPOPO_A2A_ENABLED=true",
+  "browser": "Chromium with Playwright, 1440x1000",
+  "fixture": {
+    "endpoint": "http://127.0.0.1:19094/a2a",
+    "network_scope": "loopback only, authorized CIDR 127.0.0.1/32",
+    "behavior": "accept task; execute a 15-second synthetic delay/work; attempt completed result",
+    "result": "fixture ran the full delay/work; eventual result write failed with BrokenPipeError after cancellation; no separate cancellation operation was observed"
+  },
+  "agent": {
+    "id": "agt_01m8cs5fame00achky33s9dfd0",
+    "slug": "qa005-delayed-cancel",
+    "state": "active"
+  },
+  "virtual_key": {
+    "name": "QA005 DEF069 cancellation A2A-only",
+    "allowed_planes": ["A2A"],
+    "allowed_routes": ["/a2a/*"],
+    "secret_included": false,
+    "post_test_state": "revoked through Console; inventory showed Revoked"
+  },
+  "task": {
+    "id": "tsk_01m8csf7tte00ajtm3vjbjet50",
+    "target_agent_id": "agt_01m8cs5fame00achky33s9dfd0",
+    "input": "synthetic cancellation acceptance text; no external work",
+    "initial_state": "working",
+    "cancel_api": {"status": 200, "final_state": "canceled", "version": 3, "hold_micros": 0},
+    "create_call_result": {"status": 200, "final_state": "canceled"},
+    "settled_cost_micros": 0
+  },
+  "audit_verification": {
+    "tool": "tanpopo admin verify-state",
+    "audit_chain_valid": true,
+    "events_verified": 253,
+    "orphans_reconciled": 0
+  },
+  "classification": "DEF-069 FAIL: durable/UI cancellation succeeded but delegated synthetic work continued to its scheduled completion. The create response difference from historical HTTP 400 is recorded; it does not meet downstream-work cancellation acceptance.",
+  "screenshots": [
+    "screenshots/CP28-a2a-agent-registered.png",
+    "screenshots/CP28-a2a-only-key-form.png",
+    "screenshots/CP28-a2a-working-before-cancel.png",
+    "screenshots/CP28-a2a-canceled-after-action.png",
+    "screenshots/CP28-a2a-key-revoked.png"
+  ],
+  "limitations": ["Synchronous HTTP path only", "Zero-cost loopback fixture; nonzero hold behavior untested", "Does not demonstrate real A2A partner interoperability", "Other runtime backend, async workers, streaming, role, tenant, retry and race cases remain unverified"]
+}

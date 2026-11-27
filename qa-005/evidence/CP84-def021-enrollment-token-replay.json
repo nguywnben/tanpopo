@@ -1,0 +1,62 @@
+{
+  "checkpoint": "CP84",
+  "finding": "DEF-021",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "listener": "127.0.0.1:18162",
+    "database": "isolated SQLite clone",
+    "browser": "Chromium 156"
+  },
+  "principal": {
+    "email": "qa005-cp84d-def021-replay@example.invalid",
+    "kind": "HUMAN",
+    "role": "DEVELOPER"
+  },
+  "steps": [
+    {
+      "action": "Owner reissued one-time enrollment token in actual Members & Roles row menu",
+      "http": 201
+    },
+    {
+      "action": "First activation in a separate browser context",
+      "http": 200,
+      "code": null,
+      "overview_reached": true
+    },
+    {
+      "action": "Same consumed token submitted through activation UI in a fresh browser context",
+      "http": 401,
+      "code": "invalid_enrollment_token",
+      "overview_reached": false,
+      "visible_result": "Tanpopo\nLanguage\nEnglish\nActivate your account\n\nSet your password using the one-time invite token issued by your administrator.\n\nSign in\nActivate invite\nAccount activation failed\nThe enrollment token is invalid, expired, or already used.\nInvite token\n\u2219 Required\nNew password\n\u2219 Required\nMinimum 12 characters.\nNew password\nConfirm password\n\u2219 Required\nConfirm password\nActivate account\n\nNew instance? Run first-time setup"
+    },
+    {
+      "action": "Fresh Owner API persistent readback",
+      "http": 200,
+      "found": true,
+      "kind": "HUMAN",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "enrollment_pending": false,
+      "has_password": true
+    }
+  ],
+  "classification": "PASS (scoped one-time replay rejection)",
+  "limitations": [
+    "Token expiry boundary and exact expiration time not tested",
+    "Cross-organization token rejection not tested",
+    "Enrollment audit visibility, recovery and role permission negatives not tested",
+    "Other roles, storage backends and browsers not tested"
+  ],
+  "secret_handling": "Invite token and synthetic passwords remained in process memory only; no token, password, hash or secret-bearing screenshot was saved. Replay screenshot invite field was cleared before capture; visible token value is absent.",
+  "paid_provider_calls": 0,
+  "product_code_modified": false,
+  "gate_rel_07": "BLOCKED",
+  "evidence": [
+    "evidence/screenshots/CP84-def021-pending-menu.png",
+    "evidence/screenshots/CP84-def021-activation-replay.png",
+    "evidence/screenshots/CP84-def021-member-persistence.png"
+  ]
+}

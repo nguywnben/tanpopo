@@ -1,0 +1,27 @@
+{
+  "checkpoint": "CP65",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_artifact": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "build_metadata": "linux/amd64; vcs.revision=737079ddb847d97dbcf832f610ed0048556cb65b; vcs.modified=false"
+  },
+  "environment": {
+    "runtime": "Isolated exact-RC7 SQLite service from CP64 at 127.0.0.1:18158",
+    "provider_calls": 0,
+    "paid_usage": false,
+    "source_changes": 0
+  },
+  "steps": [
+    {"command": "tanpopo --help", "result": "Root command tree lists one config group."},
+    {"command": "tanpopo config --help", "exit": 0, "result": "Subcommand list includes show and reconcile."},
+    {"command": "tanpopo config show --help", "exit": 0, "result": "Resolves to Show the instance overview; output table|json|yaml documented."},
+    {"command": "tanpopo config show --output json", "exit": 14, "stdout_bytes": 0, "stderr": "TANPOPO_ADMIN_TOKEN is required for Admin API access. Export a valid Admin token and retry."},
+    {"command": "TANPOPO_URL=http://127.0.0.1:18158 TANPOPO_ADMIN_TOKEN=<synthetic invalid sentinel> TANPOPO_ORG=org_cp64 tanpopo config show --output json", "exit": 14, "stdout_bytes": 0, "stderr": "Admin API returned HTTP 401."}
+  ],
+  "classification": {
+    "DEF-004": "PARTIAL: historical duplicate config-group/help-only collision does not reproduce; current subcommand dispatches to Admin API auth. Authorized config response/schema and table/json/yaml values remain UNVERIFIED because no valid CLI Admin bearer was available.",
+    "historical_fail_preserved": true,
+    "prior_qa004_scoped_pass_preserved": true
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "scope": "QA004 Test Root Org / default / dev",
+  "route": {
+    "slug": "qa004-loopback",
+    "environment_id": "env_01m895k8pee008b5ah423mhysr",
+    "target_count": 1,
+    "target_native_dialect": "Ollama",
+    "data_region": "ON_PREM"
+  },
+  "request": {
+    "path": "/native/anthropic/v1/messages",
+    "logical_model": "qa004-mock",
+    "credential_plane": "PROVIDER",
+    "allowed_route": "/native/anthropic/*",
+    "credentials_omitted": true
+  },
+  "response": {
+    "status": 400,
+    "error": "dialect_mismatch",
+    "error_type": "invalid_request_error",
+    "request_id": "req_01m8apvjqje00992s78mm8sxh0"
+  },
+  "key_cleanup": {
+    "http_status": 200,
+    "state": "REVOKED",
+    "version": 2
+  },
+  "classification": "PASS (scoped); no positive Anthropic deployment or request was made"
+}

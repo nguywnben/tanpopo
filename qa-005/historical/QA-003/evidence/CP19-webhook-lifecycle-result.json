@@ -1,0 +1,44 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "scope": "synthetic project kill_switch.triggered event and synthetic webhook subscription",
+  "registration": {
+    "http_status": 201,
+    "enabled": true,
+    "secret_returned": false
+  },
+  "first_delivery": {
+    "attempt_count": 8,
+    "status": "DEAD_LETTER",
+    "last_http_status": null,
+    "last_error": "transport failure"
+  },
+  "disable_with_retry_queued": {
+    "before": {
+      "status": "RETRY_SCHEDULED",
+      "attempt_count": 1,
+      "last_http_status": null
+    },
+    "after": {
+      "queued_delivery_rows": 0,
+      "subscription_enabled": false,
+      "older_dead_letter_preserved": true
+    }
+  },
+  "event_while_disabled": {
+    "kill_switch_triggered_and_cleared_in_ui": true,
+    "additional_delivery_rows": 0
+  },
+  "delete_cleanup": {
+    "subscription_rows": 0,
+    "delivery_rows": 0,
+    "synthetic_webhook_secret_rows": 0,
+    "webhook_deleted_audit_event_retained": true,
+    "active_kill_switches": 0
+  },
+  "classification": {
+    "subscription_create_enable_disable_delete": "PASS for tested SQLite/Org Owner/Chromium path",
+    "pending_retry_cancellation": "PASS",
+    "post_disable_event_delivery_suppression": "PASS",
+    "actual_upstream_http_response_and_success_delivery": "BLOCKED by direct egress policy mismatch"
+  }
+}

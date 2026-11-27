@@ -1,0 +1,13 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "page": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n4\nVault Secrets\n1\nAdapters\n1\nQA003 CP47 Ollama loopback mock: probe succeeded in 18 ms.\nConfigured connections\n4\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA003 CP47 Ollama loopback mock (758n3737)\nhttp://127.0.0.1:19271\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tActive\tNone bound\t\n\n\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tDisabled\tNone bound\t\n\n\nQA003 RC5 Ollama 401 (4hst80xy)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Self-hosted\tUnverified\tNone bound\t",
+  "connection": {
+    "status": 200,
+    "row": {
+      "id": "con_01m885fw4ce009jrgv758n3737",
+      "name": "QA003 CP47 Ollama loopback mock",
+      "state": "ACTIVE",
+      "version": 3
+    }
+  }
+}

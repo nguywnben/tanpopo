@@ -1,0 +1,23 @@
+{
+  "row": "CP60 localhost dot mismatch\nqa002-cp60-localhost-dot-mismatch\n\thttp://localhost.:19183/mcp\tActive\t0\t\nSync tools",
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/mcp/servers/mcp_01m861jqdje00bdev1z0d2kwcm/sync-tools",
+      "status": 502,
+      "body": {
+        "error": {
+          "code": "mcp_sync_failed",
+          "type": "upstream_error",
+          "message": "upstream MCP tool synchronization failed",
+          "request_id": "req_01m861kagke008jd6rr5388jm2",
+          "retryable": true
+        }
+      }
+    }
+  ],
+  "fixture_calls_before": 3,
+  "fixture_calls_after": 3,
+  "fixture_delta": 0,
+  "notice": "cp\tActive\t0\t\nSync tools\n\n\nQA002 CP50 303 Redirect Test\nqa002-cp50-redirect-303\n\thttp://127.0.0.1:19170/redirect/303/mcp\tActive\t0\t\nSync tools\n\n\nQA002 CP58 nip.io exact allowlist\nqa002-cp58-nipio-control\n\thttp://127.0.0.1.nip.io:19183/mcp\tSchema Drift Locked\t1\t\nSync tools\n\n\nQA002 CP58 nip.io CIDR mismatch\nqa002-cp58-nipio-mismatch\n\thttp://127.0.0.1.nip.io:19183/mcp\tActive\t0\t\nSync tools\n\n\nCP60 localhost dot mismatch\nqa002-cp60-localhost-dot-mismatch\n\thttp://localhost.:19183/mcp\tActive\t0\t\nSync tools"
+}

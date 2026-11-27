@@ -1,0 +1,25 @@
+{
+  "baseline": {
+    "port": 18124,
+    "status": 404,
+    "error": {
+      "code": "resource_not_found",
+      "message": "A2A plane is disabled.",
+      "request_id": "trc_01m8993avne008tebvv6g612qx",
+      "type": "not_found_error"
+    },
+    "agent_count": 0
+  },
+  "a2a_enabled_clone": {
+    "port": 18128,
+    "status": 200,
+    "error": null,
+    "agent_count": 0
+  },
+  "setup": {
+    "binary": "/tmp/qa004-run-45581179274/extracted/tanpopo",
+    "frozen_rc6_sha": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+    "a2a_toggle": "TANPOPO_A2A_ENABLED",
+    "secret_recorded": false
+  }
+}

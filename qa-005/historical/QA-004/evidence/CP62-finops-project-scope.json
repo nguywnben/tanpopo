@@ -1,0 +1,51 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "RC6 exact-source isolated runtime 127.0.0.1:18132 (offline)",
+  "actor": "synthetic Org Owner",
+  "feature": "FinOps project budget scope, switch, refresh, persistence",
+  "project_with_budget": {
+    "name": "QA004 CP55 Ops Billing",
+    "id": "prj_01m8a2ff3te00arpehp0h1hhkj",
+    "ui_save_status": 200,
+    "api_read_status": 200,
+    "budget": {
+      "id": "bgt_project_prj_01m8a2ff3te00arpehp0h1hhkj_monthly",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m8a2ff3te00arpehp0h1hhkj",
+      "period": "MONTHLY",
+      "hard_limit_micros": 100,
+      "soft_warning_percents": [50, 80, 95],
+      "version": 5
+    },
+    "ui": "One Budget ceiling row; save confirmation shown; limit control contains 100. Settled, estimated, and active holds are zero."
+  },
+  "project_without_budget": {
+    "name": "QA004 CP57 Project Recovery",
+    "id": "prj_01m8a2xtnqe00bf5n0b09xqcf9",
+    "ui": "Budget ceilings 0; No budgets configured; settled, estimated, and active holds are zero."
+  },
+  "journey": [
+    "Switched CP57 -> CP55 in the real Chromium Console; the existing CP55 budget appeared.",
+    "Saved the CP55 budget hard limit as 100 micro-USD; PUT returned HTTP 200.",
+    "Switched CP55 -> CP57; its empty FinOps state appeared and did not show the CP55 budget.",
+    "Switched back CP57 -> CP55; its single budget row appeared again.",
+    "Hard refreshed while on CP55; the Console initialized at CP57 (the account's observed default project/environment) and showed the empty CP57 FinOps state.",
+    "Authenticated GET /admin/v1/budgets?limit=100 after the save returned the one CP55 project record with hard_limit_micros=100, warning thresholds [50,80,95], version 5."
+  ],
+  "visual_review": [
+    "CP55 saved-budget screenshot visually inspected.",
+    "CP57 empty-state screenshot visually inspected.",
+    "Post-refresh default-scope screenshot visually inspected."
+  ],
+  "classification": {
+    "project_scope_filtering": "PASS (scoped): CP55 row appeared only in CP55 FinOps; CP57 displayed zero rows.",
+    "save_and_persistence": "PASS (scoped): HTTP 200 save and authenticated readback retained the exact 100-micro-USD value.",
+    "scope_survives_refresh": "UNVERIFIED: refresh selected the account's observed CP57 default. No frozen-baseline contract located that requires last-selected scope persistence.",
+    "new_defect": false
+  },
+  "limitations": [
+    "Only one project budget and two project scopes were checked.",
+    "Organization, environment, and virtual-key budgets; warning thresholds; limit enforcement; chargeback/export interactions; other roles and concurrent scope transitions remain unverified.",
+    "CP57 and CP55 are isolated synthetic QA projects; no provider inference or spend occurred."
+  ]
+}

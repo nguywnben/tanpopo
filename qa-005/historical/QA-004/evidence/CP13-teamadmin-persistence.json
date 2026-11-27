@@ -1,0 +1,18 @@
+{
+  "status": 200,
+  "teamAdmin": [
+    {
+      "role": "DEVELOPER",
+      "project_scope": "default",
+      "password_set": true,
+      "enrollment_pending": false
+    },
+    {
+      "role": "TEAM_ADMIN",
+      "project_scope": "default",
+      "password_set": true,
+      "enrollment_pending": false
+    }
+  ],
+  "escalation_canary_created": false
+}

@@ -1,0 +1,49 @@
+Operations
+qa-fresh-cp38@example.invalid
+Operator, Org Owner
+QA Fresh Install CP38
+/
+qa-fresh-project
+/
+dev
+(Active workspace scope)
+Jump
+Ctrl
+K
+Language
+English
+Kill Switch
+Providers
+
+Upstream provider connections, write-only vault credentials, and protocol adapters.
+
+Seal secret
+New connection
+Connections
+Vault Secrets
+Adapters
+1
+Configured connections
+0
+No provider connections
+Create a connection to bind a protocol adapter and write-only vault secret.
+New connection
+New provider connection
+Bind an enabled adapter, upstream endpoint, and write-only secret slots.
+Connection name
+∙ Required
+Provider adapter
+@tanpopo/ollama (adp_01m84b4506e00aqjqf4gec2hy0)
+Endpoint URL
+∙ Required
+Billing mode
+Commercial API
+Data region
+US
+Credential for api_key
+No credential
+Allow private or loopback upstream
+Requires explicit non-wildcard CIDRs; metadata endpoints remain blocked.
+Cancel
+Create connection
+No provider connections Create a connection to bind a protocol adapter and write-only vault secret.

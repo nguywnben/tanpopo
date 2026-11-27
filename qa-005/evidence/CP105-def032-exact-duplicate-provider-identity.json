@@ -1,0 +1,48 @@
+{
+  "checkpoint": "CP105",
+  "defect": "DEF-032",
+  "status": "PASS (scoped)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated exact-RC7 SQLite, port 18145, real Console via TLS proxy 19444",
+  "browser": "Chromium 156 via Playwright, 1440x1000",
+  "role": "Org Owner",
+  "scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+  "fixture_policy": "Disposable records created in the real Console; no secret slots; each loopback connection explicitly allowlisted only for 127.0.0.1/32; external and paid providers not used.",
+  "steps_and_results": [
+    {
+      "case": "exact duplicate inventory, picker, edit, disable and delete",
+      "fields_equal": ["display name", "adapter", "endpoint", "billing mode", "data region", "project", "allowlisted CIDR"],
+      "short_ids": ["fz2mwcxk", "bwqsn6fv"],
+      "endpoint": "http://127.0.0.1:19096",
+      "list_identity": "Both rows showed distinct short IDs.",
+      "deployment_picker_identity": "Both same-name options showed distinct short IDs.",
+      "edit_identity": "Edit drawer heading included fz2mwcxk.",
+      "disable": "Selected fz2mwcxk; PATCH 200/readback showed only fz2mwcxk Disabled and bwqsn6fv remained Unverified.",
+      "delete": "Confirmation quoted the selected short ID; DELETE 204; after deleting fz2mwcxk the bwqsn6fv row remained, then its own DELETE 204 removed the final row."
+    },
+    {
+      "case": "probe target isolation",
+      "fields_equal": ["display name", "adapter", "endpoint", "billing mode", "data region", "project", "allowlisted CIDR"],
+      "short_ids": ["qed4wk3s", "7nyfv9rh"],
+      "endpoint": "http://127.0.0.1:19090",
+      "selected_short_id": "7nyfv9rh",
+      "probe_response": {"http_status": 200, "valid": true, "latency_ms": 7},
+      "state_readback": "Only 7nyfv9rh changed to Active; qed4wk3s remained Unverified.",
+      "cleanup": "Both disposable records deleted through the Console; final UI/readback contained zero test-pair rows."
+    }
+  ],
+  "paid_usage": 0,
+  "secret_values_recorded": false,
+  "screenshots_visually_inspected": true,
+  "screenshots": {
+    "evidence/screenshots/CP105-def032-list.png": "f4cf59a85550fb303621746ab6f69212cdecb8d0f436439838cd5c92834e306d",
+    "evidence/screenshots/CP105-def032-picker.png": "65333f1c1741d788308295285c14365337657d6c1d5396d85a651e897a416c37",
+    "evidence/screenshots/CP105-def032-edit.png": "e21f7431b0548fabe212bff05999bb526eaef28a0d8f018adb8f94278335505f",
+    "evidence/screenshots/CP105-def032-selected-disabled.png": "a3d0ec5e30e69c0ecca35226e27dc26ef15d42a1e24a42e07b90f8c8a2d1ac48",
+    "evidence/screenshots/CP105-def032-duplicate-probe-target.png": "b42c8ca0cecb5b328b9979f0c66e8f802e0f470a26ec361670b90751147d8b0b",
+    "evidence/screenshots/CP105-def032-delete-first.png": "b4d35fcdcc52b4643735ee8b6dee56f8915323a139024b39ed309fd8b7ba3d4b",
+    "evidence/screenshots/CP105-def032-delete-second.png": "c82795b98649b5b5c6bbb4dc198832e374d80f6b0770bd51d61702ec708a37e9"
+  },
+  "limitations": ["Other roles, browser engines, persistence backends, pagination and long identifiers were not tested."]
+}

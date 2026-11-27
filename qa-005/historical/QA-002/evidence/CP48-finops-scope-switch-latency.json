@@ -1,0 +1,30 @@
+{
+  "checkpoint": "CP48",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "browser": "Chromium via local HTTPS proxy; 1440x900",
+  "screen": "FinOps → Budgets & Holds",
+  "setup": "Owner started in secondary project/environment; browser route handler delayed only project1 GET /admin/v1/budgets requests by 1800 ms, then forwarded them unchanged to the isolated server.",
+  "scope_switch": {
+    "from": "QA002 CP43 Secondary Project / qa002-cp43-env2",
+    "to": "QA002 CP39 Tenant Project / qa002-cp39-env",
+    "action": "real workspace chooser interaction"
+  },
+  "observations": {
+    "while_loading": "FinOps displayed table skeleton placeholders; no secondary-project budget rows remained visible under the newly selected project header.",
+    "after_delayed_response": "FinOps showed the two persisted rows scoped to project1: its environment and project budgets.",
+    "captured_request_queries": [
+      "GET /admin/v1/budgets?project_id=prj_01m85ry2gme00an7wydh1pd1gc&limit=100",
+      "GET /admin/v1/budgets?project_id=prj_01m85fzh16e009hg9r5wysq16v&limit=100"
+    ],
+    "result": "PASS for this delayed project-switch render scenario; no stale cross-project rows observed"
+  },
+  "visual_evidence": [
+    "CP48-project-switch-loading.png",
+    "CP48-project-switch-settled.png"
+  ],
+  "limitations": [
+    "Only FinOps Budgets & Holds was tested.",
+    "Single owner session, two projects, one 1800 ms delay, Chromium only.",
+    "This does not clear DEF-023 or DEF-024 and does not establish race safety for other screens, tabs, permission changes, network errors, or simultaneous refreshes."
+  ]
+}

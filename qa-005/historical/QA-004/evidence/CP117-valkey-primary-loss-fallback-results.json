@@ -1,0 +1,71 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "artifact_run": "45581179274",
+  "runtime": "exact RC6 on isolated PostgreSQL restore; control/data listener 18137 and separate data-plane listener 18138; loopback-only Valkey 8.1.12",
+  "cache_before_fault": {
+    "topology": "three primaries, zero replicas",
+    "slots_assigned": 16384,
+    "slots_healthy": 16384,
+    "synthetic_org_limiter_slot": 10755,
+    "slot_owner": "node 2, range 5461-10922"
+  },
+  "synthetic_key": {
+    "name": "QA004 CP117 Valkey Primary Loss",
+    "rpm_limit": 3,
+    "plaintext": "redacted; retained only in temporary process memory"
+  },
+  "healthy_baseline": {
+    "listener": 18137,
+    "requests": 2,
+    "statuses": [503, 503],
+    "error": "no_compliant_deployment_available",
+    "provider_route_configured": false,
+    "provider_dispatch_or_spend": false
+  },
+  "primary_loss": {
+    "fault": "stopped the Valkey primary owning slots 5461-10922",
+    "application_readiness": {"18137": 200, "18138": 200},
+    "per_listener_requests": {
+      "18137": [
+        {"status": 503, "error": "no_compliant_deployment_available"},
+        {"status": 429, "error": "rate_limit_exceeded"}
+      ],
+      "18138": [
+        {"status": 503, "error": "no_compliant_deployment_available"},
+        {"status": 429, "error": "rate_limit_exceeded"}
+      ]
+    },
+    "interpretation": "Observed one local-fallback admission per application process for rpm_limit 3 with three configured nodes; bounded evidence consistent with the documented per-node local slice.",
+    "upstream_route": false,
+    "outbound_request_or_spend": false
+  },
+  "cache_recovery": {
+    "automatic_rejoin": false,
+    "observed_reason": "QA container restart created a fresh node identity; the isolated cluster had zero replicas and did not automatically re-form or reassign the prior slot range.",
+    "manual_test_infrastructure_repair": "Admitted the restarted node, forgot its obsolete identity, and reassigned slots 5461-10922.",
+    "after_repair": {
+      "cluster_state": "ok",
+      "known_nodes": 3,
+      "slots_assigned": 16384,
+      "slots_healthy": 16384,
+      "application_readiness": {"18137": 200, "18138": 200}
+    }
+  },
+  "cleanup": {
+    "console_action": "Owner Access & Keys -> Revoke key -> Revoke (graceful drain)",
+    "visible_console_success": true,
+    "api_state": "REVOKED",
+    "api_version": 2,
+    "plaintext_key_saved": false
+  },
+  "screenshots_visually_inspected": ["CP117-valkey-primary-loss-recovered.png"],
+  "result": "PASS (scoped) for observed per-process RPM fallback and post-recovery Console revocation. Automatic cache failover/rejoin remains UNVERIFIED. No product defect assigned.",
+  "environment_limits": [
+    "The test cluster had three primaries and no replicas, so replica promotion and automatic HA failover could not be tested.",
+    "The managed container runtime does not support pause/freeze; a primary was stopped and then manually re-admitted after restart.",
+    "The restarted cache node did not preserve its old cluster identity or slot map in this ephemeral setup; this is recorded as test-infrastructure behavior, not a Tanpopo product finding.",
+    "Only one slot-owner outage, one rpm_limit, two application processes, and sequential requests were exercised. Partition healing, concurrent load, persistence of limiter state, and production fault-domain behavior remain UNVERIFIED."
+  ],
+  "product_source_modified": false,
+  "gate_rel_07": "BLOCKED"
+}

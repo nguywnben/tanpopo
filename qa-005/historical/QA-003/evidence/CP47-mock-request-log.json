@@ -1,0 +1,10 @@
+{
+  "runtime": "loopback-only QA Ollama-compatible mock at 127.0.0.1:19271",
+  "request_bodies_or_headers_captured": false,
+  "requests": [
+    {"origin": "Tanpopo connection probe", "method": "GET", "path": "/api/tags", "body_bytes": 0},
+    {"origin": "separate direct mock control", "method": "POST", "path": "/v1/chat/completions", "body_bytes": 96},
+    {"origin": "real Playground streamed request", "method": "POST", "path": "/v1/chat/completions", "body_bytes": 166}
+  ],
+  "external_provider_requests": 0
+}

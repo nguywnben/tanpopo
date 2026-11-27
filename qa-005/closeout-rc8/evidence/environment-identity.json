@@ -1,0 +1,33 @@
+{
+  "baseline": {
+    "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+    "branch": "qa/qa-005-closeout-rc8",
+    "release_artifact_id": "15204068659",
+    "release_workflow_run": "46010590867",
+    "post_merge_ci_run": "46010590918",
+    "version": "0.0.1-snapshot",
+    "artifact_build_time_utc": "2026-11-27T13:59:26Z",
+    "linux_amd64_binary_sha256": "30f85f6da82676dc82b27d02e2d409b60e73c99c4aade2a72e8c2af520f019cd",
+    "source_commit_reported_by_binary": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c"
+  },
+  "artifact_archive_sha256": {
+    "darwin_amd64": "55bbdda24b672475e7b75d1413b9f35a502daa817d61df4e5aff887774cbf25f",
+    "darwin_arm64": "3a7ea037cb94b44c73eb818032fed1950a9e4f7e2ea80cde3bada15da18c8974",
+    "linux_amd64": "587428f002d6089d81737f534b8a52f7fc98c7428b16de0f467f203f124b2c9e",
+    "linux_arm64": "88a1814a480b98cd05d963a8e5c2f447ea1cb6eca4a42863b719089cc9e016df",
+    "windows_amd64": "34d8b82cd7269a5a4447a8f8844fee9fc788b8a31101745386dfe2cc4a5b7534"
+  },
+  "verification": {
+    "archive_sha256sums_match": true,
+    "runtime_version_and_source_identity_match": true,
+    "release_workflow_conclusion": "success",
+    "ci_workflow_conclusion": "success",
+    "ci_run_artifact_count": 0,
+    "attestation_job_reported_success": true,
+    "local_attestation_signature_verification": "UNVERIFIED: installed gh version lacks `gh attestation`; API attestations endpoint returned 404",
+    "go_toolchain": "UNAVAILABLE: `go version` and `go env` resolve to a broken managed Go shim; no source rebuild relied upon",
+    "exact_release_binary_runtime_tests": "EXECUTED"
+  },
+  "artifact_expiry_utc": "2026-11-28T14:02:04Z",
+  "scope_note": "CI release artifact was retrieved while available. The successful post-merge CI run had no downloadable artifact. All live verification used the exact-source release Linux/amd64 binary."
+}

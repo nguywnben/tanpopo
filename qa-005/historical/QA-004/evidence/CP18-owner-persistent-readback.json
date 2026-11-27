@@ -1,0 +1,26 @@
+{
+  "projects": [
+    {
+      "slug": "qa004-isolation-canary",
+      "name": "QA-004 Isolated Canary"
+    },
+    {
+      "slug": "default",
+      "name": "default"
+    }
+  ],
+  "member": {
+    "status": 200,
+    "email": "qa004-scope-canary@example.invalid",
+    "kind": "HUMAN",
+    "roles": [
+      "DEVELOPER"
+    ],
+    "scoped_projects": [
+      "qa004-isolation-canary"
+    ],
+    "has_password": true,
+    "enrollment_pending": false,
+    "version": 2
+  }
+}

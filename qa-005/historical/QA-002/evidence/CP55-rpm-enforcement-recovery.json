@@ -1,0 +1,55 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "result": "PASS for one isolated environment-scoped provider Virtual Key",
+  "key": {
+    "id": "vky_01m85ykzr1e008v0dvpm5z47bn",
+    "rpm_limit": 1,
+    "final_state": "REVOKED"
+  },
+  "scope": {
+    "project": "qa002-cp43-secondary-project",
+    "environment": "qa002-cp43-env2",
+    "credential_plane": "PROVIDER",
+    "route": "qa002-cp52-failover-route",
+    "provider": "isolated loopback synthetic fixture"
+  },
+  "requests": [
+    {
+      "sequence": 1,
+      "http_status": 200,
+      "canonical_error_code": null,
+      "selected_deployment_id": "dpl_01m85w0efre00b9qsa1dcwkygw",
+      "trace_id": "trc_01m85ymdmxe008bey5ha7t6d5r",
+      "fixture_call_count": 3
+    },
+    {
+      "sequence": 2,
+      "http_status": 429,
+      "retry_after_seconds": 60,
+      "canonical_error_code": "rate_limit_exceeded",
+      "selected_deployment_id": null,
+      "trace_id": "trc_01m85ymdpre009ks5e74csjcn9",
+      "fixture_call_count": 3
+    },
+    {
+      "sequence": 3,
+      "http_status": 200,
+      "canonical_error_code": null,
+      "selected_deployment_id": "dpl_01m85w0efre00b9qsa1dcwkygw",
+      "trace_id": "trc_01m85ypac2e009xty0vczrqkj6",
+      "fixture_call_count": 4,
+      "note": "Sent after more than 60 seconds from initial key creation; the request recovered successfully."
+    }
+  ],
+  "assertions": {
+    "second_request_rejected_before_provider_dispatch": true,
+    "recovery_after_window": true,
+    "key_revoked_in_console_and_persistent_state": true,
+    "secret_or_request_content_recorded": false
+  },
+  "limitations": [
+    "One environment-scoped key and one local synthetic provider were exercised.",
+    "Parent policy RPM, TPM, maximum concurrent streams, simultaneous limits, burst/window edge cases, other roles, and distributed enforcement remain unverified.",
+    "The Access & Keys issue form exposed no rate-limit controls; the exercised per-key rpm_limit was provisioned through the authenticated Admin API. The UI provisioning contract remains unverified."
+  ]
+}

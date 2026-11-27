@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-23",
+  "fixture": "synthetic endpoint at 127.0.0.1:19088 returned input-required",
+  "results": {
+    "discoveryStatus": 200,
+    "createStatus": 201,
+    "taskId": "tsk_01m84am5v0e00anzwej0dh1rm7",
+    "createState": "input-required",
+    "createVersion": 3,
+    "getStatus": 200,
+    "getState": "input-required",
+    "transitionStatus": 404,
+    "transitionError": "resource_not_found",
+    "transitionMessage": "A2A endpoint not found."
+  },
+  "contract": "SM-09 says input-required is resumable back to working; HTTP documented route only provides GET and POST /cancel",
+  "expected": "Caller provides additional input and task returns to working, then can complete",
+  "actual": "Task persists in input-required; POST /a2a/tasks/{id}/transition returns 404 resource_not_found; task cannot be resumed through exposed HTTP routes."
+}

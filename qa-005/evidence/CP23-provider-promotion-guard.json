@@ -1,0 +1,15 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated SQLite at 127.0.0.1:18145",
+  "synthetic_fixture": "loopback HTTP server at 127.0.0.1:19091 returned HTTP 401 for GET /v1/models",
+  "adapter": "approved QA-only @tanpopo/ollama adapter under ephemeral QA test trust root",
+  "probe": {"http_status": 200, "valid": false, "failure_code": "auth_failed", "sanitized_message": "upstream returned HTTP 401", "connection_state": "CREATED_UNVERIFIED"},
+  "deployment": {"create_http_status": 201, "initial_state": "PROVISIONED", "connection_state": "CREATED_UNVERIFIED", "version": 1},
+  "promotion_attempt": {"method": "PATCH /admin/v1/deployments/{id}", "requested_state": "ACTIVE_HEALTHY", "http_status": 422, "error_code": "connection_not_active"},
+  "persistent_readback_after_attempt": {"deployment_state": "PROVISIONED", "connection_state": "CREATED_UNVERIFIED", "version": 1},
+  "ui_action_menu": ["Disable deployment", "Delete deployment"],
+  "cleanup": "test deployment and failed connection deleted through Console; test HTTP fixture stopped. Synthetic logical model declaration remains because no model-delete action is presented in the Console.",
+  "classification": "PASS (scoped regression guard)",
+  "limitations": ["Only Ollama adapter and HTTP 401 were exercised.", "Timeout, TLS, malformed response, route candidate, recovery, and other adapters remain unverified."]
+}

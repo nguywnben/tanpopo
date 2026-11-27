@@ -1,0 +1,24 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": "exact-source SQLite 18145",
+  "request": {
+    "endpoint": "/native/ollama/api/chat",
+    "model": "qa005-native-vision",
+    "stream": false,
+    "image_count": 1,
+    "image_payload_sha256": "207864d1365bd605e5a1b55e99d111c540e2cfcdcde064c74cb2b356efd43e6e"
+  },
+  "response": {
+    "status": 200,
+    "content_type": "application/json",
+    "usage_accuracy": "EXACT",
+    "trace_id": "trc_01m8cyctaze0099w7jq4vqzjs2",
+    "error_code": null,
+    "model": "qa005-native:latest",
+    "done": true,
+    "prompt_eval_count": 7,
+    "eval_count": 4,
+    "response_length": 0
+  },
+  "raw_response_sha256": "3fa3dbdd47cf255c1b5a1c2f576b2dd0202c0d39af5da4bd49dd8a5b738d50ba"
+}

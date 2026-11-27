@@ -1,0 +1,32 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "fresh isolated exact-RC6 instance at 127.0.0.1:18140 with separate /tmp data directory",
+  "browser": "Chromium 1440x1000",
+  "setup_state": "first step, no data submitted",
+  "progress_buttons": [
+    {
+      "visible_text": "Owner account",
+      "accessible_name": "Go to step 1: Owner account",
+      "aria_disabled": false
+    },
+    {
+      "visible_text": "2 First connection",
+      "accessible_name": "Go to step 2: First connection",
+      "aria_disabled": true
+    },
+    {
+      "visible_text": "3 Key custody",
+      "accessible_name": "Go to step 3: Key custody",
+      "aria_disabled": true
+    },
+    {
+      "visible_text": "4 Review",
+      "accessible_name": "Go to step 4: Review",
+      "aria_disabled": true
+    }
+  ],
+  "method": "Playwright Chromium Accessibility.getFullAXTree plus DOM-visible button text and aria-disabled state",
+  "result": "Each progress button's accessible name contains the step title; the later steps are unavailable until prerequisites are satisfied. Historical DEF-001 omission did not reproduce in this current exact-RC6 state.",
+  "limits": "One fresh setup state and Chromium engine. Historical Vitest label-content-name-mismatch failures remain unreconciled; axe-core was unavailable in this runner. No setup form was submitted.",
+  "screenshot": "CP80-fresh-setup-step1.png"
+}

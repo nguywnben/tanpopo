@@ -1,0 +1,78 @@
+{
+  "checkpoint": "CP126",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "127.0.0.1:18128",
+  "scope": "QA004 Test Root Org / default / dev; isolated malformed-image synthetic Ollama fixture at 127.0.0.1:18125",
+  "budget_before_dispatch": {
+    "hard_limit_micro_usd": 5000,
+    "settled_exact_micro_usd": 2036,
+    "settled_estimated_micro_usd": 14,
+    "active_hold_micro_usd": 0,
+    "temporary_limit_increase_via_real_console": true
+  },
+  "request": {
+    "method": "POST",
+    "path": "/native/ollama/api/generate",
+    "virtual_key_id": "vky_01m8b7jr4xe0097c68vm6kkr8r",
+    "virtual_key_name": "QA004 CP126 Native Generate Malformed Image",
+    "test_image_field_count": 1,
+    "image_content": "synthetic invalid base64 marker; raw request content not persisted",
+    "http_status": 400,
+    "error_code": "upstream_bad_request",
+    "retryable": false,
+    "request_id": "req_01m8b7jrvse008cfdsc85faxk1",
+    "trace_id": "trc_01m8b7jrvse008cgjf6f3625zn"
+  },
+  "fixture": {
+    "path": "/api/generate",
+    "image_count": 1,
+    "valid_image_hash_count": 0,
+    "invalid_image_count": 1,
+    "authorization_header_present": false,
+    "response_http_status": 400,
+    "prompt_or_image_bytes_stored": false,
+    "external_provider_contacted": false
+  },
+  "persistent_trace": {
+    "http_status": 200,
+    "status_code": 400,
+    "error_code": "upstream_bad_request",
+    "usage_accuracy": "EXACT",
+    "total_cost_micros": 0
+  },
+  "chargeback": {
+    "endpoint": "/admin/v1/usage/summary?group_by=key",
+    "http_status": 200,
+    "rows_for_test_key": []
+  },
+  "budget_after": {
+    "restored_hard_limit_micro_usd": 100,
+    "settled_exact_micro_usd": 2036,
+    "settled_estimated_micro_usd": 14,
+    "reserved_hold_micro_usd": 0,
+    "version": 155,
+    "values_unchanged_by_failed_request": true
+  },
+  "cleanup": {
+    "test_key_state": "REVOKED",
+    "test_key_version": 2,
+    "original_qa_fixture_restored": true,
+    "restored_fixture_api_tags_http_status": 200,
+    "temporary_budget_limit_not_left_in_place": true
+  },
+  "visual_inspection": [
+    "CP126-malformed-generate-budget-increased.png",
+    "CP126-malformed-generate-key-form.png",
+    "CP126-malformed-generate-traces.png",
+    "CP126-malformed-generate-chargeback.png",
+    "CP126-malformed-generate-key-revoked.png",
+    "CP126-malformed-generate-budget-restored.png"
+  ],
+  "classification": {
+    "malformed_image_error_path": "PASS for one upstream-rejected invalid native Generate image: mapped to non-retryable 400, no Chargeback settlement, no retained hold",
+    "DEF-052": "Trace marked Exact/$0 for the rejected request; zero-charge agreement in this case does not cure inaccurate error/usage labels on successfully settled requests.",
+    "new_defect": false,
+    "qa_status": "ONGOING",
+    "release_gate": "BLOCKED"
+  }
+}

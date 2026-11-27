@@ -1,0 +1,56 @@
+{
+  "checkpoint": "CP66",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_artifact": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "build_metadata": "linux/amd64; vcs.revision=737079ddb847d97dbcf832f610ed0048556cb65b; vcs.modified=false"
+  },
+  "environment": {
+    "runtime": "isolated SQLite clone at 127.0.0.1:18160; derived with SQLite online backup from CP64 fresh install",
+    "browser": "Chromium 156.0.8078.79 via Playwright",
+    "operator": "synthetic bootstrap Owner",
+    "provider_calls": 0,
+    "paid_usage": false,
+    "source_changes": 0
+  },
+  "workflow": {
+    "path": "Access & Keys > Members & Roles > Add member",
+    "initial_state": "one organization member: synthetic Owner",
+    "synthetic_invitee": "qa005-team-admin-cp66@example.invalid",
+    "selected_roles": ["DEVELOPER", "TEAM_ADMIN"],
+    "project_binding": {
+      "displayed": "QA005 CP64 Project (qa005-cp64-project)",
+      "project_id": "prj_01m8dbkxhne009a8wxaz7fwcb6"
+    },
+    "create_http": 201,
+    "post_state": "Member added; pending-activation row and enrollment dialog appeared. One-time enrollment token intentionally excluded from retained evidence.",
+    "hard_reload": "Member persisted with Developer and Team Admin roles.",
+    "member_api": {
+      "http": 200,
+      "member_id": "prc_01m8dcqktpe00bxepxwy3cmwet",
+      "email": "qa005-team-admin-cp66@example.invalid",
+      "roles": ["DEVELOPER", "TEAM_ADMIN"],
+      "project_ids": ["prj_01m8dbkxhne009a8wxaz7fwcb6"]
+    },
+    "audit": {
+      "http": 200,
+      "member_created": true,
+      "enrollment_issued": true,
+      "target_matches_member": true,
+      "project_ids_match_form_and_api": true,
+      "roles_match_api": true,
+      "chain_partition": "org_01m8dbkxhne009a753r8s95bz3"
+    },
+    "screenshots": [
+      "evidence/screenshots/CP66-owner-overview.png",
+      "evidence/screenshots/CP66-team-admin-project-scope-form.png",
+      "evidence/screenshots/CP66-team-admin-persisted.png"
+    ]
+  },
+  "classification": {
+    "DEF-006": "PASS (scoped): project-scoped member creation, persistence and matching audit event independently verified on exact RC7. The invitee had both default Developer and selected Team Admin roles; effective permissions are not proven.",
+    "unverified": ["invite activation", "pure Team Admin RBAC", "sibling-project denial", "cross-organization boundaries", "update/remove/reinvite lifecycle", "other roles", "alternate backends"],
+    "related_product_gap": "PG-001: Add Member retains default Developer alongside newly selected roles unless explicitly cleared."
+  }
+}

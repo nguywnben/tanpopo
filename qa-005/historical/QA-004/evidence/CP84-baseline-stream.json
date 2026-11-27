@@ -1,0 +1,23 @@
+{
+  "result": {
+    "status": 200,
+    "contentType": "text/event-stream; charset=utf-8",
+    "chunk_count": 25,
+    "done": true,
+    "body": "data: {\"choices\":[{\"delta\":{\"content\":\"chunk-0 \"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-cancel-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"chunk-1 \"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-cancel-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"chunk-2 \"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-cancel-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"chunk-3 \"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-cancel-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"chunk-4 \"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-cancel-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"chunk-5 \"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-cancel-qa004\",\"model\":\"qa004-mock\",\"object\":\"chat.completion.c"
+  },
+  "fixture": [
+    {
+      "path": "/v1/chat/completions",
+      "model": "qa004-mock",
+      "stream": true,
+      "auth_present": false,
+      "event": "started"
+    },
+    {
+      "path": "/v1/chat/completions",
+      "event": "completed",
+      "chunks_sent": 24
+    }
+  ]
+}

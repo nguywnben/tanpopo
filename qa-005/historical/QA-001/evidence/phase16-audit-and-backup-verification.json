@@ -1,0 +1,36 @@
+{
+  "phase": 16,
+  "date": "2026-11-23",
+  "environment": "Canonical Tanpopo unified binary, isolated SQLite DB under /tmp/qa-tanpopo",
+  "operations_console_backup": {
+    "visible_control": "Create encrypted backup",
+    "request": "POST /admin/v1/ops/backups",
+    "status": 503,
+    "error": "backup requires configured tanpopo.lock, tanpopo.yaml, and extension artifact store",
+    "retested_after_valid_config_file_added": true,
+    "still_503": true,
+    "visual_evidence": ["phase16-backups-empty.png", "phase16-backup-console-failure.png", "phase16-backup-config-file-still-503.png"]
+  },
+  "cli_backup": {
+    "create_exit": 0,
+    "archive_filename": "tanpopo-backup-9e639b2d0ddafc2a1c7114d03ce5f225.tpop.enc",
+    "sha256_hex": "1feb3aa3edcfc00f06f5e1623f71336a959cb313f18fce2b658efe2713fee663",
+    "size_bytes": 83501,
+    "file_mode_octal": "0600",
+    "verify_exit": 14,
+    "verify_error": "backup: initialized organization \"org_01m83wyz0qe008ch01tnv1jht8\" has no verifiable audit history"
+  },
+  "runtime_audit_counts": {
+    "qa_boundary_org_id": "org_01m83wyz0qe008ch01tnv1jht8",
+    "qa_boundary_org_audit_event_count": 0,
+    "default_org_audit_event_count": 167,
+    "qa_project_created_event_count": 0,
+    "qa_environment_created_event_count": 0
+  },
+  "source_wiring": {
+    "unified_server_constructor": "cmd/tanpopo/serve.go builds adminhttp.ServerConfig without ConfigPath",
+    "backup_handler_requirement": "internal/admin/http/ops_lifecycle.go requires non-empty ConfigPath, LockfilePath and installer artifact root"
+  },
+  "findings": ["DEF-007", "DEF-008"],
+  "limitations": "CLI backup archive integrity verification failed, so it was not restored. No restore was run against the active database. No production data or environment was involved."
+}

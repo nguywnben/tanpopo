@@ -1,0 +1,50 @@
+Skip to main content
+Tanpopo
+Monitor
+Overview
+Traces
+FinOps
+Gateway
+Providers
+Models
+Routes & Policies
+Ecosystem
+Extensions
+MCP Hub
+Playground
+Governance
+Access & Keys
+Security
+Operations
+qa-fresh-cp38@example.invalid
+Operator, Org Owner
+QA Fresh Install CP38
+/
+qa-fresh-project
+/
+dev
+(Active workspace scope)
+Jump
+Ctrl
+K
+Language
+English
+Kill Switch
+Request traces
+
+Metadata-only execution telemetry. Zero prompt or completion bytes stored.
+
+Metadata-Only
+Request ID lookup
+Model
+Error code
+Search
+Recent requests
+2
+Request ID	Route	Status	Error	Metering	Duration	Timestamp
+
+trc_01m84brzk0e00ag7sgh6snre93
+	llama3-2-qa-local	200	—	Exact	11 ms	2:08:20 PM
+
+trc_01m84brzjne00bkvcswa858hbj
+	/v1/models	200	—	Exact	0 ms	2:08:20 PM

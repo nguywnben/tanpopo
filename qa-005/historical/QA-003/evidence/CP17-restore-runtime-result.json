@@ -1,0 +1,56 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "restored isolated SQLite on 18112",
+  "health": "ok",
+  "login": "success",
+  "organizationsVisible": [
+    "Default Organization"
+  ],
+  "deletedOrganizationIdsAbsent": true,
+  "uiVerification": [
+    {
+      "status": 200,
+      "body": {
+        "intact": true,
+        "checked_events_count": 225,
+        "first_broken_seq_no": null
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "intact": true,
+        "checked_events_count": 6,
+        "first_broken_seq_no": null
+      }
+    },
+    {
+      "status": 200,
+      "body": {
+        "intact": true,
+        "checked_events_count": 2,
+        "first_broken_seq_no": null
+      }
+    }
+  ],
+  "retainedDeletedTenantVerification": [
+    {
+      "tenant": "A",
+      "status": 200,
+      "body": {
+        "intact": true,
+        "checked_events_count": 6,
+        "first_broken_seq_no": null
+      }
+    },
+    {
+      "tenant": "B",
+      "status": 200,
+      "body": {
+        "intact": true,
+        "checked_events_count": 2,
+        "first_broken_seq_no": null
+      }
+    }
+  ]
+}

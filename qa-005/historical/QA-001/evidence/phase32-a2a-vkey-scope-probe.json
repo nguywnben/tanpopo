@@ -1,0 +1,38 @@
+{
+  "date": "2026-11-23",
+  "browser": "Chromium",
+  "runtime": "8081 configured HTTPS origin 8444",
+  "keyName": "qa-cp32-a2a-scope-boundary",
+  "create": {
+    "status": 201,
+    "id": "vky_01m845xnh1e0098g0hpzzs4qnw",
+    "secretIssued": true,
+    "version": 1
+  },
+  "dataPlane": {
+    "path": "GET /a2a/agents",
+    "noAuthorization": {
+      "status": 404,
+      "code": "resource_not_found",
+      "message": "A2A plane is disabled.",
+      "keys": [
+        "error"
+      ]
+    },
+    "withIssuedVirtualKey": {
+      "status": 404,
+      "code": "resource_not_found",
+      "message": "A2A plane is disabled.",
+      "keys": [
+        "error"
+      ]
+    }
+  },
+  "revocation": {
+    "status": 200,
+    "code": null,
+    "state": "REVOKED"
+  },
+  "secretPersisted": false,
+  "notes": "The issuance form exposed model and MCP allowlist controls but no A2A discover/delegate grants. Secret was held only in browser-script memory and the QA key was revoked after the probe."
+}

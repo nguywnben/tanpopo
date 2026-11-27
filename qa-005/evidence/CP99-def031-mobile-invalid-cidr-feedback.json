@@ -1,0 +1,50 @@
+{
+  "checkpoint": "CP99",
+  "finding": "DEF-031",
+  "classification": "PASS (scoped exact-RC7 mobile validation and feedback)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156 at 375x844",
+  "principal": "ORG_OWNER (qa005-owner@example.invalid)",
+  "cases": [
+    {
+      "surface": "MCP registration drawer",
+      "private_endpoint": true,
+      "allowed_cidrs": "127.0.0.1/33",
+      "visible_inline_message": "Private upstream access requires explicit non-wildcard CIDRs.",
+      "screenshot": "screenshots/CP99-def031-mcp-invalid-cidr-mobile.png",
+      "registration_post_count": 0,
+      "list_readback_http": 200,
+      "matching_rows": 0,
+      "endpoint": "http://127.0.0.1:19996/mcp",
+      "listener_present": false
+    },
+    {
+      "surface": "A2A registration drawer",
+      "private_endpoint": true,
+      "allowed_cidrs": "0.0.0.0/0",
+      "visible_inline_message": "Private upstream access requires explicit non-wildcard CIDRs.",
+      "screenshot": "screenshots/CP99-def031-a2a-invalid-cidr-mobile.png",
+      "registration_post_count": 0,
+      "list_readback_http": 200,
+      "matching_rows": 0,
+      "endpoint": "http://127.0.0.1:19997/a2a",
+      "listener_present": false
+    }
+  ],
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "page_errors": [],
+  "not_tested": [
+    "server-side rejection of these exact values",
+    "host-bit, empty, overlapping, overbroad, IPv6, and multiple CIDR inputs",
+    "corrected-valid retry",
+    "keyboard-only interaction",
+    "desktop and non-Chromium browser engines",
+    "other roles and backends",
+    "DNS rebinding, redirects, and data-plane SSRF behavior"
+  ],
+  "historical_evidence_preserved": true,
+  "gate_rel_07": "BLOCKED"
+}

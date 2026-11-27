@@ -1,0 +1,36 @@
+{
+  "checkpoint": "CP79",
+  "finding": "DEF-021",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "listener": "127.0.0.1:18162",
+    "database": "isolated SQLite clone",
+    "browser": "Chromium 156"
+  },
+  "principal": {
+    "email": "qa005-cp79-def021@example.invalid",
+    "kind": "HUMAN",
+    "role": "DEVELOPER",
+    "project_binding": "prj_01m8d6dbtxe008w7fphkgp2e24"
+  },
+  "steps": [
+    {"action": "Owner created project-bound Developer member in Console", "http_status": 201},
+    {"action": "Owner reissued one-time enrollment token through Console", "http_status": 201},
+    {"action": "Synthetic member submitted enrollment form in a separate browser context", "http_status": 200},
+    {"action": "New member reached signed-in Overview", "result": "PASS; visually inspected screenshot shows Developer identity and role"},
+    {"action": "Fresh Owner API readback after browser restart", "http_status": 200, "member_found": true, "enrollment_pending": false, "has_password": true, "role": "DEVELOPER", "project_binding_matches": true},
+    {"action": "Fresh Owner Console readback", "result": "PASS; member row shows Password set and Developer"}
+  ],
+  "classification": "PASS (scoped QA-005 retest)",
+  "not_tested": ["email delivery", "token expiry", "token replay", "cross-organization token rejection", "enrollment audit visibility", "password recovery", "role permission negatives", "other roles", "PostgreSQL", "other browsers", "accessibility"],
+  "evidence": [
+    "checkpoints/CP79-def021-local-enrollment.md",
+    "evidence/screenshots/CP79-def021-add-member-form.png",
+    "evidence/screenshots/CP79-def021-member-overview.png",
+    "evidence/screenshots/CP79-def021-persistent-member-row.png"
+  ],
+  "secret_handling": "Synthetic token and password were not saved or emitted. Token was held in memory for activation; password was discarded with the browser process.",
+  "product_code_modified": false,
+  "gate_rel_07": "BLOCKED"
+}

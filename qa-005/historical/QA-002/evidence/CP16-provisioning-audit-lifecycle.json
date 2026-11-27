@@ -1,0 +1,25 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated SQLite server 127.0.0.1:18084; real authenticated Org Owner session and CSRF-protected Admin API",
+  "synthetic_project": {
+    "id": "prj_01m852f6aye00a7a72vf4c96hn",
+    "slug": "qa002-audit-delete-cp16-mwtqihy2",
+    "create_status": 201,
+    "environment_id": "env_01m852f6b3e00agm1j7yyrjfyy",
+    "environment_slug": "audit-canary",
+    "environment_create_status": 201,
+    "delete_status": 200,
+    "project_present_after_delete": false,
+    "environment_present_after_delete": false
+  },
+  "audit_events": [
+    {"seq_no": 125, "event_type": "project.created", "target_id": "prj_01m852f6aye00a7a72vf4c96hn", "actor_kind": "PRINCIPAL", "entry_point": "admin_api", "metadata_contains_slug": true},
+    {"seq_no": 126, "event_type": "environment.created", "target_id": "env_01m852f6b3e00agm1j7yyrjfyy", "actor_kind": "PRINCIPAL", "entry_point": "admin_api", "metadata_contains_project_id_and_slug": true},
+    {"seq_no": 127, "event_type": "project.crypto_shredded", "target_id": "prj_01m852f6aye00a7a72vf4c96hn", "actor_kind": "PRINCIPAL", "entry_point": "admin_api", "metadata_contains_reason_and_confirm_slug": true}
+  ],
+  "audit_chain_verification": {"http_status": 200, "intact": true, "checked_events_count": 127, "first_broken_seq_no": null},
+  "visual_evidence": ["CP16-audit-project-delete.png"],
+  "visual_inspection": "PASS: real Security > Audit Log screen showed project.created, environment.created, and project.crypto_shredded rows with the authenticated principal actor and expected targets.",
+  "limitations": ["No injected storage failure", "No standalone organization create/delete", "No cross-tenant visibility test", "No four-eyes approval path"],
+  "gate": "GATE-REL-07 BLOCKED"
+}

@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "dry_run": true,
+  "matched_route": "qa004-mock",
+  "strategy": "PRIORITY_FAILOVER",
+  "eligible_candidates": 0,
+  "rejected_deployments": [
+    {
+      "stage": "HARD_COMPLIANCE_FILTER",
+      "rule_code": "DATA_RESIDENCY_MISMATCH",
+      "detail": "Deployment data region \"ON_PREM\" does not match requested data region \"US\"."
+    },
+    {
+      "stage": "HARD_COMPLIANCE_FILTER",
+      "rule_code": "CONNECTION_INACTIVE",
+      "detail": "Connection is in DRAFT state."
+    }
+  ]
+}

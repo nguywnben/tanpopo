@@ -1,0 +1,19 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated SQLite clone on 127.0.0.1:18116",
+  "role": "SECURITY_REVIEWER",
+  "synthetic_key": {
+    "name": "CP20 reviewer emergency revoke test",
+    "readable_in_console": true,
+    "state_before": "ACTIVE",
+    "state_after": "REVOKED",
+    "revocation_mode": "EMERGENCY_SECURITY"
+  },
+  "ui_feedback": "Virtual key revoked. 0 active streams severed.",
+  "database_readback": {
+    "state": "REVOKED",
+    "revocation_mode": "EMERGENCY_SECURITY",
+    "active_kill_switches_after_cleanup": 0
+  },
+  "plaintext_retained": false
+}

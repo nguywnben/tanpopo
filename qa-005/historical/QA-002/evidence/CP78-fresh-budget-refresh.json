@@ -1,0 +1,45 @@
+{
+  "beforeReload": {
+    "scope": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)",
+    "text": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m868q2jte00abmhf75asqts3\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m868q2jte00abmhf75asqts3\nSave"
+  },
+  "defaultAfterRefresh": {
+    "scope": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)",
+    "text": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m868q2jte00abmhf75asqts3\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m868q2jte00abmhf75asqts3\nSave"
+  },
+  "afterReload": {
+    "scope": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)",
+    "text": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.012001\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n1\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nPROJECT\nprj_01m868q2jte00abmhf75asqts3\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m868q2jte00abmhf75asqts3\nSave"
+  },
+  "projectId": "prj_01m868q2jte00abmhf75asqts3",
+  "apiReads": [
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m868q2jte00abmhf75asqts3&limit=100",
+      "budgets": [
+        {
+          "id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m868q2jte00abmhf75asqts3",
+          "period": "MONTHLY",
+          "hard_limit_micros": 2500000,
+          "version": 1
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "url": "/admin/v1/budgets?project_id=prj_01m868q2jte00abmhf75asqts3&limit=100",
+      "budgets": [
+        {
+          "id": "bgt_project_prj_01m868q2jte00abmhf75asqts3_monthly",
+          "scope_tier": "PROJECT",
+          "scope_id": "prj_01m868q2jte00abmhf75asqts3",
+          "period": "MONTHLY",
+          "hard_limit_micros": 2500000,
+          "version": 1
+        }
+      ]
+    }
+  ]
+}

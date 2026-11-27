@@ -1,0 +1,36 @@
+{
+  "key": {
+    "id": "vky_01m85e9trde00ab28c9p9a7mqw",
+    "name": "QA002 CP35 live probe revoke",
+    "state": "REVOKED",
+    "allowed_planes": "PROVIDER",
+    "allowed_models_json": "[\"*\"]",
+    "allowed_routes_json": "[\"*\"]",
+    "version": 2,
+    "revocation_mode": "STANDARD",
+    "revoked_at_ms": 1795479183414
+  },
+  "traces": [
+    {
+      "request_id": "trc_01m85eb8nre00aqm8awr540zxc",
+      "route_slug": "qa002-cp22-streamroute",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "virtual_key_id": "vky_01m85e9trde00ab28c9p9a7mqw",
+      "created_at_ms": 1795479151308
+    }
+  ],
+  "settlements": [
+    {
+      "request_id": "trc_01m85eb8nse00b8bwess9qdpfg",
+      "settled_at_ms": 1795479151299,
+      "plane": "PROVIDER",
+      "logical_model_slug": "qa002-cp22-streaming",
+      "usage_accuracy": "EXACT",
+      "input_tokens": 13,
+      "output_tokens": 10,
+      "total_cost_micros": 1,
+      "virtual_key_id": "vky_01m85e9trde00ab28c9p9a7mqw"
+    }
+  ]
+}

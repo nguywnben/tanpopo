@@ -1,0 +1,61 @@
+{
+  "trace_api": [
+    {
+      "request_id": "trc_01m89q0xsge00ac0xbr6md0p0j",
+      "plane": "PROVIDER",
+      "env_id": "env_01m895k8pee008b5ah423mhysr",
+      "virtual_key_id": "vky_01m89pzc3be00bv1xs8bf1hre2",
+      "route_slug": "qa004-embedding-vectors",
+      "deployment_id": "dpl_01m89pnes6e009ymwbvpnvr3mj",
+      "data_region": "ON_PREM",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "ttft_ms": null,
+      "duration_ms": 14,
+      "has_debug_payload": false,
+      "waterfall_stages": [
+        {
+          "stage": "Policy",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "ExtensionHook",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "Egress",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "ExtensionHook",
+          "duration_ms": 0,
+          "outcome": ""
+        },
+        {
+          "stage": "RouteAttempt",
+          "duration_ms": 0,
+          "outcome": ""
+        }
+      ],
+      "created_at": "2026-11-25T16:01:07.39Z"
+    }
+  ],
+  "usage_summary": [
+    {
+      "group_key": "QA004 embeddings scoped synthetic",
+      "exact_micro_usd": 0,
+      "estimated_micro_usd": 0,
+      "exact_request_count": 1,
+      "estimated_request_count": 0,
+      "unmetered_request_count": 0
+    }
+  ],
+  "tracesScreen": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nRequest traces\n\nMetadata-only execution telemetry. Zero prompt or completion bytes stored.\n\nMetadata-Only\nRequest ID lookup\nModel\nError code\nSearch\nRecent requests\n5\nRequest ID\tRoute\tStatus\tError\tMetering\tDuration\tTimestamp\n\ntrc_01m89q0xsge00ac0xbr6md0p0j\n\tqa004-embedding-vectors\t200\t—\tExact\t14 ms\t4:01:07 PM\n\ntrc_01m897e3q4e00awxk54kwsybxn\n\tqa004-loopback\t429\tproject_budget_exceeded\tExact\t1 ms\t11:28:42 AM\n\ntrc_01m897atmbe0093dsa7amefgw7\n\tqa004-loopback\t200\t—\tExact\t13 ms\t11:26:54 AM\n\ntrc_01m896n9hwe00bw0djbr2gbwvj\n\tqa004-loopback\t200\t—\tExact\t66 ms\t11:15:09 AM\n\ntrc_01m896ffnqe008n4g8t0qmnqb3\n\tqa004-loopback\t200\t—\tExact\t10 ms\t11:11:58 AM",
+  "finopsScreen": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nFinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n1\nChargeback\nExact settled\n$0.000002\nProvider-reported usage\nEstimated settled\n$0.000001\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n2\nGroup by\nVirtual Key\nVirtual Key\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nQA004 embeddings scoped synthetic\t\nExact\n$0.000000\n\t\nEstimated\n$0.000000\n\t1 / 0\t\n0\n\nQA004 native full journey\t\nExact\n$0.000002\n\t\nEstimated\n$0.000001\n\t2 / 1\t\n0",
+  "response_header_request_id": "req_01m89q0xsee008cz8k18n1z8z3"
+}

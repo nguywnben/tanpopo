@@ -1,0 +1,20 @@
+{
+  "api": [
+    {
+      "method": "GET",
+      "path": "/models",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/models",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/models",
+      "status": 201
+    }
+  ],
+  "visibleText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-fresh-cp38@example.invalid\nOperator, Org Owner\nQA Fresh Install CP38\n/\nqa-fresh-project\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nModels & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\nLogical Models\n1\nRegistered logical model \"llama3-2-qa-local\" as DECLARED.\nData region\nAll regions\nHealth state\nAll states\nEnvironment deployments\n0\nNo deployments found\nBind a logical model to a provider connection with an integer nano-USD rate card.\nNo deployments found Bind a logical model to a provider connection with an integer nano-USD rate card."
+}

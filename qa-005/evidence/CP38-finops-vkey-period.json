@@ -1,0 +1,14 @@
+{
+  "checkpoint": "CP38",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {"artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9", "storage": "SQLite", "base_url": "http://127.0.0.1:18145", "browser": "Chromium 1440x1000", "role": "Owner / Operator", "scope": "primary project"},
+  "defect": "DEF-018",
+  "classification": "PASS (scoped)",
+  "budget_list_http_status": 200,
+  "virtual_key_rows": [
+    {"scope_tier": "VIRTUAL_KEY", "period_api": "TOTAL_LIFETIME", "period_ui": "Total lifetime"},
+    {"scope_tier": "VIRTUAL_KEY", "period_api": "TOTAL_LIFETIME", "period_ui": "Total lifetime"}
+  ],
+  "screenshot": "screenshots/CP38-finops-vkey-period.png",
+  "limitations": ["Two currently listed Virtual Key rows only; historical five-row and fourteen-row failures remain preserved.", "Other roles, exports, API clients, expired Playground keys, pagination and PostgreSQL were not tested.", "This narrow non-reproduction does not establish broad resolution of DEF-018."]
+}

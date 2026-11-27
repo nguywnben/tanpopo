@@ -1,0 +1,40 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 artifact 45581179274 at 127.0.0.1:18132",
+  "memberProvisioning": {
+    "createdThroughOwnerConsole": true,
+    "selectedRole": ["TEAM_ADMIN"],
+    "selectedProject": "qa004-scope-invite-project",
+    "createStatus": 201,
+    "enrollmentTokenIssuedStatus": 201,
+    "enrollmentUiStatus": 200,
+    "sessionRoles": ["TEAM_ADMIN"],
+    "tokenSavedInEvidence": false
+  },
+  "teamAdminOnly": {
+    "projectList": {"status": 200, "slugs": ["qa004-scope-invite-project"]},
+    "assignedEnvironmentList": {"status": 200, "slugs": ["dev"]},
+    "siblingEnvironmentRead": {"status": 403, "error": "insufficient_role_permission"},
+    "scopedMemberList": {"status": 200, "count": 4},
+    "unfilteredMemberList": {"status": 403, "error": "insufficient_role_permission"},
+    "sameProjectDeveloperInvite": {
+      "submittedThroughConsole": true,
+      "developer": "qa004-cp51-teamadmin-only-added@example.invalid",
+      "assignedProject": "qa004-scope-invite-project",
+      "persistedInScopedListAfterRefresh": true,
+      "enrollmentTokenSavedInEvidence": false
+    },
+    "siblingProjectMemberCreate": {"status": 403, "error": "insufficient_role_permission", "memberCreated": false}
+  },
+  "def054TeamAdminOnlyReproduction": {
+    "console": "Routes & Policies shows a red insufficient role permission banner and a zero-route empty state.",
+    "routesApi": {"status": 200, "count": 0},
+    "modelsApi": {"status": 200, "count": 0},
+    "deploymentsApi": {"status": 200, "count": 0},
+    "unscopedEffectivePolicyApi": {"status": 403, "error": "insufficient_role_permission"},
+    "projectEffectivePolicyApi": {"status": 200},
+    "environmentEffectivePolicyApi": {"status": 200},
+    "interpretation": "This empty test project contained no route/model/deployment rows to prove additional data loss. The global error banner follows an ancillary unscoped organization-policy denial while the scoped policy/catalog reads succeed. This supports existing DEF-054 and is not assigned a duplicate ID."
+  },
+  "coverage": "PASS (scoped) for pure Team Admin activation, assigned project/environment visibility, same-project member creation, refresh persistence and sibling-project read/write denial. FAIL (scoped) for the DEF-054 misleading Routes page permission banner after a denied unscoped policy read. Other Team Admin resources, multiple project scopes, role edits/removal, nonempty route/catalog data in this role-only runtime, and other roles remain UNVERIFIED."
+}

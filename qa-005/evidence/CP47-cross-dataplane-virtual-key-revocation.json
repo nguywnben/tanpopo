@@ -1,0 +1,49 @@
+{
+  "checkpoint": "CP47",
+  "scope": "Virtual Key emergency revocation propagation from Control Plane to independent Data Plane",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": {
+    "control_plane": "127.0.0.1:18151",
+    "data_planes": ["127.0.0.1:18152", "127.0.0.1:18153"],
+    "storage": "isolated PostgreSQL 16",
+    "fast_state": "three-node Valkey 8.1 Cluster; cluster_state=ok",
+    "browser": "Chromium; synthetic QA Owner",
+    "provider": "none; synthetic model intentionally has no route/deployment"
+  },
+  "procedure": [
+    "Issue one environment-bound PROVIDER Virtual Key in the real Access & Keys UI; keep the one-time secret in process memory only.",
+    "Send a valid synthetic no-route completion request to Data Plane 18152.",
+    "Use the real UI Actions > Revoke key > Revoke (graceful drain) workflow on the Control Plane.",
+    "Replay the same key on independent Data Plane 18153 and read back key metadata from the UI/API."
+  ],
+  "key": {
+    "id": "vky_01m8d0th1ae009f25bajc48zn0",
+    "last_four": "in0K",
+    "plaintext_recorded": false,
+    "final_state": "REVOKED",
+    "final_version": 2,
+    "revocation_http": 200,
+    "severed_streams_count": 0
+  },
+  "before_revocation": {
+    "data_plane": "127.0.0.1:18152",
+    "http": 503,
+    "error": "no_compliant_deployment_available",
+    "request_id": "req_01m8d0thxfe00bbmrkk2e359v1",
+    "meaning": "authentication/admission passed; no upstream route existed, so no provider dispatch occurred"
+  },
+  "after_revocation": {
+    "data_plane": "127.0.0.1:18153",
+    "http": 401,
+    "error": "invalid_virtual_key",
+    "request_id": "req_01m8d0tkjhe00a2bp1s5x2wmp6",
+    "meaning": "independent Data Plane rejected replay after Control Plane revocation"
+  },
+  "screenshot": "evidence/screenshots/CP47-vkey-revoked.png",
+  "visual_inspection": "Access & Keys visibly reports the tested key as Revoked and the revocation success notice. The screenshot contains only metadata, never the one-time plaintext.",
+  "limitations": [
+    "One key, two Data Planes, one orderly graceful revocation, one replay.",
+    "Sub-second propagation bound, active stream severance, concurrent request race, Valkey outage/failover, PostgreSQL notification fallback, multiple tenants/roles, and production multi-host networking remain unverified."
+  ]
+}

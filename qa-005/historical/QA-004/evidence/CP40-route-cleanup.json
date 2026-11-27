@@ -1,0 +1,29 @@
+{
+  "route_rows": [
+    "Route slugStrategyTarget chainTarget healthActions",
+    "qa004-loopbackPriority failoverQA004 synthetic Ollama / qa004-mock · 9gam7qHealthy"
+  ],
+  "api": {
+    "data": [
+      {
+        "id": "rte_01m896capve00bxj3fmedpv16a",
+        "slug": "qa004-loopback",
+        "env_id": "env_01m895k8pee008b5ah423mhysr",
+        "strategy": "PRIORITY_FAILOVER",
+        "allowed_data_regions": [],
+        "max_failover_hops": 3,
+        "request_timeout_ms": 60000,
+        "targets": [
+          {
+            "deployment_id": "dpl_01m8969kjme00br1mjja9gam7q",
+            "priority_order": 1,
+            "weight": 100
+          }
+        ],
+        "version": 1,
+        "updated_at": "2026-11-25T11:10:15.259Z"
+      }
+    ],
+    "has_more": false
+  }
+}

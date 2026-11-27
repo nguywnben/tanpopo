@@ -1,0 +1,53 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084 isolated QA Console",
+  "product_source_changed": false,
+  "workflow": "Marketplace stage → permission review → leave unapproved → uninstall candidate",
+  "package": {
+    "catalog_name": "OpenAI-Compatible Gateway & vLLM/TGI Adapter",
+    "package_id": "ext_01m86r6qn3e0080ydkfp9tp6xz",
+    "version": "0.1.0",
+    "origin_trust": "official",
+    "publisher_signature": "unsigned",
+    "execution_tier": "declarative"
+  },
+  "stage": {
+    "ui_action": "Stage for review",
+    "http_status": 202,
+    "lifecycle_after_stage": "Pending Permission Approval",
+    "active_version": null,
+    "candidate_version": "0.1.0",
+    "candidate_permissions_include": {
+      "hosts": ["127.0.0.1", "lmstudio.local", "localhost", "tgi.internal", "vllm.internal"],
+      "private_ip_access": true,
+      "secret_slot": "api_key",
+      "execution_tier": "DECLARATIVE_T1"
+    },
+    "provider_credential_entered": false,
+    "provider_call_made": false
+  },
+  "permission_review": {
+    "explicit_acknowledgement_present": true,
+    "acknowledgement_checked": false,
+    "approve_and_activate_disabled_before_consent": true,
+    "approval_or_activation_performed": false,
+    "visual_inspection": "Permission delta and disabled-state action were visually inspected; candidate remained disabled."
+  },
+  "cleanup": {
+    "ui_action": "Uninstall package",
+    "http_status": 204,
+    "audit_reason_used": "QA-only synthetic cleanup reason; exact text omitted from evidence",
+    "candidate_row_absent_after_refresh": true,
+    "installed_count_returned_to": 2
+  },
+  "result": "PASS, scoped permission review/consent gate and safe cleanup; no defect found",
+  "limits": [
+    "No package permission was approved and the adapter was never activated.",
+    "No runtime invocation, secret broker, private-host egress, signature validation, multi-reviewer, role-denial, rollback, or restart/lockfile behavior was exercised.",
+    "Evidence excludes credentials, tokens, provider keys, archives, databases, and raw logs."
+  ],
+  "screenshots": [
+    "CP109-extension-permission-review.png",
+    "CP109-extension-candidate-cleanup.png"
+  ]
+}

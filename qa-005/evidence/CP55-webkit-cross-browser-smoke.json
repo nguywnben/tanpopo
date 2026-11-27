@@ -1,0 +1,57 @@
+{
+  "checkpoint": "CP55",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "recovered isolated PostgreSQL 16 / 3-node Valkey 8.1 stack; Control Plane 127.0.0.1:18151",
+  "browser": "Playwright WebKit/WPE 26.5 on Linux; Playwright 1.62.1; rootless extracted browser dependencies in /tmp",
+  "secure_origin": "HTTPS reverse proxy 127.0.0.1:18443 to the same loopback runtime using a self-signed, ephemeral 127.0.0.1 test certificate; Playwright context explicitly ignored only this test certificate",
+  "flows": [
+    {
+      "identity": "synthetic Owner",
+      "steps": "Signed in through the real Console, allowed the response to set its Secure __Host-tanpopo_admin_session cookie, opened Overview.",
+      "auth_login_status": 200,
+      "auth_session_status": 200,
+      "cookie_attributes": {"name": "__Host-tanpopo_admin_session", "secure": true, "http_only": true, "same_site": "Lax", "value_recorded": false},
+      "result": "PASS (scoped Owner login/session and Overview render)"
+    },
+    {
+      "identity": "pure FINOPS_VIEWER",
+      "steps": "Signed in through the real Console at 375x812, opened FinOps, called read-only role endpoints, and navigated to the Traces route.",
+      "finops_ui": "rendered; usage summary and budgets calls returned HTTP 200",
+      "direct_gets": [
+        {"path": "/admin/v1/budgets", "status": 200},
+        {"path": "/admin/v1/traces?limit=10", "status": 403, "error": "insufficient_role_permission"},
+        {"path": "/admin/v1/virtual-keys", "status": 403, "error": "insufficient_role_permission"},
+        {"path": "/admin/v1/kill-switches", "status": 403, "error": "insufficient_role_permission"}
+      ],
+      "traces_ui": "Access restricted",
+      "viewport": {"width": 375, "document_scroll_width": 375, "no_page_level_horizontal_overflow": true},
+      "result": "PASS (scoped WebKit rendering, login, FinOps role boundary, and 375px viewport)"
+    }
+  ],
+  "initial_http_attempt": {
+    "origin": "plain HTTP loopback, 127.0.0.1:18151",
+    "observation": "WebKit did not store the Secure __Host session cookie; auth/login returned 200 but subsequent auth/session returned 401.",
+    "resolution": "Repeated on HTTPS loopback. Secure cookie was stored and auth/session returned 200.",
+    "classification": "test-origin configuration limitation; not a product defect because the app intentionally sets Secure session cookies"
+  },
+  "firefox_attempt": {
+    "browser": "Playwright Firefox 153.0 / revision 1538",
+    "result": "BLOCKED: Firefox process launched but Playwright did not receive startup, timing out after 10 seconds.",
+    "diagnostics": ["Sandbox cannot write /proc/self/uid_map (EROFS)", "headless SWGL failed to map the default framebuffer"],
+    "host_dependencies": "Playwright install-deps required root; su authentication was unavailable and the managed apt lists directory is read-only. Firefox remains unverified."
+  },
+  "screenshots": [
+    "../evidence/screenshots/CP55-webkit-owner-overview.png",
+    "../evidence/screenshots/CP55-webkit-finops-viewer-375.png",
+    "../evidence/screenshots/CP55-webkit-viewer-traces-375.png"
+  ],
+  "visual_inspection": "All three screenshots were opened and visually inspected. Owner Overview rendered; the 375px FinOps Viewer screen was readable and fit the viewport; the restricted Traces view clearly showed the denial alert.",
+  "limitations": [
+    "Playwright WebKit/WPE is an engine smoke on Linux, not an actual Safari browser or macOS/iOS test.",
+    "Firefox is blocked as recorded above. Google Chrome and Microsoft Edge branded builds, and the required latest two stable releases for each vendor, remain unverified.",
+    "No product source changes and no paid provider usage."
+  ],
+  "new_defect": false,
+  "release_gate": "GATE-REL-07 remains BLOCKED"
+}

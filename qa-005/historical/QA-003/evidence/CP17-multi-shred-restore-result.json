@@ -1,0 +1,87 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated clone of SQLite RC5 at 127.0.0.1:18111; restored copy on 127.0.0.1:18112",
+  "organizations": [
+    {
+      "label": "A",
+      "displayName": "QA003 Multi-shred A",
+      "idSuffix": "pwmr3jhe",
+      "shredConfirmedInUI": true,
+      "organizationRows": {
+        "organizations": 0,
+        "org_encryption_keys": 0,
+        "projects": 0,
+        "environments": 0,
+        "virtual_keys": 0,
+        "principals": 0,
+        "role_bindings": 0,
+        "secret_credentials": 0,
+        "project_encryption_keys": 0
+      },
+      "retainedAuditEvents": [
+        "organization.created",
+        "project.created",
+        "environment.created",
+        "virtual_key.created",
+        "secret_credential.created",
+        "organization.crypto_shredded"
+      ],
+      "productAuditVerify": {
+        "httpStatus": 200,
+        "intact": true,
+        "checkedEvents": 6
+      }
+    },
+    {
+      "label": "B",
+      "displayName": "QA003 Multi-shred B",
+      "idSuffix": "21g09wtm",
+      "shredConfirmedInUI": true,
+      "organizationRows": {
+        "organizations": 0,
+        "org_encryption_keys": 0,
+        "projects": 0,
+        "environments": 0,
+        "virtual_keys": 0,
+        "principals": 0,
+        "role_bindings": 0,
+        "secret_credentials": 0,
+        "project_encryption_keys": 0
+      },
+      "retainedAuditEvents": [
+        "organization.created",
+        "organization.crypto_shredded"
+      ],
+      "productAuditVerify": {
+        "httpStatus": 200,
+        "intact": true,
+        "checkedEvents": 2
+      }
+    }
+  ],
+  "survivingOrganizations": 1,
+  "survivingSyntheticCredentialMetadata": [
+    {
+      "name": "QA003 synthetic restore credential",
+      "kind": "API_KEY",
+      "version": 1,
+      "fingerprintSuffix": "c577",
+      "plaintextReturned": false
+    }
+  ],
+  "archive": {
+    "backupId": "ee510a449fe5f8678d3cbe06e48ec9fc",
+    "sha256": "b40b2fa194e6a9c52d23968211a5e8dfddf46dcb08fb9e75d825aa65607541b4",
+    "sizeBytes": 62556,
+    "verify": "PASS; authenticated 4 files",
+    "restoreVerifySecretsDecrypt": "PASS",
+    "restoredRuntimeHealth": "PASS; HTTP 200",
+    "freshOwnerLogin": "PASS"
+  },
+  "negativeControls": {
+    "wrongKeyRestore": "Rejected; exit 14; authentication failure",
+    "wrongKeyDestination": "absent",
+    "tamperedArchiveRestore": "Rejected; exit 14; invalid archive header",
+    "tamperedDestination": "absent"
+  }
+}

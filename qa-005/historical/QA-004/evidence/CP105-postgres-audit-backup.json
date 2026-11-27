@@ -1,0 +1,51 @@
+{
+  "ids": {
+    "organization": {
+      "id": "org_01m8awayeke00bfff33wkn2g8s",
+      "slug": "qa004-cp105-postgresql",
+      "name": "QA004 CP105 PostgreSQL",
+      "status": "ACTIVE",
+      "min_plugin_trust": "ANY_APPROVED",
+      "four_eyes_enabled": false,
+      "version": 1,
+      "created_at": "2026-11-26T02:53:12.956Z"
+    },
+    "project": {
+      "id": "prj_01m8awayeke00bfgn140arcw3y",
+      "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+      "slug": "default",
+      "name": "default",
+      "version": 1,
+      "created_at": "2026-11-26T02:53:12.956Z"
+    },
+    "environments": {
+      "status": 200,
+      "data": {
+        "data": [
+          {
+            "id": "env_01m8awayeke00bfh45kd4epg65",
+            "org_id": "org_01m8awayeke00bfff33wkn2g8s",
+            "project_id": "prj_01m8awayeke00bfgn140arcw3y",
+            "slug": "dev",
+            "name": "dev",
+            "created_at": "2026-11-26T02:53:12.956Z"
+          }
+        ]
+      }
+    },
+    "auditVerify": {
+      "status": 403,
+      "body": {
+        "error": {
+          "code": "csrf_validation_failed",
+          "type": "permission_error",
+          "message": "CSRF token or origin validation failed",
+          "request_id": "req_01m8awet5je008y47be846rmfa",
+          "retryable": false
+        }
+      }
+    }
+  },
+  "auditUi": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 6 events.\nImmutable audit events\n6\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#6\tauth.login_succeeded\tprc_01m8awayeke00bfjv073fafrb6\t\nprincipal\nprc_01m8awayeke00bfjv073fafrb6\n\t2:55:19 AM\t\nInspect\n\n#5\tauth.login_succeeded\tprc_01m8awayeke00bfjv073fafrb6\t\nprincipal\nprc_01m8awayeke00bfjv073fafrb6\n\t2:54:10 AM\t\nInspect\n\n#4\tauth.login_succeeded\tprc_01m8awayeke00bfjv073fafrb6\t\nprincipal\nprc_01m8awayeke00bfjv073fafrb6\n\t2:53:13 AM\t\nInspect\n\n#3\tenvironment.created\tprc_01m8awayeke00bfjv073fafrb6\t\nenvironment\nenv_01m8awayeke00bfh45kd4epg65\n\t2:53:12 AM\t\nInspect\n\n#2\tproject.created\tprc_01m8awayeke00bfjv073fafrb6\t\nproject\nprj_01m8awayeke00bfgn140arcw3y\n\t2:53:12 AM\t\nInspect\n\n#1\torganization.created\tprc_01m8awayeke00bfjv073fafrb6\t\norganization\norg_01m8awayeke00bfff33wkn2g8s\n\t2:53:12 AM\t\nInspect",
+  "backupUi": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nEncrypted backups (.tpop.enc)\n0\nCreate encrypted backup\nEncrypted backups unavailable on this host\nConsole snapshot backups currently support SQLite storage only; use PostgreSQL backup tooling for PostgreSQL deployments\nNo backup receipts recorded\nBackup receipts are recorded as immutable SYSTEM audit events."
+}

@@ -1,0 +1,10 @@
+{
+  "binary": "/tmp/qa-tools/tanpopo",
+  "rootHelpExit": 0,
+  "configShowExit": 0,
+  "configShowOutputClass": "local config command help; no JSON/server configuration data",
+  "configShowOutputTail": "Validate and reconcile declarative configuration\n\nUsage:\n  tanpopo config [flags]\n  tanpopo config [command]\n\nAvailable Commands:\n  reconcile   Validate tanpopo.yaml and immutable tanpopo.lock, then apply atomically\n\nFlags:\n  -h, --help   help for config\n\nGlobal Flags:\n      --lang string     Display language (auto or locale code such as en, vi, ja, zh-Hans) (default \"auto\")\n      --output string   Output format (table|json|yaml) (default \"table\")\n\nUse \"tanpopo config [command] --help\" for more information about a command.\n",
+  "rootHasDuplicateConfigGroups": true,
+  "reconcileHelpContainsSubcommand": true,
+  "reconcileExit": 0
+}

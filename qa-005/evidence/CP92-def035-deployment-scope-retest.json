@@ -1,0 +1,46 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER",
+  "scopes": [
+    {
+      "name": "organization only",
+      "selected_scope": "QA005 Org / No project / No env",
+      "ui_rows": 0,
+      "ui_empty_state": "No deployments found",
+      "api": {"general_deployments_request": false, "health_filter_request_http": 200, "health_filter_rows": 0},
+      "screenshot": "CP92-def035-owner-org-only.png"
+    },
+    {
+      "name": "project without environment",
+      "selected_scope": "QA005 Org / QA005 No Budget Project / No env",
+      "project_id": "prj_01m8d6dbtxe008w7fphkgp2e24",
+      "environment_id_in_all_rows": "env_01m8d6f78xe00a9w53vt41rnqg",
+      "ui_heading": "All environment deployments",
+      "ui_rows": 5,
+      "environment_label_shown_on_each_row": "QA005 Budgetless Dev",
+      "api": {"request": "GET /admin/v1/deployments?env_id=env_01m8d6f78xe00a9w53vt41rnqg&project_id=prj_01m8d6dbtxe008w7fphkgp2e24&limit=100", "http": 200, "count": 5, "all_rows_match_selected_project_environment": true},
+      "screenshot": "CP92-def035-owner-project-noenv.png"
+    },
+    {
+      "name": "populated project and environment control",
+      "selected_scope": "QA005 Org / Initial Project / dev",
+      "project_id": "prj_01m8cj8phze00a0s2ha55vm8wt",
+      "environment_id": "env_01m8cj8phze00a0t3c590b5mdw",
+      "ui_rows": 5,
+      "api": {"request": "GET /admin/v1/deployments?env_id=env_01m8cj8phze00a0t3c590b5mdw&project_id=prj_01m8cj8phze00a0s2ha55vm8wt&limit=100", "http": 200, "count": 5, "all_rows_match_selected_project_environment": true},
+      "screenshot": "CP92-def035-owner-initial-project.png"
+    }
+  ],
+  "product_writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "classification": "PASS (scoped current-workspace isolation behavior; historical QA-002 FAIL and QA-004 PARTIAL retained)",
+  "limitations": [
+    "Organization-only screen showed zero rows and made no general deployments collection request; no organization-wide listing contract is inferred.",
+    "Other roles, destructive actions, cross-organization data, in-flight scope races, pagination, alternate storage engines and browsers remain unverified."
+  ],
+  "gate_rel_07": "BLOCKED"
+}

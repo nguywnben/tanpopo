@@ -1,0 +1,20 @@
+{
+  "keys": [
+    {
+      "id": "vky_01m8ahvwnje00atwgawpv6xfqw",
+      "state": "CREATED_ACTIVE",
+      "allowed_planes": [
+        "PROVIDER"
+      ],
+      "allowed_routes": [
+        "/v1/chat/completions"
+      ]
+    }
+  ],
+  "baseline": {
+    "status": 503,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"code\":\"no_compliant_deployment_available\",\"type\":\"residency_unavailable_error\",\"message\":\"Deployment data region \\\"ON_PREM\\\" does not match requested data region \\\"US\\\". (policy_denied_region)\",\"request_id\":\"req_01m8ahvwybe00bs56mngg9sr29\",\"retryable\":true}}\n"
+  },
+  "secret_length": 42
+}

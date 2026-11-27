@@ -1,0 +1,11 @@
+{
+  "installed_after_cleanup": [
+    {
+      "package_id": "@tanpopo/ollama",
+      "state": "ENABLED_ACTIVE",
+      "signature_verified": true,
+      "origin_trust_tier": "official"
+    }
+  ],
+  "screen": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nExtensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\next_01m89qpt3qe00avbbvnxk4cf3x uninstall completed.\nInstalled packages\n1\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\n@tanpopo/ollama\next_01m895ph2ge00a3cr388bdwbt3\nActive: 0.1.0\n\tActive\tOfficial\tSignature verified (2cfb21ec9faf)\tdeclarative\t"
+}

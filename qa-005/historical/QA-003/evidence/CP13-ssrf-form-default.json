@@ -1,0 +1,31 @@
+{
+  "visibleInputs": [
+    {
+      "type": "text",
+      "checked": false,
+      "placeholder": "",
+      "value": ""
+    },
+    {
+      "type": "url",
+      "checked": false,
+      "placeholder": "",
+      "value": ""
+    },
+    {
+      "type": "checkbox",
+      "checked": true,
+      "placeholder": ""
+    },
+    {
+      "type": "text",
+      "checked": false,
+      "placeholder": "127.0.0.1/32, 10.20.0.0/24",
+      "value": "127.0.0.1/32"
+    }
+  ],
+  "adminCookieNames": [
+    "__Host-tanpopo_admin_session"
+  ],
+  "cookieSecure": true
+}

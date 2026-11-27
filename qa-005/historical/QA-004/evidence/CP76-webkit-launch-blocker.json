@@ -1,0 +1,15 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "attempt": "Launch exact-RC6 authenticated webhook drawer retest in Playwright WebKit at 375x844.",
+  "outcome": "BLOCKED before browser page creation",
+  "error": "Playwright host dependency validation reports libGLESv2.so.2 missing.",
+  "diagnostics": {
+    "browser_bundle_present": "/tmp/qa004-browsers/webkit-2336",
+    "dependency_tree_present": "/tmp/qa004-browser-deps/usr/lib/x86_64-linux-gnu/libGLESv2.so.2",
+    "attempted_ld_library_path": "/tmp/qa004-browser-deps/usr/lib/x86_64-linux-gnu:/tmp/qa004-browser-deps/lib/x86_64-linux-gnu",
+    "result": "Playwright still rejects launch during dependency validation. No page loaded and no WebKit behavior is inferred."
+  },
+  "additional_alternative": "Managed environment advertises remote desktop support, but no desktop JavaScript/computer-use tool is available in this chat; environment status reports remote_desktop enabled with state unknown.",
+  "required_infrastructure": "A Playwright-supported WebKit/WPE installation whose native dependencies are registered in the host linker path, or an available authorized shared desktop browser control tool.",
+  "secrets_or_product_changes": "None"
+}

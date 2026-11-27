@@ -1,0 +1,84 @@
+{
+  "task_id": "tsk_01m864pfmre0080qa9wxgecpd1",
+  "create_status": 201,
+  "initial_state": "input-required",
+  "initial_get": {
+    "status": 200,
+    "state": "input-required",
+    "hold": 5000
+  },
+  "ui_before": "tsk_01m864pfmre0080qa9wxgecpd1\nqa002-cp68-private-agent\nSynthetic agent needs approval input\n\tInput required\t1 / 5\tUS\t$0.005000\t$0.000000\t\nResume\nCancel",
+  "ui_after_refresh": "tsk_01m864pfmre0080qa9wxgecpd1\nqa002-cp68-private-agent\nSynthetic agent needs approval input\n\tInput required\t1 / 5\tUS\t$0.005000\t$0.000000\t\nResume\nCancel",
+  "cancel_api": [
+    {
+      "method": "POST",
+      "status": 200,
+      "body": {
+        "task_id": "tsk_01m864pfmre0080qa9wxgecpd1",
+        "target_agent_id": "agt_01m8641yq4e00a440gccs7v6x0",
+        "target_agent_slug": "qa002-cp68-private-agent",
+        "state": "canceled",
+        "hop_count": 1,
+        "call_chain_ids": [
+          "agt_01m8641yq4e00a440gccs7v6x0"
+        ],
+        "trace_root_id": "qa002-cp69-cancel",
+        "enforced_region": "US",
+        "sub_budget_hold_micros": 5000,
+        "reservation_id": "rsv_01m864pfmre0080r83ca6ed0hx",
+        "version": 4,
+        "created_at": "2026-11-24T06:43:07.545Z",
+        "updated_at": "2026-11-24T06:43:12.057Z",
+        "completed_at": "2026-11-24T06:43:12.057Z"
+      }
+    }
+  ],
+  "final": {
+    "status": 200,
+    "state": "canceled",
+    "body": {
+      "task_id": "tsk_01m864pfmre0080qa9wxgecpd1",
+      "target_agent_id": "agt_01m8641yq4e00a440gccs7v6x0",
+      "target_agent_slug": "qa002-cp68-private-agent",
+      "state": "canceled",
+      "hop_count": 1,
+      "call_chain_ids": [
+        "agt_01m8641yq4e00a440gccs7v6x0"
+      ],
+      "trace_root_id": "qa002-cp69-cancel",
+      "enforced_region": "US",
+      "sub_budget_hold_micros": 5000,
+      "reservation_id": "rsv_01m864pfmre0080r83ca6ed0hx",
+      "version": 4,
+      "created_at": "2026-11-24T06:43:07.545Z",
+      "updated_at": "2026-11-24T06:43:12.057Z",
+      "completed_at": "2026-11-24T06:43:12.057Z"
+    }
+  },
+  "ui_after_cancel": "tsk_01m864pfmre0080qa9wxgecpd1\nqa002-cp68-private-agent\n\tCanceled\t1 / 5\tUS\t$0.005000\t$0.000000\t\u2014",
+  "fixture": {
+    "calls": [
+      {
+        "path": "/tasks",
+        "task_id": "tsk_01m864pfmre0080qa9wxgecpd1",
+        "input_part_count": 1,
+        "approval_marker_present": false,
+        "authorization_forwarded": false,
+        "trace_root_present": true,
+        "hop_count": "1"
+      }
+    ]
+  },
+  "key": {
+    "revoked_row": "QA002 CP69 A2A cancel\tvk_tp_stage_\u2026ZKaN\t\nA2A\n/a2a/*\n\tRevoked\tNov 24, 2026, 6:41:02 AM\t",
+    "replay_status": 401,
+    "replay_error": "invalid_virtual_key"
+  },
+  "harness_attempt": {
+    "task_id": "tsk_01m864m1h6e0092h1jek1ddj5m",
+    "result": "FAILED",
+    "reason": "Initial temporary fixture was bound to 127.0.0.1:19184 while the registered agent endpoint used :19186; the synthetic call could not reach the fixture. No fixture call was logged. The harness was corrected and the cancellation flow was rerun with a fresh task and idempotency key.",
+    "reservation_state_after_failure": "RELEASED_UNUSED"
+  },
+  "read_only_persistence_evidence": "CP69-a2a-reservation-persistence.json"
+}

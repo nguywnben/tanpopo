@@ -1,0 +1,31 @@
+{
+  "installs_http": 200,
+  "installations": [
+    {
+      "id": "ins_01m8e0hbh3e00asxjy0ty2xdze",
+      "state": "ENABLED_ACTIVE",
+      "version": 4
+    },
+    {
+      "id": "ins_01m8d820ete00a5cp5za36wzhq",
+      "state": "ENABLED_ACTIVE",
+      "version": 2
+    },
+    {
+      "id": "ins_01m8cjgmk7e0087j5d1px4jkw3",
+      "state": "ENABLED_ACTIVE",
+      "version": 5
+    }
+  ],
+  "adapter_http": 200,
+  "adapters": [
+    {
+      "id": "adp_01m8d85x7pe00b2tmww9ggd56j",
+      "name": "@tanpopo/openai-compatible"
+    },
+    {
+      "id": "adp_01m8cjnzgfe008ssk2jxy7e5w5",
+      "name": "@tanpopo/ollama"
+    }
+  ]
+}

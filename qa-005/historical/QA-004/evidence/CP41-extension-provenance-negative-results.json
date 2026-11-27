@@ -1,0 +1,130 @@
+{
+  "catalog_status": 200,
+  "packages": [
+    {
+      "package_id": "@tanpopo/anthropic",
+      "canonical_name": "Anthropic Official Adapter",
+      "version": "0.1.0",
+      "source_uri": "tanpopo-builtin://anthropic.tpkg",
+      "expected_sha256": "3eb6a2c98f11be934113d34d74edeb0357ad56d76bc21c36a31241260c7219da",
+      "signature_verified": false,
+      "origin_trust_tier": "unverified_external",
+      "signing_key_fingerprint": null
+    },
+    {
+      "package_id": "@tanpopo/aws-bedrock",
+      "canonical_name": "AWS Bedrock Official Adapter",
+      "version": "0.1.0",
+      "source_uri": "tanpopo-builtin://aws-bedrock.tpkg",
+      "expected_sha256": "d5d3a900e331879c6e6102ee2a2a819907613237e49a242d8a396f385ba6c74b",
+      "signature_verified": false,
+      "origin_trust_tier": "unverified_external",
+      "signing_key_fingerprint": null
+    },
+    {
+      "package_id": "@tanpopo/azure-openai",
+      "canonical_name": "Azure OpenAI Official Adapter",
+      "version": "0.1.0",
+      "source_uri": "tanpopo-builtin://azure-openai.tpkg",
+      "expected_sha256": "afce0501bc175c018c21a4788a59f891f7353aedc4e289c49eadb8ae45f10b90",
+      "signature_verified": false,
+      "origin_trust_tier": "unverified_external",
+      "signing_key_fingerprint": null
+    },
+    {
+      "package_id": "@tanpopo/cohere-rerank",
+      "canonical_name": "Cohere Rerank Official Adapter",
+      "version": "0.1.0",
+      "source_uri": "tanpopo-builtin://cohere-rerank.tpkg",
+      "expected_sha256": "0e99a4036862a4fe4102829655f81324bd3d4aa68532a2cf8e7b4da51303106f",
+      "signature_verified": false,
+      "origin_trust_tier": "unverified_external",
+      "signing_key_fingerprint": null
+    },
+    {
+      "package_id": "@tanpopo/gemini",
+      "canonical_name": "Google Gemini Official Adapter",
+      "version": "0.1.0",
+      "source_uri": "tanpopo-builtin://gemini.tpkg",
+      "expected_sha256": "bd2c4bd3b11b166fb92eae37a3078bb7174a7688bcae9c8b3061794094f0a7a8",
+      "signature_verified": false,
+      "origin_trust_tier": "unverified_external",
+      "signing_key_fingerprint": null
+    },
+    {
+      "package_id": "@tanpopo/ollama",
+      "canonical_name": "Ollama Local & Self-Hosted Adapter",
+      "version": "0.1.0",
+      "source_uri": "tanpopo-builtin://ollama.tpkg",
+      "expected_sha256": "06b3685d23df37d51ff92e6d07b296a1803e40dab4800a0176eff39edb27ab63",
+      "signature_verified": true,
+      "origin_trust_tier": "official",
+      "signing_key_fingerprint": "2cfb21ec9faf58dadfc26df341eb1e88f0313983b72641a9808606ab926a5ff4"
+    },
+    {
+      "package_id": "@tanpopo/openai",
+      "canonical_name": "OpenAI Official Adapter",
+      "version": "0.1.0",
+      "source_uri": "tanpopo-builtin://openai.tpkg",
+      "expected_sha256": "fcd5f51d316103413256f4afdad82fd13f4c561088d55aa82f8a53bc768c144f",
+      "signature_verified": false,
+      "origin_trust_tier": "unverified_external",
+      "signing_key_fingerprint": null
+    },
+    {
+      "package_id": "@tanpopo/openai-compatible",
+      "canonical_name": "OpenAI-Compatible Gateway & vLLM/TGI Adapter",
+      "version": "0.1.0",
+      "source_uri": "tanpopo-builtin://openai-compatible.tpkg",
+      "expected_sha256": "25a504bf2ac2979c822003849a99d89e97ea3deb6cec660e854e1c73803e4016",
+      "signature_verified": false,
+      "origin_trust_tier": "unverified_external",
+      "signing_key_fingerprint": null
+    }
+  ],
+  "installed_before": [
+    {
+      "id": "ins_01m895ph2ge00a3evn7jxp86st",
+      "package_id": "ext_01m895ph2ge00a3cr388bdwbt3",
+      "state": "ENABLED_ACTIVE",
+      "signature_verified": true,
+      "origin_trust_tier": "official",
+      "signing_key_fingerprint": "2cfb21ec9faf58dadfc26df341eb1e88f0313983b72641a9808606ab926a5ff4"
+    }
+  ],
+  "digestMismatch": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "hash_mismatch",
+        "type": "extension_error",
+        "message": "installer: artifact_digest_mismatch: expected=0eb6a2c98f11be934113d34d74edeb0357ad56d76bc21c36a31241260c7219da actual=3eb6a2c98f11be934113d34d74edeb0357ad56d76bc21c36a31241260c7219da",
+        "request_id": "req_01m89qp0w9e00a37mnw1hpcrf3",
+        "retryable": false
+      }
+    }
+  },
+  "namespaceSpoof": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "resource_not_found",
+        "type": "not_found_error",
+        "message": "extension package or installation not found",
+        "request_id": "req_01m89qp0wee00akhjz3vhb99vr",
+        "retryable": false
+      }
+    }
+  },
+  "installed_after": [
+    {
+      "id": "ins_01m895ph2ge00a3evn7jxp86st",
+      "package_id": "ext_01m895ph2ge00a3cr388bdwbt3",
+      "state": "ENABLED_ACTIVE",
+      "signature_verified": true,
+      "origin_trust_tier": "official",
+      "signing_key_fingerprint": "2cfb21ec9faf58dadfc26df341eb1e88f0313983b72641a9808606ab926a5ff4"
+    }
+  ],
+  "screen": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nExtensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\nShowing cached offline marketplace catalog.\nSearch catalog\nOrigin trust\nAll origins\nCapability\nAll capabilities\nPublisher signature\nAll publishers\nPackage\tOrigin\tSignature\tTier\tCapabilities\tActions\n\nAnthropic Official Adapter\n@tanpopo/anthropic · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Anthropic Messages API (/v1/messages, system extraction, tool_use/tool_result, image/PDF blob_ref splicing, stateful SSE normalization, and /native/anthropic/*).\n\tUnverified\tUnsigned\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAWS Bedrock Official Adapter\n@tanpopo/aws-bedrock · v0.1.0\nTier-2 WebAssembly adapter translating OpenAI chat requests to Amazon Bedrock Converse with host-only AWS SigV4 signing.\n\tUnverified\tUnsigned\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAzure OpenAI Official Adapter\n@tanpopo/azure-openai · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for Azure OpenAI chat completions with deployment routing, api-version pinning, blind api-key injection, OpenAI-compatible SSE, and scoped native passthrough.\n\tUnverified\tUnsigned\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nCohere Rerank Official Adapter\n@tanpopo/cohere-rerank · v0.1.0\nOfficial Tier-1 Cohere v2 rerank adapter with blind API-key injection, exact search-unit reporting, and strict response normalization.\n\tUnverified\tUnsigned\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nGoogle Gemini Official Adapter\n@tanpopo/gemini · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Google Gemini API (contents, systemInstruction, functionDeclarations/functionCall, streamGenerateContent?alt=sse, blind x-goog-api-key header injection without ?key= query params, and /n"
+}

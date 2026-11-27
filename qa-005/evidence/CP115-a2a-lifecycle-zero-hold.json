@@ -1,0 +1,276 @@
+{
+  "checkpoint": "CP115",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated exact-source SQLite clone, 127.0.0.1:18166; TANPOPO_A2A_ENABLED=true",
+  "browser": "Chromium 156, real Tanpopo Console, 1440x1000; screenshots visually inspected",
+  "provider_usage": "No external/paid provider; loopback deterministic synthetic A2A fixture only",
+  "synthetic_agent": {
+    "slug": "qa005-cp115-delayed-input-required",
+    "endpoint": "http://127.0.0.1:19188/a2a",
+    "authorization_header_forwarded": false
+  },
+  "input_required_lifecycle": {
+    "task_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+    "trace_root_id": "trc_01m8e41p9ke009vdk5fe0x2yra",
+    "initial_state": "input-required",
+    "initial_version": 3,
+    "observed_persisted_states": [
+      {
+        "t_ms": 18,
+        "http": 200,
+        "state": "input-required",
+        "version": 3
+      },
+      {
+        "t_ms": 327,
+        "http": 200,
+        "state": "working",
+        "version": 4
+      }
+    ],
+    "final_read": {
+      "http": 200,
+      "state": "completed",
+      "version": 5,
+      "sub_budget_hold_micros": 10000,
+      "settled_cost_micros": 2000,
+      "artifacts": [
+        {
+          "name": "qa115-result",
+          "text": "delayed fixture completed after resume"
+        }
+      ],
+      "reservation_id_present": true
+    },
+    "resume_http": 200,
+    "resume_elapsed_ms": 12327,
+    "console_row": "tsk_01m8e41p9ke009vcxjvg8qk85q\nqa005-cp115-delayed-input-required\n\tCompleted\t1 / 5\tUS\t$0.010000\t$0.002000\t—",
+    "fixture": {
+      "calls": 4,
+      "completed": 1,
+      "rows": [
+        {
+          "index": 1,
+          "path": "/a2a/tasks",
+          "task_id": "tsk_01m8e3yxape00bjh9e01bbb6ww",
+          "follow_up": false,
+          "completed": null,
+          "elapsed_seconds": null,
+          "auth_forwarded": false
+        },
+        {
+          "index": 2,
+          "path": "/a2a/tasks",
+          "task_id": "tsk_01m8e3z362e0089xkmf26c2khf",
+          "follow_up": false,
+          "completed": null,
+          "elapsed_seconds": null,
+          "auth_forwarded": false
+        },
+        {
+          "index": 3,
+          "path": "/a2a/tasks",
+          "task_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+          "follow_up": false,
+          "completed": null,
+          "elapsed_seconds": null,
+          "auth_forwarded": false
+        },
+        {
+          "index": 4,
+          "path": "/a2a/tasks",
+          "task_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+          "follow_up": true,
+          "completed": true,
+          "elapsed_seconds": 12,
+          "auth_forwarded": false
+        }
+      ]
+    },
+    "audit_task_events": [
+      {
+        "seq_no": 683,
+        "event_type": "a2a.task.submitted",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "request_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "metadata_json": "{\"enforced_region\":\"US\",\"hop_count\":1,\"sub_budget_hold_micros\":10000,\"target_agent_id\":\"agt_01m8e3qwzhe008np2pzwy7dwqd\",\"trace_root_id\":\"trc_01m8e41p9ke009vdk5fe0x2yra\"}"
+      },
+      {
+        "seq_no": 684,
+        "event_type": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "request_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "metadata_json": "{\"from_state\":\"submitted\",\"spent_micros\":0,\"to_state\":\"working\"}"
+      },
+      {
+        "seq_no": 685,
+        "event_type": "a2a.task.transitioned",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "request_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "metadata_json": "{\"from_state\":\"working\",\"spent_micros\":1000,\"to_state\":\"input-required\"}"
+      },
+      {
+        "seq_no": 689,
+        "event_type": "a2a.task.resumed",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "request_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "metadata_json": "{\"from_state\":\"input-required\",\"spent_micros\":0,\"to_state\":\"working\"}"
+      },
+      {
+        "seq_no": 690,
+        "event_type": "a2a.task.resumed",
+        "target_type": "a2a_task",
+        "target_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "request_id": "tsk_01m8e41p9ke009vcxjvg8qk85q",
+        "metadata_json": "{\"from_state\":\"working\",\"spent_micros\":2000,\"to_state\":\"completed\"}"
+      }
+    ]
+  },
+  "zero_hold_dispatch_observation": {
+    "tasks": [
+      {
+        "task": {
+          "id": "tsk_01m8e3yxape00bjh9e01bbb6ww",
+          "state": "FAILED",
+          "sub_budget_cap_micros": 0,
+          "settled_cost_micros": 0,
+          "reservation_id": null,
+          "version": 3
+        },
+        "events": [
+          {
+            "seq_no": 677,
+            "event_type": "a2a.task.submitted",
+            "target_type": "a2a_task",
+            "target_id": "tsk_01m8e3yxape00bjh9e01bbb6ww",
+            "request_id": "tsk_01m8e3yxape00bjh9e01bbb6ww",
+            "metadata_json": "{\"enforced_region\":\"US\",\"hop_count\":1,\"sub_budget_hold_micros\":0,\"target_agent_id\":\"agt_01m8e3qwzhe008np2pzwy7dwqd\",\"trace_root_id\":\"trc_01m8e3yxape00bjjs29bcs1cjy\"}"
+          },
+          {
+            "seq_no": 678,
+            "event_type": "a2a.task.transitioned",
+            "target_type": "a2a_task",
+            "target_id": "tsk_01m8e3yxape00bjh9e01bbb6ww",
+            "request_id": "tsk_01m8e3yxape00bjh9e01bbb6ww",
+            "metadata_json": "{\"from_state\":\"submitted\",\"spent_micros\":0,\"to_state\":\"working\"}"
+          },
+          {
+            "seq_no": 679,
+            "event_type": "a2a.task.transitioned",
+            "target_type": "a2a_task",
+            "target_id": "tsk_01m8e3yxape00bjh9e01bbb6ww",
+            "request_id": "tsk_01m8e3yxape00bjh9e01bbb6ww",
+            "metadata_json": "{\"from_state\":\"working\",\"spent_micros\":0,\"to_state\":\"failed\"}"
+          }
+        ]
+      },
+      {
+        "task": {
+          "id": "tsk_01m8e3z362e0089xkmf26c2khf",
+          "state": "FAILED",
+          "sub_budget_cap_micros": 0,
+          "settled_cost_micros": 0,
+          "reservation_id": null,
+          "version": 3
+        },
+        "events": [
+          {
+            "seq_no": 680,
+            "event_type": "a2a.task.submitted",
+            "target_type": "a2a_task",
+            "target_id": "tsk_01m8e3z362e0089xkmf26c2khf",
+            "request_id": "tsk_01m8e3z362e0089xkmf26c2khf",
+            "metadata_json": "{\"enforced_region\":\"US\",\"hop_count\":1,\"sub_budget_hold_micros\":0,\"target_agent_id\":\"agt_01m8e3qwzhe008np2pzwy7dwqd\",\"trace_root_id\":\"trc_01m8e3z362e0089yrh12sp8rzk\"}"
+          },
+          {
+            "seq_no": 681,
+            "event_type": "a2a.task.transitioned",
+            "target_type": "a2a_task",
+            "target_id": "tsk_01m8e3z362e0089xkmf26c2khf",
+            "request_id": "tsk_01m8e3z362e0089xkmf26c2khf",
+            "metadata_json": "{\"from_state\":\"submitted\",\"spent_micros\":0,\"to_state\":\"working\"}"
+          },
+          {
+            "seq_no": 682,
+            "event_type": "a2a.task.transitioned",
+            "target_type": "a2a_task",
+            "target_id": "tsk_01m8e3z362e0089xkmf26c2khf",
+            "request_id": "tsk_01m8e3z362e0089xkmf26c2khf",
+            "metadata_json": "{\"from_state\":\"working\",\"spent_micros\":0,\"to_state\":\"failed\"}"
+          }
+        ]
+      }
+    ],
+    "request_http_statuses": [
+      403,
+      403
+    ],
+    "fixture_work_dispatched_before_rejection": true,
+    "fixture_reported_synthetic_spend_micros_per_call": 1000,
+    "application_persisted_task_state": "FAILED",
+    "application_settled_cost_micros": 0,
+    "reservation_created": false,
+    "external_paid_cost": 0,
+    "evidence_basis": "Two deliberate synchronous A2A requests with sub_budget_hold_micros=0 reached the loopback fixture; its response reported spent_micros=1000; caller then received 403 budget_or_privilege_exceeded and persisted task FAILED with zero internal settlement. A local synthetic response is not proof of real external spend."
+  },
+  "cleanup": {
+    "temporary_a2a_key": {
+      "http_revoke": 200,
+      "state_readback": "REVOKED",
+      "version": 2,
+      "secret_omitted": true
+    },
+    "post_revoke_bearer_replay": {
+      "http": 401,
+      "error": "invalid_credential_plane"
+    },
+    "audit_chain_verification": [
+      {
+        "org_id": "org_01m8crmjtje009gbep9v278fpe",
+        "http": 200,
+        "body": {
+          "intact": true,
+          "checked_events_count": 5,
+          "first_broken_seq_no": null
+        }
+      },
+      {
+        "org_id": "org_01m8cj8phze00a0r8dfkqmmfn0",
+        "http": 200,
+        "body": {
+          "intact": true,
+          "checked_events_count": 691,
+          "first_broken_seq_no": null
+        }
+      }
+    ],
+    "runtime_and_fixture_stopped": true
+  },
+  "visual_evidence": [
+    {
+      "file": "screenshots/CP115-a2a-input-required-ui.png",
+      "inspection": "Same persisted task is visibly Input required; prompt and Resume/Cancel are present; $0.010000 hold and $0.000000 settled cost shown."
+    },
+    {
+      "file": "screenshots/CP115-a2a-resume-dialog.png",
+      "inspection": "Resume dialog labels the same task and prompt; required follow-up field and cancel/send actions visible."
+    },
+    {
+      "file": "screenshots/CP115-a2a-resume-filled.png",
+      "inspection": "Synthetic approval answer entered; no credential or production data in prompt."
+    },
+    {
+      "file": "screenshots/CP115-a2a-resume-inflight.png",
+      "inspection": "During the deliberately delayed request, modal stays open and Send action shows spinner/disabled pending state; not a stale post-completion result."
+    },
+    {
+      "file": "screenshots/CP115-a2a-task-completed.png",
+      "inspection": "After response, success banner; same task is Completed, hold $0.010000, settled $0.002000, action absent."
+    }
+  ]
+}

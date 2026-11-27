@@ -1,0 +1,93 @@
+{
+  "checkpoint": "CP125",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "127.0.0.1:18128",
+  "scope": "QA004 Test Root Org / default / dev; isolated local synthetic Ollama fixture at 127.0.0.1:18125",
+  "request": {
+    "method": "POST",
+    "path": "/native/ollama/api/generate",
+    "virtual_key_id": "vky_01m8b7ahwme00bpw6znzm8b2zg",
+    "virtual_key_name": "QA004 CP125 Native Generate Image Pricing",
+    "virtual_key_state_after_cleanup": "REVOKED",
+    "virtual_key_version_after_cleanup": 2,
+    "model": "qa004-cp121-priced-vision",
+    "images": 2,
+    "image_sha256_ordered": [
+      "b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640",
+      "9d9e18e597b11d30abba0dcc7f27ca50b050fe431596f06da7d6f9524208cc00"
+    ],
+    "http_status": 200,
+    "response_done": true,
+    "prompt_eval_count": 10,
+    "eval_count": 5
+  },
+  "fixture": {
+    "path": "/api/generate",
+    "image_count": 2,
+    "image_sha256_ordered": [
+      "b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640",
+      "9d9e18e597b11d30abba0dcc7f27ca50b050fe431596f06da7d6f9524208cc00"
+    ],
+    "authorization_header_present": false,
+    "prompt_or_image_bytes_stored": false,
+    "external_provider_contacted": false
+  },
+  "pricing": {
+    "image_unit_nano_usd": 1000000,
+    "expected_image_count": 2,
+    "expected_total_nano_usd": 2000000,
+    "expected_total_micro_usd": 2000,
+    "expected_usd": "0.002000",
+    "token_rates": 0,
+    "self_hosted_zero_rate": false
+  },
+  "persistent_readback": {
+    "trace_id": "trc_01m8b7ajj1e009xtn3qwxptkte",
+    "trace_http_status": 200,
+    "trace_error": null,
+    "trace_usage_accuracy": "EXACT",
+    "trace_total_cost_micros": 0,
+    "chargeback_endpoint": "/admin/v1/usage/summary?group_by=key",
+    "chargeback_http_status": 200,
+    "group_key": "QA004 CP125 Native Generate Image Pricing",
+    "exact_micro_usd": 0,
+    "estimated_micro_usd": 0,
+    "exact_request_count": 0,
+    "estimated_request_count": 1,
+    "unmetered_request_count": 0
+  },
+  "budget_control": {
+    "limit_before_test": 100,
+    "settled_exact_before_test": 2036,
+    "settled_estimated_before_test": 14,
+    "temporary_limit": 5000,
+    "temporary_limit_change_via_console_http": 200,
+    "restored_limit": 100,
+    "restoration_via_console_http": 200,
+    "post_test_settled_exact": 2036,
+    "post_test_settled_estimated": 14,
+    "post_test_reserved_hold": 0,
+    "post_restore_budget_version": 152
+  },
+  "cleanup": {
+    "original_fixture_restored": true,
+    "restored_fixture_api_tags_http_status": 200,
+    "test_key_revoked": true,
+    "temporary_project_hard_limit_not_left_in_place": true
+  },
+  "visual_inspection": [
+    "CP125-native-generate-key-form.png",
+    "CP125-native-generate-traces.png",
+    "CP125-native-generate-chargeback.png",
+    "CP125-native-generate-key-revoked.png",
+    "CP125-native-generate-budget-increased.png",
+    "CP125-native-generate-budget-restored.png"
+  ],
+  "classification": {
+    "DEF-074": "FAIL extended: native Ollama /api/generate top-level images[] also reached upstream but settled zero image-unit cost at a configured nonzero image rate.",
+    "DEF-052": "Further trace/Chargeback mismatch evidence: trace EXACT/$0 versus one Estimated Chargeback request at $0.",
+    "new_defect": false,
+    "qa_status": "ONGOING",
+    "release_gate": "BLOCKED"
+  }
+}

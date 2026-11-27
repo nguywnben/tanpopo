@@ -1,0 +1,19 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "organizationIdSuffix": "g8c3g2th",
+  "setup": "real Chromium UI creation on isolated SQLite clone; no product source changes",
+  "beforeInjectedFailure": {
+    "organizationDEKRows": 1,
+    "projectRows": 1,
+    "environmentRows": 1,
+    "projectDEKRows": 1,
+    "virtualKeyRows": 1,
+    "virtualKeyState": "active",
+    "credentialPlaintextSaved": false
+  },
+  "screenshots": [
+    "CP18B-project-created.png",
+    "CP18B-environment-created.png",
+    "CP18B-vkey-present.png"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "checkpoint": "CP100",
+  "finding": "DEF-027",
+  "classification": "PARTIAL (fresh exact-RC7 route-target UI retest)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite through TLS proxy https://127.0.0.1:19444",
+  "browser": "Playwright Chromium 156 at 1440x1000",
+  "principal": "ORG_OWNER (qa005-owner@example.invalid)",
+  "scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+  "picker_candidates": [
+    "QA005 DEF040 unverified recovery canary / qa005-def040-probe-model · ncw84h (US · Healthy)",
+    "QA005 budgetless Ollama / qa005-native:latest · t0t22t (ON_PREM · Healthy)",
+    "CP58 OpenAI SSE loopback fixture / qa005-model · fsf2nr (ON_PREM · Healthy)",
+    "QA005 budgetless Ollama / qa005-playground-low:latest · 9trtct (ON_PREM · Healthy)",
+    "QA005 budgetless Ollama / qa005-native:latest · s434yd (ON_PREM · Healthy)"
+  ],
+  "selected_candidate": "QA005 budgetless Ollama / qa005-native:latest · t0t22t (ON_PREM · Healthy)",
+  "selected_card_contains_identity": true,
+  "screenshots_visually_inspected": [
+    "screenshots/CP100-def027-route-list.png",
+    "screenshots/CP100-def027-route-create-targets.png",
+    "screenshots/CP100-def027-route-target-options.png",
+    "screenshots/CP100-def027-selected-target-identity.png"
+  ],
+  "route_create_requests": 0,
+  "route_writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "page_errors": [],
+  "historical_three_connection_failover_case_repeated": false,
+  "remaining_scope": [
+    "three healthy identical-model deployments from distinct provider connections",
+    "saved multi-target route summary",
+    "controlled failover execution and trace ordering",
+    "route edit/reorder",
+    "other roles, scopes, backends, browsers"
+  ],
+  "historical_evidence_preserved": true,
+  "gate_rel_07": "BLOCKED"
+}

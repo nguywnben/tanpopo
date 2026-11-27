@@ -1,0 +1,36 @@
+{
+  "heldReads": [
+    {
+      "method": "GET",
+      "query": {
+        "project_id": true,
+        "env_id": true
+      },
+      "status": 200,
+      "rows": [
+        {
+          "name": "CP20 reviewer emergency revoke test",
+          "state": "REVOKED"
+        },
+        {
+          "name": "CP20 reviewer revoke canary",
+          "state": "REVOKED"
+        }
+      ]
+    }
+  ],
+  "scopeStates": [
+    {
+      "scope": "Default Organization / default / dev",
+      "beforeRelease": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\nEnvironment Virtual Keys\n0"
+    },
+    {
+      "scope": "Default Organization / No project / No env",
+      "beforeRelease": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\n16\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic."
+    },
+    {
+      "scope": "Default Organization / No project / No env",
+      "afterRelease": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\n16\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic."
+    }
+  ]
+}

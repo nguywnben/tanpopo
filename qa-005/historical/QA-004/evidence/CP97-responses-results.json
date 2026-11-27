@@ -1,0 +1,59 @@
+{
+  "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "allowed_route": "/v1/responses",
+  "fixture_requests_before": 13,
+  "fixture_requests_after": 14,
+  "first": {
+    "status": 200,
+    "request_id": "req_01m8aqnxe4e0098pdeq04pd34z",
+    "error": null,
+    "content_type": "application/json; charset=utf-8",
+    "body_sha256": "7d5305d4042fbee1266cc6fe70bfe0e7b70d3ed5f073bca51ad7132301c43fc9",
+    "object": "response",
+    "output_text": "Hello from synthetic Ollama.",
+    "body_keys": [
+      "created_at",
+      "id",
+      "model",
+      "object",
+      "output",
+      "status",
+      "usage"
+    ]
+  },
+  "replay": {
+    "status": 200,
+    "request_id": "req_01m8aqnxepe0098t5m12mc3qmv",
+    "error": null,
+    "content_type": "application/json; charset=utf-8",
+    "body_sha256": "7d5305d4042fbee1266cc6fe70bfe0e7b70d3ed5f073bca51ad7132301c43fc9",
+    "object": "response",
+    "output_text": "Hello from synthetic Ollama.",
+    "body_keys": [
+      "created_at",
+      "id",
+      "model",
+      "object",
+      "output",
+      "status",
+      "usage"
+    ]
+  },
+  "mismatch": {
+    "status": 422,
+    "request_id": "req_01m8aqnxeve00b9bve9wywa7sr",
+    "error": "idempotency_key_reused_mismatch",
+    "content_type": "application/json; charset=utf-8",
+    "body_sha256": "5f748fe54272eb4923e0304efcd44fe20da2682856f7a620a7e678cf575a6a0a",
+    "object": null,
+    "output_text": null,
+    "body_keys": [
+      "error"
+    ]
+  },
+  "key_cleanup": {
+    "status": 200,
+    "state": "REVOKED",
+    "version": 2
+  }
+}

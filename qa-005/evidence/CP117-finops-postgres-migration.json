@@ -1,0 +1,84 @@
+{
+  "checkpoint": "CP117",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "scope": "Exact RC7 tanpopo db migrate-engine --verify against an isolated synthetic SQLite clone from CP116",
+  "sqlite_source": {
+    "path_omitted": true,
+    "sha256": "720be31fcb7442fb7a4ea05d40091b7ac67eb180be0cf3228f9fec1d67e1ba59",
+    "storage": "SQLite QA clone; original source clone was opened read-only by migration implementation"
+  },
+  "target": {
+    "engine": "PostgreSQL 16",
+    "container": "existing QA-only PostgreSQL container; independent second PostgreSQL server process in /dev/shm",
+    "process_port": 5433,
+    "target_database": "qa005_cp117",
+    "auth": "trust only inside isolated container test process",
+    "migration_role": "qa005_cp117_migrator",
+    "role_readback": {
+      "rolsuper": false,
+      "rolbypassrls": false
+    },
+    "existing_qa_database_modified": false
+  },
+  "environment": {
+    "disk_backed_container_attempt": "BLOCKED: Docker overlay reported 0 bytes available; docker run could not initialize its root filesystem.",
+    "alternative": "PASS: RAM-backed PostgreSQL 16 process, empty dedicated database, least-privilege migration role and local test tunnel.",
+    "free_space_before_docker_attempt_bytes": 0,
+    "free_tmpfs_after_cleanup_mib": 63,
+    "host_overlay_after_test": "100% used; no cleanup/pruning performed."
+  },
+  "migration": {
+    "command": "tanpopo --output json db migrate-engine --from sqlite://<isolated-clone> --to postgres://qa005_cp117_migrator@127.0.0.1:<local-tunnel>/qa005_cp117?sslmode=disable --verify",
+    "http_or_process_exit": "nonzero",
+    "result": "FAIL",
+    "failed_table": "budget_ledgers",
+    "error": "ERROR: value too long for type character varying(40) (SQLSTATE 22001)",
+    "postgres_schema": "db/migrations/postgres/0001_full_schema_rls_partitions.sql defines budget_ledgers.id VARCHAR(40)",
+    "sqlite_schema": "db/migrations/sqlite/0012_budget_ledger.sql declares VARCHAR(40); SQLite accepts the longer stored text because VARCHAR length is not enforced.",
+    "target_readback_after_rollback": {
+      "organizations": 0,
+      "budget_ledgers": 0,
+      "usage_settlements": 0,
+      "audit_events": 0,
+      "data_copy_transaction": "rolled back"
+    }
+  },
+  "valid_source_rows": [
+    {
+      "id": "bgt_project_prj_01m8ct3xs7e00bv1hwq3qz2est_monthly",
+      "length": 50,
+      "created_http": 200,
+      "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+      "evidence": "CP35 real Owner Console create/readback, qa-005/evidence/CP35-budget-lifecycle.json"
+    },
+    {
+      "id": "bgt_organization_org_01m8crmjtje009gbep9v278fpe_monthly",
+      "length": 55,
+      "created_http": 200,
+      "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+      "evidence": "CP35 real Owner Console create/readback, qa-005/evidence/CP35-budget-lifecycle.json"
+    }
+  ],
+  "accepted_criterion": "TP-IMP-0039 AC-2 / CT-32: exact table row, micro-USD, Vault-envelope and audit-chain parity; any mismatch must roll back.",
+  "cleanup": {
+    "RAM_postgres_stopped": true,
+    "test_cluster_and_log_removed_from_tmpfs": true,
+    "local_tunnel_stopped": true,
+    "existing_postgres_service_left_running": true,
+    "source_clone_preserved": true,
+    "no_production_or_paid_provider_usage": true
+  },
+  "classification": {
+    "new_defect": "DEF-086",
+    "severity": "Major",
+    "status": "FAIL",
+    "root_cause": "hypothesis only: the PostgreSQL width is inconsistent with valid budget IDs produced by the Console; exact design disposition remains an engineering decision."
+  },
+  "limitations": [
+    "One QA SQLite clone and one isolated in-memory PostgreSQL 16 target.",
+    "The target database schema was initialized, but row-copy verification stopped at the first overlength budget ID.",
+    "Other table widths, pricing/rate-card migration parity, larger production-sized data, online write freeze and rollback recovery remain unverified.",
+    "No production data or credentials were included."
+  ]
+}

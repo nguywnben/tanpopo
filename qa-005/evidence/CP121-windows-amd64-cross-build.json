@@ -1,0 +1,8 @@
+{
+  "checkpoint": "CP121",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "toolchain": {"go_version":"go1.26.11 linux/amd64","goroot":"/tmp/qa005-go-root/go","gomodcache":"/tmp/qa-gopath/pkg/mod","gotoolchain":"local"},
+  "build": {"goos":"windows","goarch":"amd64","cgo_enabled":false,"trimpath":true,"result":"PASS","artifact_type":"PE32+ x86-64 Windows console executable","artifact_sha256":"47a4ff222a878c2cc3858c6339e54936af86665612b06bfb4798e3ab7efe96db","artifact_location":"ephemeral /dev/shm; not committed"},
+  "runtime_execution": "UNVERIFIED/BLOCKED: only Linux/amd64 QA execution host available; no Windows host/runtime attached.",
+  "limits": ["Compile-time compatibility only.","Windows filesystem/service shutdown/installer/network/database/browser/recovery behavior not exercised.","No product source or specification changed."]
+}

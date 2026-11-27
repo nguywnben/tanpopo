@@ -1,0 +1,49 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "remote_refs_at_check": {
+    "main": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+    "develop": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+    "HEAD": "40bba5b55c2da6fc00b107b315c9b3167fb20169"
+  },
+  "local_build": {
+    "artifact_path": "/tmp/tanpopo-qa002-bin/tanpopo",
+    "version": "0.1.0-dev",
+    "commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+    "built": "2026-11-24",
+    "sha256": "e48521ab1563f6610697c7953b37cae1ab48928dd4d8a961c4a32b47dd5ed3e6",
+    "buildvcs": "disabled because Go's automatic VCS status probe exited 128 in the linked worktree; commit metadata set explicitly to the verified baseline"
+  },
+  "official_toolchain": {
+    "go": "1.26.11 linux/amd64",
+    "archive_sha256_verified_against_go_dev_release_metadata": true,
+    "system_go": "not a compiler; unrelated board-game executable"
+  },
+  "frontend": {
+    "node": "v24.22.3",
+    "npm": "11.19.1",
+    "npm_ci_ignore_scripts": "PASS; 365 packages from lockfile using /tmp cache",
+    "typecheck": "PASS",
+    "vitest": "PASS; 9 files, 45 tests",
+    "production_build": "PASS; i18n check 15 locales; 4453 modules; initial JS gzip 190.38 KB / 250 KB",
+    "rebuilt_dist_matches_committed_embedded_dist": true
+  },
+  "browser": {
+    "chromium": "156.0.8078.79",
+    "playwright": "1.62.1",
+    "firefox_webkit": "not yet verified"
+  },
+  "release_inventory": {
+    "git_tags": 0,
+    "github_releases": 0,
+    "rc4_archive_or_binary_in_repository": false,
+    "result": "No separately published RC4 binary was available to compare; local source build reports 0.1.0-dev, not an RC4 release label."
+  },
+  "server": {
+    "isolated_address": "127.0.0.1:18083",
+    "storage": "fresh disposable SQLite under /tmp",
+    "readyz_http": 200,
+    "readyz_body": "{\"status\":\"ready\"}",
+    "note": "GET /health returned the SPA HTML shell with HTTP 200; actual health contract is /healthz and readiness is /readyz. Do not infer health from the fallback HTML."
+  },
+  "secrets": "QA provider binding values and master key omitted; synthetic owner password and bootstrap token are not included."
+}

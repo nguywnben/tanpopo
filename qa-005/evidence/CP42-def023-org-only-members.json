@@ -1,0 +1,122 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": "exact-source SQLite 18145",
+  "principal": "synthetic QA Org Owner",
+  "expected_members": 3,
+  "states": [
+    {
+      "scope": "Initial Project / dev",
+      "visible_member_count": 3
+    },
+    {
+      "scope": "QA005 Org\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+      "visible_member_count": 3
+    }
+  ],
+  "member_api_reads": [
+    {
+      "method": "GET",
+      "status": 200,
+      "query": "?limit=100",
+      "count": 3,
+      "members": [
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "FINOPS_VIEWER"
+          ],
+          "project_binding_count": 0,
+          "enrollment_pending": false
+        },
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "DEVELOPER",
+            "FINOPS_VIEWER"
+          ],
+          "project_binding_count": 1,
+          "enrollment_pending": true
+        },
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "ORG_OWNER"
+          ],
+          "project_binding_count": 0,
+          "enrollment_pending": false
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "query": "?limit=100",
+      "count": 3,
+      "members": [
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "FINOPS_VIEWER"
+          ],
+          "project_binding_count": 0,
+          "enrollment_pending": false
+        },
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "DEVELOPER",
+            "FINOPS_VIEWER"
+          ],
+          "project_binding_count": 1,
+          "enrollment_pending": true
+        },
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "ORG_OWNER"
+          ],
+          "project_binding_count": 0,
+          "enrollment_pending": false
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "query": "?limit=100",
+      "count": 3,
+      "members": [
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "FINOPS_VIEWER"
+          ],
+          "project_binding_count": 0,
+          "enrollment_pending": false
+        },
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "DEVELOPER",
+            "FINOPS_VIEWER"
+          ],
+          "project_binding_count": 1,
+          "enrollment_pending": true
+        },
+        {
+          "kind": "HUMAN",
+          "roles": [
+            "ORG_OWNER"
+          ],
+          "project_binding_count": 0,
+          "enrollment_pending": false
+        }
+      ]
+    }
+  ],
+  "project_with_no_environment": {
+    "evidence": "CP42-def023-project-noenv.json",
+    "scope": "QA005 Org / Initial Project / No env",
+    "visible_member_count": 3
+  }
+}

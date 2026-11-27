@@ -1,0 +1,25 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated SQLite clone on 127.0.0.1:18116",
+  "role": "SECURITY_REVIEWER",
+  "member_list_get": 200,
+  "member_list_visible": true,
+  "add_member_button_count": 0,
+  "valid_csrf_member_create_post": {
+    "status": 403,
+    "error_code": "insufficient_role_permission"
+  },
+  "denied_canary_principal_created": false,
+  "audit_event_list_get": 200,
+  "project_kill_switch_trigger_and_clear": "PASS",
+  "active_kill_switches_after_cleanup": 0,
+  "audit_events_retained": {"kill_switch.triggered": 3, "kill_switch.cleared": 3, "virtual_key.revoked": 2},
+  "member_list_visibility_contract_clarity": "UNVERIFIED: action map allows read; SCR-13 does not explicitly state member-list visibility",
+  "api_statuses": {
+    "GET /admin/v1/members": 200,
+    "POST /admin/v1/members": 403,
+    "GET /admin/v1/audit-events": 200,
+    "POST /admin/v1/kill-switches": 200,
+    "DELETE /admin/v1/kill-switches/{id}": 200
+  }
+}

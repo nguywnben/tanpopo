@@ -1,0 +1,142 @@
+{
+  "securityText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nGovernance\nAccess & Keys\nSecurity\nqa002-cp28-reviewer@example.invalid\nSecurity Reviewer\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.\nApproval queue clear Destructive MCP tool invocations requiring human-in-the-loop sign-off appear here.",
+  "accessText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nGovernance\nAccess & Keys\nSecurity\nqa002-cp28-reviewer@example.invalid\nSecurity Reviewer\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nVirtual Keys\n18\nMembers & Roles\n2\nEnvironment Virtual Keys\n18\nName\tPrefix / Last 4\tPlanes / Routes\tState\tCreated\tActions\nQA002 CP28 destructive approval\tvk_tp_dev_…w7TU\t\nMCP\n*\n\tRevoked\tNov 23, 2026, 11:14:53 PM\t\nQA002 CP28 destructive approval\tvk_tp_dev_…0bts\t\nPROVIDER, MCP\n*\n\tRevoked\tNov 23, 2026, 11:11:20 PM\t\nPlayground session\tvk_tp_dev_…fYLg\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 11:02:55 PM\t\n\nPlayground session\tvk_tp_dev_…YXTx\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 11:01:20 PM\t\n\nPlayground session\tvk_tp_dev_…QYXh\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 11:00:49 PM\t\n\nPlayground session\tvk_tp_dev_…oIh1\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 10:48:47 PM\t\n\nPlayground session\tvk_tp_dev_…RMKX\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 10:47:50 PM\t\n\nPlayground session\tvk_tp_dev_…Khqb\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 10:46:25 PM\t\n\nPlayground session\tvk_tp_dev_…hzLQ\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 10:45:45 PM\t\n\nPlayground session\tvk_tp_dev_…ZpUC\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 10:40:52 PM\t\n\nQA002 CP24 MCP-only\tvk_tp_dev_…EM6n\t\nMCP\n*\n\tRevoked\tNov 23, 2026, 10:18:01 PM\t\nQA002 CP24 MCP-only\tvk_tp_dev_…4Kcv\t\nMCP\n*\n\tRevoked\tNov 23, 2026, 10:17:40 PM\t\nQA002 CP24 MCP invocation\tvk_tp_dev_…6Ybc\t\nPROVIDER, MCP\n*\n\tRevoked\tNov 23, 2026, 10:14:57 PM\t\nPlayground session\tvk_tp_dev_…TT4q\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 9:52:38 PM\t\n\nPlayground session\tvk_tp_dev_…Sr8N\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 9:52:01 PM\t\n\nPlayground session\tvk_tp_dev_…MDvF\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 9:50:59 PM\t\n\nPlayground session\tvk_tp_dev_…A7Rq\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 9:45:52 PM\t\n\nPlayground session\tvk_tp_dev_…zegt\t\nPROVIDER\n*\n\tActive\tNov 23, 2026, 9:04:01 PM\t",
+  "issueVisible": false,
+  "issueDrawer": "",
+  "budgetText": "ive-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nBudgets & Holds\n14\nChargeback\nExact settled\n$0.000005\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nBudget ceilings\n14\nScope\tPeriod\tExact settled\tEstimated\tActive hold\tHard limit (micro-USD)\n\nVIRTUAL_KEY\nvky_01m85abte4e00akzsz7s4hcthn\n\tMONTHLY\t$0.000001\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m85abte4e00akzsz7s4hcthn\n\n\nVIRTUAL_KEY\nvky_01m85a8xmbe00ad3sb9wyanh0r\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m85a8xmbe00ad3sb9wyanh0r\n\n\nVIRTUAL_KEY\nvky_01m85a7zbne00bbgqhtjd4bx7e\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m85a7zbne00bbgqhtjd4bx7e\n\n\nVIRTUAL_KEY\nvky_01m859hyche009qhf2x5yn403q\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m859hyche009qhf2x5yn403q\n\n\nVIRTUAL_KEY\nvky_01m859g6qge009qw0j8t7zqwh1\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m859g6qge009qw0j8t7zqwh1\n\n\nVIRTUAL_KEY\nvky_01m859dm5de0081t83m73q15vx\n\tMONTHLY\t$0.000001\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m859dm5de0081t83m73q15vx\n\n\nVIRTUAL_KEY\nvky_01m859cd1we009z2y80rrxm9zj\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m859cd1we009z2y80rrxm9zj\n\n\nVIRTUAL_KEY\nvky_01m8593evve008h9qe95cjxmmv\n\tMONTHLY\t$0.000001\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m8593evve008h9qe95cjxmmv\n\n\nPROJECT\nprj_01m853e561e00byw750arfmw8y\n\tMONTHLY\t$0.000003\t$0.000000\t\n$0.000000\n\t\nHard limit for PROJECT prj_01m853e561e00byw750arfmw8y\n\n\nVIRTUAL_KEY\nvky_01m856b4ype0091h727havv8c7\n\tMONTHLY\t$0.000001\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m856b4ype0091h727havv8c7\n\n\nVIRTUAL_KEY\nvky_01m856a0rbe00bxmqy8nacn4nf\n\tMONTHLY\t$0.000001\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m856a0rbe00bxmqy8nacn4nf\n\n\nVIRTUAL_KEY\nvky_01m856843ce00a3bd2sz1sps9r\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m856843ce00a3bd2sz1sps9r\n\n\nVIRTUAL_KEY\nvky_01m855yr1te0082arkf0msjcs8\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m855yr1te0082arkf0msjcs8\n\n\nVIRTUAL_KEY\nvky_01m853j3sde00986ngt0pv1th5\n\tMONTHLY\t$0.000000\t$0.000000\t\n$0.000000\n\t\nHard limit for VIRTUAL_KEY vky_01m853j3sde00986ngt0pv1th5",
+  "createBudgetVisible": false,
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations?limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects?limit=200",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches?active_only=true",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals?status=PENDING&limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=50",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active?limit=50",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary?window=24h",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals?status=PENDING&limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/audit-events?limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches?active_only=true",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/virtual-keys?project_id=prj_01m853e561e00byw750arfmw8y&env_id=env_01m853e561e00byx2a58rbj8wz&limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/members?limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/models?limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments?env_id=env_01m853e561e00byx2a58rbj8wz&limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/traces?env_id=env_01m853e561e00byx2a58rbj8wz&limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/virtual-keys?project_id=prj_01m853e561e00byw750arfmw8y&env_id=env_01m853e561e00byx2a58rbj8wz&limit=100",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/usage/summary?group_by=project",
+      "status": 200,
+      "code": null
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets?project_id=prj_01m853e561e00byw750arfmw8y&limit=100",
+      "status": 200,
+      "code": null
+    }
+  ]
+}

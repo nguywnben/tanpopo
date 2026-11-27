@@ -1,0 +1,31 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "endpoint": "http://[::1]:19185/mcp",
+  "synthetic_fixture": "IPv6-loopback-only Streamable HTTP MCP fixture; method/path metadata only",
+  "negative_control": {
+    "allowed_cidr": "::2/128",
+    "registration": "HTTP 201; row persisted ACTIVE with zero tools",
+    "sync": "HTTP 502 mcp_sync_failed; UI displayed upstream MCP tool synchronization failed",
+    "fixture_requests": 0,
+    "classification": "Fail-closed; no SSRF or CIDR bypass"
+  },
+  "positive_control": {
+    "allowed_cidr": "::1/128",
+    "registration": "HTTP 201",
+    "sync_first": "UI showed success banner for one synced tool and fixture recorded the expected three JSON-RPC methods; HTTP status was not captured for this first sync",
+    "sync_repeat": "HTTP 200; synced_count 1; drifted_count 0",
+    "persisted_state": "Schema Drift Locked; one tool",
+    "ui_banner": "Synced 1 tools ... 0 schema changes require approval",
+    "fixture_calls": [
+      {"method":"initialize","path":"/mcp"},
+      {"method":"notifications/initialized","path":"/mcp"},
+      {"method":"tools/list","path":"/mcp"},
+      {"method":"initialize","path":"/mcp"},
+      {"method":"notifications/initialized","path":"/mcp"},
+      {"method":"tools/list","path":"/mcp"}
+    ],
+    "first_discovery_status_mismatch": "Newly discovered tool is locked for schema review while sync reports zero changes requiring approval; DEF-026 recurred."
+  },
+  "observations": ["QA-OBS-004 generic CIDR failure diagnostic recurred"],
+  "source_changes": false
+}

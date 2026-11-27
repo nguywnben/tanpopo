@@ -1,0 +1,10 @@
+{
+  "scope": "synthetic QA organization qa002-cp39-isolation",
+  "principal_role": "ORG_OWNER",
+  "project_selected": false,
+  "request": "GET /admin/v1/members",
+  "status": 200,
+  "member_count": 1,
+  "member_emails": ["qa002-cp39-org-owner@example.invalid"],
+  "sensitive_session_fields": "omitted"
+}

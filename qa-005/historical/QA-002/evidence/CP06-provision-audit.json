@@ -1,0 +1,26 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated A2A-enabled SQLite server 127.0.0.1:18084",
+  "owner": "synthetic QA Org Owner; IDs only, no secret material",
+  "actions": [
+    {"kind": "fresh bootstrap organization/project/environment", "events": ["organization.created", "project.created", "environment.created"], "entry_point": "admin_api"},
+    {"kind": "separate project create", "http_status": 201, "target_id": "prj_01m84ymb7we009px5hb5pfwsns", "event": "project.created", "actor_id": "prc_01m84xhbtwe00939kr14qg3khv", "org_id": "org_01m84xhbtwe009367awjy8edrt", "seq_no": 8, "metadata_slug": "qa002-audit-mwto47wa"},
+    {"kind": "environment create", "http_status": 201, "target_id": "env_01m84ymb8ae00b43av7shak1sf", "event": "environment.created", "actor_id": "prc_01m84xhbtwe00939kr14qg3khv", "org_id": "org_01m84xhbtwe009367awjy8edrt", "seq_no": 9, "metadata_project_id": "prj_01m84ymb7we009px5hb5pfwsns", "metadata_slug": "stage"}
+  ],
+  "failed_create_atomicity": {
+    "action": "POST duplicate project slug in the same tenant",
+    "http_status": 409,
+    "error_code": "resource_already_exists",
+    "audit_count_before": 10,
+    "audit_count_after": 10,
+    "partial_resource_or_audit_write": false
+  },
+  "audit_chain": {"verify_http_status": 200, "intact": true, "checked_events_count": 10, "first_broken_seq_no": null},
+  "ui": {
+    "route": "/security/audit-log",
+    "visible_rows_include": ["organization.created", "project.created", "environment.created"],
+    "screenshot_visually_inspected": "CP06-audit-log.png"
+  },
+  "classification": "DEF-007 missing-event behavior did not reproduce for bootstrap or standalone successful project/environment creates. Events carried the authenticated principal, target/resource scope, partition, sequence, and metadata; failed duplicate create did not add a resource or event; the audit chain verified intact.",
+  "limits": ["Standalone organization creation from the operations UI was not exercised.", "Permission-denied, storage fault, rollback, update/delete provisioning events, and cross-tenant audit visibility remain unverified."]
+}

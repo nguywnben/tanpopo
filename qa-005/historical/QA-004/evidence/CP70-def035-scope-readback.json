@@ -1,0 +1,51 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 SQLite runtime at 127.0.0.1:18128",
+  "browser": "Chromium, 1440x1000, authenticated Org Owner/Operator Console",
+  "product_source_modified": false,
+  "organization": {
+    "id": "org_01m895k8pee008b3aeaswvpshy",
+    "slug": "qa004-test-root-org"
+  },
+  "scopes": [
+    {
+      "name": "organization only / no project / no environment",
+      "ui_deployment_rows": 0,
+      "ui_state": "All environment deployments; No deployments found",
+      "authenticated_org_only_get_admin_v1_deployments_limit_100": {
+        "status": 200,
+        "rows": [
+          {"deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae", "environment_id": "env_01m895k8pee008b5ah423mhysr"},
+          {"deployment_id": "dpl_01m8969kjme00br1mjja9gam7q", "environment_id": "env_01m895k8pee008b5ah423mhysr"}
+        ]
+      }
+    },
+    {
+      "name": "empty project QA-004 Isolated Canary / qa004-scope-canary-env",
+      "project_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "environment_id": "env_01m89de355e0088ns1czays31e",
+      "ui_deployment_rows": 0,
+      "explicit_project_and_environment_filtered_get": {
+        "status": 200,
+        "query": "project_id and env_id for this empty canary scope",
+        "rows": 0
+      },
+      "environment_readback": "the environment belongs to the selected canary project"
+    },
+    {
+      "name": "owning project default / dev",
+      "project_id": "prj_01m895k8pee008b440xk2ef12p",
+      "environment_id": "env_01m895k8pee008b5ah423mhysr",
+      "ui_deployment_rows": 2,
+      "project_and_environment_filtered_get": {
+        "status": 200,
+        "rows": [
+          "dpl_01m897vpcve008s9jjtnxtxvae",
+          "dpl_01m8969kjme00br1mjja9gam7q"
+        ]
+      }
+    }
+  ],
+  "classification": "PARTIAL retest of historical DEF-035: no sibling deployment row or sibling Disable/Delete action appeared in organization-only or the empty project's selected environment; the two rows appeared in the environment that owns them. The raw organization-owner unfiltered deployment list still returns those two records, while the organization-only UI renders an empty state. Whether that owner-level empty state is intended when the header says 'All environment deployments' is contract-unclear. Project-only scope with No env, other roles, delayed responses, refresh/scope races and action lifecycle remain UNVERIFIED.",
+  "new_defects": []
+}

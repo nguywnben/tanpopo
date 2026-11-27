@@ -1,0 +1,31 @@
+{
+  "revoked": [
+    "QA004 CP98 Responses stream valid"
+  ],
+  "finalKeys": [
+    {
+      "id": "vky_01m8arzhtge00b57zyt66n6xm0",
+      "name": "QA004 CP98 Responses stream final",
+      "state": "REVOKED",
+      "version": 2
+    },
+    {
+      "id": "vky_01m8aryr9ve0088gjkngw5dk2e",
+      "name": "QA004 CP98 Responses stream valid",
+      "state": "REVOKED",
+      "version": 2
+    },
+    {
+      "id": "vky_01m8arq8che009ahab99n3z1jw",
+      "name": "QA004 CP98 Responses stream verified",
+      "state": "REVOKED",
+      "version": 2
+    },
+    {
+      "id": "vky_01m8ardmc8e00axa0mfaav3ez9",
+      "name": "QA004 CP98 Responses stream healthy",
+      "state": "REVOKED",
+      "version": 2
+    }
+  ]
+}

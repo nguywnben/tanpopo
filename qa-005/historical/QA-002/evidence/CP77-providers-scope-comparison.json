@@ -1,0 +1,138 @@
+{
+  "first": {
+    "scope": "QA-002 A2A Org\n/\nqa-002-a2a-project\n/\ndev\n(Active workspace scope)",
+    "body": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t",
+    "api": [
+      {
+        "status": 200,
+        "url": "/admin/v1/auth/login"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/auth/session"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/organizations?limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/bootstrap/status"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/projects?limit=200"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/kill-switches?active_only=true"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/approvals?status=PENDING&limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/projects/prj_01m84ymb7we009px5hb5pfwsns/environments"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=50"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/alerts/active?limit=50"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/overview/summary?window=24h"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/projects/prj_01m84xhbtwe00937gta0tjq86f/environments"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/provider-adapters?limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/secrets?limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/connections?limit=100"
+      }
+    ]
+  },
+  "second": {
+    "scope": "QA-002 A2A Org\n/\nQA002 Audit mwto47wa\n/\nstage\n(Active workspace scope)",
+    "body": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t",
+    "api": [
+      {
+        "status": 200,
+        "url": "/admin/v1/auth/login"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/auth/session"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/organizations?limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/bootstrap/status"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/projects?limit=200"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/kill-switches?active_only=true"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/approvals?status=PENDING&limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/projects/prj_01m84ymb7we009px5hb5pfwsns/environments"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=50"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/alerts/active?limit=50"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/overview/summary?window=24h"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/projects/prj_01m84xhbtwe00937gta0tjq86f/environments"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/provider-adapters?limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/secrets?limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/connections?limit=100"
+      },
+      {
+        "status": 200,
+        "url": "/admin/v1/projects/prj_01m84ymb7we009px5hb5pfwsns/environments"
+      }
+    ]
+  }
+}

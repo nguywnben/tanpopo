@@ -1,0 +1,18 @@
+
+> tanpopo-console@0.3.0 test
+> vitest run src/pages/console.test.tsx -t hides unavailable presets|offers only adapters
+
+
+ RUN  v5.1.0 /workspace/tanpopo-qa-002/web/console
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 11 skipped (13)
+   Start at  21:20:24
+   Duration  3.53s (import 38%, environment 27%, tests 22%, transform 7%, setup 6%)
+
+npm notice
+npm notice New major version of npm available! 11.19.1 -> 12.2.3
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.3
+npm notice To update run: npm install -g npm@12.2.3
+npm notice

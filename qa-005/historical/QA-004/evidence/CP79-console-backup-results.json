@@ -1,0 +1,49 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 test runtime 127.0.0.1:18128",
+  "role": "OPERATOR + ORG_OWNER",
+  "browser": "Chromium 1440x1000",
+  "workflow": "Operations > Backups > Create encrypted backup",
+  "ui": {
+    "initial_empty_count": 0,
+    "success_notice": true,
+    "success_notice_text": "Encrypted backup created; filename, SHA-256, and byte count displayed.",
+    "post_create_count": 1
+  },
+  "archive": {
+    "filename": "tanpopo-backup-4144db2016cef60b98400f7b438d6c54.tpop.enc",
+    "backup_id": "4144db2016cef60b98400f7b438d6c54",
+    "isolated_runtime_bytes": 142704,
+    "receipt_sha256": "5d473aadae1d082c6a9e3f97a5295d48ef99a789bf09a9500f99b0839d5ffacb",
+    "filesystem_sha256": "5d473aadae1d082c6a9e3f97a5295d48ef99a789bf09a9500f99b0839d5ffacb",
+    "size_and_hash_match_receipt": true,
+    "storage": "isolated runtime backup directory under /tmp; archive is excluded from the QA branch"
+  },
+  "system_audit": {
+    "query_status": 200,
+    "action": "ops.backup_created",
+    "chain_partition": "SYSTEM",
+    "sequence": 6,
+    "target_type": "instance_ops",
+    "target_id_matches_backup_id": true,
+    "metadata_hash_matches_archive": true,
+    "metadata_size_matches_archive": true,
+    "event_hash_present": true,
+    "previous_hash_present": true,
+    "chain_verification_status": 200,
+    "chain_intact": true,
+    "checked_events_count": 6
+  },
+  "archive_verify_restore": {
+    "status": "UNVERIFIED",
+    "attempt": "Frozen RC6 CLI backup verify using the only accessible test KEK candidate",
+    "result": "AEAD authentication failed while unwrapping the archive data key",
+    "interpretation": "This key does not authenticate this archive. The active test server's master-key file binding is not readable from the restricted shell, so this does not establish archive corruption or a product defect. Verify/restore of this exact UI-created archive requires the runtime-matching QA KEK. CP28 and CP67 independently verified other RC6 archives; those passes are not inherited for this artifact."
+  },
+  "screenshots": [
+    "CP79-console-backups-initial.png",
+    "CP79-console-backup-created.png"
+  ],
+  "product_source_modified": false,
+  "sensitive_artifact_handling": "The encrypted backup itself contains QA runtime database material and is not included in this branch."
+}

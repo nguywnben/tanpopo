@@ -1,0 +1,12 @@
+{
+  "status": 503,
+  "body": {
+    "error": {
+      "code": "no_compliant_deployment_available",
+      "type": "residency_unavailable_error",
+      "message": "No compliant active deployment is available for model \"qa002-failed-provider-route\".",
+      "request_id": "req_01m8513nage00ap52verm9ykkd",
+      "retryable": true
+    }
+  }
+}

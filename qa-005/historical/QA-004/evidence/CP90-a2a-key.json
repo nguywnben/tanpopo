@@ -1,0 +1,20 @@
+{
+  "create_status": 201,
+  "grant_update_status": 200,
+  "keys": [
+    {
+      "id": "vky_01m8amqqh9e00aq1k1da5f6pg5",
+      "name": "QA004 CP90 Input-required cancel A2A-only",
+      "state": "CREATED_ACTIVE",
+      "allowed_planes": [
+        "A2A"
+      ],
+      "allowed_routes": [
+        "/a2a/*"
+      ],
+      "project_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "env_id": "env_01m89de355e0088ns1czays31e",
+      "version": 2
+    }
+  ]
+}

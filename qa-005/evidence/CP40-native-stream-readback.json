@@ -1,0 +1,42 @@
+{
+  "checkpoint": "CP40",
+  "trace_details": [
+    {
+      "status": 200,
+      "request_id": "trc_01m8cy4epre00bgjencjd8w0hj",
+      "plane": "NATIVE",
+      "route_slug": "qa005-native-fixture",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 1500000,
+      "status_code": 200,
+      "error_code": null,
+      "data_region": "ON_PREM",
+      "has_debug_payload": false
+    },
+    {
+      "status": 200,
+      "request_id": "trc_01m8cy4eq7e009m5cymbnksra1",
+      "plane": "NATIVE",
+      "route_slug": "qa005-native-fixture",
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 1800000,
+      "status_code": 200,
+      "error_code": null,
+      "data_region": "ON_PREM",
+      "has_debug_payload": false
+    }
+  ],
+  "usage_summary": {
+    "status": 200,
+    "rows": [
+      {
+        "group_key": "qa005-native-fixture",
+        "exact_micro_usd": 8100000,
+        "estimated_micro_usd": 0,
+        "exact_request_count": 5,
+        "estimated_request_count": 0,
+        "unmetered_request_count": 0
+      }
+    ]
+  }
+}

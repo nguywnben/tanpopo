@@ -1,0 +1,50 @@
+{
+  "checkpoint": "CP102",
+  "finding": "DEF-078",
+  "classification": "PARTIAL (historical mismatch not reproduced in this current RC7 project)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite through TLS proxy https://127.0.0.1:19444",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER",
+  "scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+  "period": {
+    "start": "2026-11-01T00:00:00Z",
+    "end": "2026-12-01T00:00:00Z",
+    "budget_api_status": 200,
+    "usage_summary_api_status": 200,
+    "budget": {
+      "period": "MONTHLY",
+      "exact_micros": 3000000,
+      "estimated_micros": 0,
+      "active_hold_micros": 0,
+      "hard_limit_micros": 2500000,
+      "negative_carryover_micros": 500000
+    },
+    "filtered_project_usage": {
+      "exact_micros": 3000000,
+      "estimated_micros": 0,
+      "exact_request_count": 3,
+      "estimated_request_count": 0
+    },
+    "ui_budget_and_chargeback_match": true
+  },
+  "visually_inspected_screenshots": [
+    "screenshots/CP102-finops-initial.png",
+    "screenshots/CP102-finops-chargeback.png"
+  ],
+  "writes": 0,
+  "inference_requests": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "historical_qa004_mismatch_overturned": false,
+  "remaining_scope": [
+    "fresh default/seeded project reproduction",
+    "exact and estimated settlements while the budget is already active",
+    "request-level settlement-to-ledger attribution",
+    "budget period rollover",
+    "concurrent settlement and boundary admission",
+    "other backends"
+  ],
+  "gate_rel_07": "BLOCKED"
+}

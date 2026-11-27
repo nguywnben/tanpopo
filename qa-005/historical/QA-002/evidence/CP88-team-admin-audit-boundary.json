@@ -1,0 +1,28 @@
+{
+  "checkpoint": "CP88",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "browser": "Chromium",
+  "role": "Team Admin",
+  "assigned_project": "QA002 Audit mwto47wa",
+  "workspace_scope": "Project / stage",
+  "route": "/security/audit-log",
+  "visible_security_navigation": true,
+  "api": {
+    "method": "GET",
+    "path": "/admin/v1/audit-events?limit=100",
+    "status": 403
+  },
+  "ui": {
+    "visible_denial": "insufficient role permission",
+    "event_details_returned": false,
+    "protected_rows_displayed": false
+  },
+  "authorization_contract_observed": {
+    "team_admin_has_audit_read_and_verify": false,
+    "team_admin_has_project_kill_switch_action": true,
+    "team_admin_has_approval_read_and_decide": true
+  },
+  "classification": "PASS - intentional RBAC restriction; no defect assigned",
+  "mutation_performed": false,
+  "gate": "GATE-REL-07 BLOCKED"
+}

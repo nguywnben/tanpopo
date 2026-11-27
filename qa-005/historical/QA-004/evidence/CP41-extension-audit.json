@@ -1,0 +1,43 @@
+{
+  "api": {
+    "status": 200,
+    "total_returned": 43,
+    "events": [
+      {
+        "id": "aud_01m89qs0h3e008x5w2bfe4czmw",
+        "seq_no": 43,
+        "action": "extension.staged_install_cancelled",
+        "target_type": "extension_installation",
+        "target_id": "ins_01m89qpt3qe00avdrdwr684qj8",
+        "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+        "metadata": {
+          "installation_id": "ins_01m89qpt3qe00avdrdwr684qj8"
+        },
+        "created_at": "2026-11-25T16:14:16.611Z"
+      },
+      {
+        "id": "aud_01m89qpt3re008nvtby1f3wfj5",
+        "seq_no": 42,
+        "action": "extension.staged_pending_approval",
+        "target_type": "extension_installation",
+        "target_id": "ins_01m89qpt3qe00avdrdwr684qj8",
+        "actor_id": "prc_01m895k8pee008b6m9nq76z1ab",
+        "metadata": {
+          "allowed_hosts": [
+            "api.anthropic.com"
+          ],
+          "canonical_name": "@tanpopo/anthropic",
+          "enterprise_signed": false,
+          "execution_tier": "WASM_SANDBOX_T2",
+          "origin_trust_tier": "unverified_external",
+          "secret_slots": "[REDACTED]",
+          "version": "0.1.0"
+        },
+        "created_at": "2026-11-25T16:13:04.503Z"
+      }
+    ]
+  },
+  "staged_ui": "de\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n4\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#42\textension.staged_pending_approval\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m89qpt3qe00avdrdwr684qj8\n\t4:13:04 PM\t\nInspect\n\n#7\textension.staged_pending_approval\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m895qhd1e00bwdzrxt61nxp4\n\t10:58:53 AM\t\nInspect\n\n#6\textension.staged_pending_approval\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m895q3r2e009jw7z2xjxjr9n\n\t10:58:40 AM\t\nInspect\n\n#5\textension.staged_pending_approval\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m895ph2ge00a3evn7jxp86st\n\t10:58:20 AM\t\nInspect",
+  "cancelled_ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nImmutable audit events\n3\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#43\textension.staged_install_cancelled\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m89qpt3qe00avdrdwr684qj8\n\t4:14:16 PM\t\nInspect\n\n#9\textension.staged_install_cancelled\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m895q3r2e009jw7z2xjxjr9n\n\t11:02:40 AM\t\nInspect\n\n#8\textension.staged_install_cancelled\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m895qhd1e00bwdzrxt61nxp4\n\t11:02:40 AM\t\nInspect",
+  "chain_verification_ui": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 43 events.\nImmutable audit events\n3\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#43\textension.staged_install_cancelled\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m89qpt3qe00avdrdwr684qj8\n\t4:14:16 PM\t\nInspect\n\n#9\textension.staged_install_cancelled\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m895q3r2e009jw7z2xjxjr9n\n\t11:02:40 AM\t\nInspect\n\n#8\textension.staged_install_cancelled\tprc_01m895k8pee008b6m9nq76z1ab\t\nextension_installation\nins_01m895qhd1e00bwdzrxt61nxp4\n\t11:02:40 AM\t\nInspect"
+}

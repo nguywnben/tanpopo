@@ -1,0 +1,126 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated SQLite clone at 127.0.0.1:18147; TANPOPO_A2A_ENABLED=true",
+  "agent_id": "agt_01m8cqhrfce00akzh56yx7fw8e",
+  "agent_slug": "qa005-a2a-input-required",
+  "credential_scope": {
+    "allowed_planes": [
+      "A2A"
+    ],
+    "allowed_routes": [
+      "/a2a/*"
+    ],
+    "secret_omitted": true
+  },
+  "provider_plane_denial": {
+    "http_status": 403,
+    "error_code": "scope_or_plane_denied"
+  },
+  "task_lifecycle": {
+    "before": {
+      "status": 200,
+      "body": {
+        "task_id": "tsk_01m8cqr0wje008wbmpha70z1av",
+        "target_agent_id": "agt_01m8cqhrfce00akzh56yx7fw8e",
+        "target_agent_slug": "qa005-a2a-input-required",
+        "state": "input-required",
+        "prompt_message": "Please provide the invoice approval code.",
+        "hop_count": 1,
+        "call_chain_ids": [
+          "agt_01m8cqhrfce00akzh56yx7fw8e"
+        ],
+        "trace_root_id": "trc_01m8cqr0wje008wch0vr51zfkf",
+        "enforced_region": "US",
+        "sub_budget_hold_micros": 0,
+        "version": 3,
+        "created_at": "2026-11-26T20:11:27.506Z",
+        "updated_at": "2026-11-26T20:11:27.51Z"
+      }
+    },
+    "resumed": {
+      "status": 200,
+      "body": {
+        "task_id": "tsk_01m8cqr0wje008wbmpha70z1av",
+        "target_agent_id": "agt_01m8cqhrfce00akzh56yx7fw8e",
+        "target_agent_slug": "qa005-a2a-input-required",
+        "state": "completed",
+        "hop_count": 1,
+        "call_chain_ids": [
+          "agt_01m8cqhrfce00akzh56yx7fw8e"
+        ],
+        "trace_root_id": "trc_01m8cqr0wje008wch0vr51zfkf",
+        "enforced_region": "US",
+        "sub_budget_hold_micros": 0,
+        "artifacts": [
+          {
+            "name": "qa005-result",
+            "text": "fixture complete"
+          }
+        ],
+        "version": 5,
+        "created_at": "2026-11-26T20:11:27.506Z",
+        "updated_at": "2026-11-26T20:12:08.301Z",
+        "completed_at": "2026-11-26T20:12:08.301Z"
+      }
+    },
+    "after": {
+      "status": 200,
+      "body": {
+        "task_id": "tsk_01m8cqr0wje008wbmpha70z1av",
+        "target_agent_id": "agt_01m8cqhrfce00akzh56yx7fw8e",
+        "target_agent_slug": "qa005-a2a-input-required",
+        "state": "completed",
+        "hop_count": 1,
+        "call_chain_ids": [
+          "agt_01m8cqhrfce00akzh56yx7fw8e"
+        ],
+        "trace_root_id": "trc_01m8cqr0wje008wch0vr51zfkf",
+        "enforced_region": "US",
+        "sub_budget_hold_micros": 0,
+        "artifacts": [
+          {
+            "name": "qa005-result",
+            "text": "fixture complete"
+          }
+        ],
+        "version": 5,
+        "created_at": "2026-11-26T20:11:27.506Z",
+        "updated_at": "2026-11-26T20:12:08.301Z",
+        "completed_at": "2026-11-26T20:12:08.301Z"
+      }
+    }
+  },
+  "limitations": [
+    "Local deterministic mock only; no real partner interoperability.",
+    "Cancellation, nonzero sub-budget, parent/child lifecycle, failure/retry, residency/model/hop boundaries, multi-tenant isolation, and MCP remain unverified."
+  ],
+  "discovery": {
+    "http_status": 200,
+    "fixture_agent_discovered": true
+  },
+  "task_creation": {
+    "http_status": 201,
+    "task_id": "tsk_01m8cqr0wje008wbmpha70z1av",
+    "initial_state": "input-required"
+  },
+  "audit_verification": {
+    "tool": "tanpopo admin verify-state",
+    "storage_engine": "sqlite",
+    "audit_chain_valid": true,
+    "events_verified": 188,
+    "orphan_holds_reconciled": 0
+  },
+  "key_revocation": {
+    "ui_result": "Virtual key revoked; 0 active streams severed",
+    "clone_post_revoke_a2a_request": {
+      "http_status": 401,
+      "error_code": "invalid_credential_plane"
+    },
+    "default_disabled_runtime_request": {
+      "http_status": 404,
+      "error_code": "resource_not_found",
+      "reason": "A2A plane disabled by default"
+    }
+  }
+}

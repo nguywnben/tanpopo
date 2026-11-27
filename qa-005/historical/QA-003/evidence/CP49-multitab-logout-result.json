@@ -1,0 +1,51 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "scenario": "second-tab logout revokes first-tab Playground key",
+  "create_status": 201,
+  "key_id": "vky_01m8879bw2e00bryebb996cwtg",
+  "secret_written_to_evidence": false,
+  "second_tab_before_logout": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensi",
+  "logout_status": null,
+  "second_tab_after_logout": {
+    "url": "/login",
+    "text": "Tanpopo\nLanguage\nEnglish\nSign in\n\nUse your local administrator credentials to access the control plane.\n\nSign in\nActivate invite\nEmail address\n∙ Required\nPassword\n∙ Required\nPassword\nSign in\n\nNew instance? Run first-time"
+  },
+  "first_tab_key_after_logout": {
+    "status": 401,
+    "error_code": "invalid_virtual_key",
+    "credentials_omit": true,
+    "secret_recorded": false
+  },
+  "first_tab_ui_before_send": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 2:21:52 AM\nEnd session\nLive Playground\nSDK Snippets\nModel or route slug\nqa003-cp47-stream-route\nComparison model (optional)\nYou\nCross-tab logout revocation.\nqa003-cp47-stream-route\nQA003 loopback mock reply\nPrompt\nSend\nExecution traces\nPrimary · trc_01m8879bxze008d9pc874ps0pa\nroute qa003-cp47-stream-route · HTTP 200 · $0.000000 · 9 ms\nExact",
+  "stale_tab_ui_send": {
+    "status": 401,
+    "error_code": "invalid_virtual_key"
+  },
+  "first_tab_ui_after_send": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 2:21:52 AM\nEnd session\nLive Playground\nSDK Snippets\nVirtual Key is invalid, expired, or revoked.\nModel or route slug\nqa003-cp47-stream-route\nComparison model (optional)\nYou\nCross-tab logout revocation.\nqa003-cp47-stream-route\nQA003 loopback mock reply\nYou\nSend from the tab after another tab signed out.\nqa003-cp47-stream-route\nPrompt\nSend\nExecution traces\nPrimary · trc_01m8879tv6e00921e9cfhr7321\nTrace not available yet.",
+  "logout_responses": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/logout",
+      "status": 204
+    }
+  ],
+  "key_readback": {
+    "status": 401,
+    "found": false
+  },
+  "trace_readback_after_fresh_login": {
+    "status": 404,
+    "trace_id": "trc_01m8879tv6e00921e9cfhr7321",
+    "trace_found": false,
+    "request_id": null,
+    "status_code": null,
+    "error_code": null,
+    "has_prompt": false,
+    "has_completion": false
+  }
+}

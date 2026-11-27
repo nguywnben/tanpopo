@@ -1,0 +1,39 @@
+{
+  "credentialConfigured": true,
+  "proxyPath": {
+    "status": 200,
+    "modelsReturned": 10,
+    "modelNames": [
+      "models/gemini-2.5-flash",
+      "models/gemini-2.5-pro",
+      "models/gemini-2.5-flash-preview-tts",
+      "models/gemini-2.5-pro-preview-tts",
+      "models/gemma-4-26b-a4b-it"
+    ],
+    "method": "Authenticated Google Generative Language API model list via environment-configured HTTPS proxy",
+    "costGeneratingInference": false
+  },
+  "directNodePath": {
+    "result": "ECONNREFUSED",
+    "interpretation": "Node fetch direct without ambient proxy failed before receiving HTTP response"
+  },
+  "tanpopoAppPath": {
+    "runtime": "isolated SQLite 127.0.0.1:18116",
+    "adapter": "@tanpopo/gemini",
+    "adapterActivated": true,
+    "credentialSubmittedViaWriteOnlyVault": true,
+    "probeHttpStatus": 200,
+    "valid": false,
+    "failureCode": "upstream_unreachable",
+    "sanitizedMessage": "upstream connection could not be reached",
+    "connectionState": "CREATED_UNVERIFIED",
+    "inferenceSent": false
+  },
+  "historicalComparison": {
+    "qa002Cp112": "Same Cloud direct-egress vs configured-proxy differential reproduced; environmental classification is supported there.",
+    "probeRuntimeUnavailable": "Historical QA-001 symptom remains unresolved for its older runtime/config; it was not reproduced on this active QA-003 adapter configuration."
+  },
+  "classification": "Environmental direct-egress incompatibility in managed Cloud path; no product defect established.",
+  "security": "No SSRF bypass, proxy override, query-string API key, or external inference was used.",
+  "spendUsd": 0
+}

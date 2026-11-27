@@ -1,0 +1,13 @@
+{
+  "readback": {
+    "status": 200,
+    "items": [
+      {
+        "id": "con_01m897rgv1e00b2n9vf3w7j125",
+        "state": "CREATED_UNVERIFIED",
+        "version": 3
+      }
+    ]
+  },
+  "ui": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa004-testroot-owner@example.invalid\nOperator, Org Owner\nQA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAir-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nProviders\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n2\nVault Secrets\nAdapters\n1\nQA004 synthetic Ollama 401: upstream returned HTTP 401\nConfigured connections\n2\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA004 synthetic Ollama 401 (f3w7j125)\nhttp://127.0.0.1:18126\n\tadp_01m8960jy4e008j1wpkkzr227t\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA004 synthetic Ollama (qh65qzth)\nhttp://127.0.0.1:18125\n\tadp_01m8960jy4e008j1wpkkzr227t\tON_PREM · Self-hosted\tActive\tNone bound\t"
+}

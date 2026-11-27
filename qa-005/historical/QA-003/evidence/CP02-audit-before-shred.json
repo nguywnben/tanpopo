@@ -1,0 +1,16 @@
+{
+  "listStatus": 200,
+  "eventCount": 4,
+  "eventTypes": [
+    "virtual_key.created",
+    "environment.created",
+    "project.created",
+    "organization.created"
+  ],
+  "verifyStatus": 200,
+  "intact": true,
+  "checkedEvents": 4,
+  "firstBrokenSeq": null,
+  "screenshot": "CP02-target-audit-before-shred.png",
+  "visualText": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nFilter by action\nVerify hash chain\nHash chain verified\nCryptographic RFC 8785 JCS chain intact across 4 events.\nImmutable audit events\n4\nSeq\tAction\tActor\tTarget\tTime\tDetail\n#4\tvirtual_key.created\tprc_01m87axgx7e008ek9a2xdp3tfk\t\nvirtual_key\nvky_01m87bnmate008k9q7qwsnnzj7\n\t6:04:14 PM\t\nInspect\n\n#3\tenvironment.created\tprc_01m87axgx7e008ek9a2xdp3tfk\t\nenvironment\nenv_01m87bd8ywe009gze2n6tcsagb\n\t5:59:40 PM\t\nInspect\n\n#2\tproject.created\tprc_01m87axgx7e008ek9a2xdp3tfk\t\nproject\nprj_01m87bd75xe008vmrnbevambr7\n\t5:59:38 PM\t\nInspect\n\n#1\torganization.created\tprc_01m87axgx7e008ek9a2xdp3tfk\t\norganization\norg_01m87b4kx8e00a53dy88sak10c\n\t5:54:56 PM\t\nInspect"
+}

@@ -1,0 +1,115 @@
+{
+  "baseline": "RC6 2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "role": "ORG_OWNER",
+  "scope": "QA004 Test Root Org / QA-004 Isolated Canary / No env",
+  "initial": {
+    "status": 200,
+    "etag": "\"v4\"",
+    "data": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "*"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 4
+    }
+  },
+  "edit_response": {
+    "status": 200,
+    "headers": {
+      "etag": "\"v5\""
+    },
+    "body": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "qa004-cp81-temporary"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 5
+    }
+  },
+  "effective_after_edit": {
+    "status": 200,
+    "etag": "\"v5\"",
+    "data": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "qa004-cp81-temporary"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 5
+    }
+  },
+  "restore_response": {
+    "status": 200,
+    "headers": {
+      "etag": "\"v6\""
+    },
+    "body": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "*"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 6
+    }
+  },
+  "effective_after_restore": {
+    "status": 200,
+    "etag": "\"v6\"",
+    "data": {
+      "id": "pol_pafzdvwmbefmm64fx7r1mceqjr",
+      "scope_tier": "PROJECT",
+      "scope_id": "prj_01m89cf7vce008saenf6dyw8gk",
+      "allowed_data_regions": [
+        "APAC",
+        "EU",
+        "ON_PREM",
+        "US"
+      ],
+      "allowed_models": [
+        "*"
+      ],
+      "min_plugin_trust": "ANY_APPROVED",
+      "min_capability_assurance": "DECLARED",
+      "version": 6
+    }
+  },
+  "cleanup_verified": true
+}

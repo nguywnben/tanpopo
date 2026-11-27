@@ -1,0 +1,39 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "heldReads": [
+    {
+      "status": 200,
+      "hasProject": false,
+      "hasEnv": true,
+      "rows": [
+        {
+          "slug": "qa003-cp45-identity-probe",
+          "version": 1,
+          "targets": [
+            {
+              "deployment_id": "dpl_01m87fckaye00axyrh360js4t4",
+              "priority_order": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "states": [
+    {
+      "point": "default/dev request held",
+      "scope": "Default Organization / default / dev",
+      "text": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\nRoute Explain\nPolicies\nConfigured routes\n0"
+    },
+    {
+      "point": "empty project rendered before release",
+      "scope": "Default Organization / QA003 Empty Project DEF035 / No env",
+      "text": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.\nConfigured routes\n0\nNo routes in this environment\nCreate a route to map model slugs to ordered or weighted deployments."
+    },
+    {
+      "point": "old route response released and settled",
+      "scope": "Default Organization / QA003 Empty Project DEF035 / No env",
+      "text": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.\nConfigured routes\n0\nNo routes in this environment\nCreate a route to map model slugs to ordered or weighted deployments."
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "exact RC6 SQLite 18128; read-only active DB metadata",
+  "org_id": "org_01m895k8pee008b3aeaswvpshy",
+  "project_id": "prj_01m89cf7vce008saenf6dyw8gk",
+  "subscription_id": "whk_01m8bgsdtge00b7cwdmtedvc2g",
+  "credential_id": "sec_01m8bgqf0ne00b0y2nje5mryxt",
+  "creation": {
+    "webhook_status": 201,
+    "webhook_enabled_initial": true,
+    "signing_credential": "reused synthetic org-owned WEBHOOK_HMAC_SECRET; all matching temporary credentials deleted"
+  },
+  "disable": {
+    "persisted_enabled": false,
+    "version": 2,
+    "state_observed": "real Console showed Disabled; authenticated API list returned enabled=false, version=2"
+  },
+  "kill_switch": {
+    "status": 200,
+    "affected_entities": "1, as shown in visually inspected Console result",
+    "cleared_status": 200,
+    "active_switches_after_clear": []
+  },
+  "delivery_rows_while_disabled": [],
+  "cleanup": {
+    "delete_subscription_status": 200,
+    "delete_secret_statuses": [
+      204,
+      204
+    ],
+    "readback": {
+      "subscription_rows": 0,
+      "delivery_rows": 0
+    },
+    "delete_secret_statuses_204_count": 2
+  },
+  "external_provider_spend_usd": 0,
+  "delivery_rows_while_disabled_observation": "Read-only query of active RC6 SQLite store after trigger returned zero rows for this organization/subscription; payload excluded"
+}

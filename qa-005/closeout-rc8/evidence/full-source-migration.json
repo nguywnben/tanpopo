@@ -1,0 +1,47 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "runtime": "Exact RC8 release Linux/amd64 binary; isolated PostgreSQL 16; non-superuser, non-BYPASSRLS migration role; separate disposable target database",
+  "source_sqlite_sha256": "720be31fcb7442fb7a4ea05d40091b7ac67eb180be0cf3228f9fec1d67e1ba59",
+  "command": "tanpopo db migrate-engine --from sqlite://... --to postgres://... --verify",
+  "exit_code": 0,
+  "status": "VERIFIED",
+  "migration_managed_tables": 55,
+  "rows_copied": 1272,
+  "audit_events_verified": 727,
+  "secret_envelopes_verified": 0,
+  "deks_trial_decrypted": 5,
+  "hard_limit_sum_micros": 10022501100,
+  "settled_cost_sum_micros": 18104016,
+  "exact_parity_comparisons": {
+    "budget_ledgers": {"count": 12, "exact_normalized_match": true, "canonical_sha256": "0017506fcf54a7c2582fe266a7564ca94912b4fc411f08c8e44be3a587169c8d", "max_id_characters": 55},
+    "budget_reservation_ledgers": {"count": 43, "exact_normalized_match": true, "canonical_sha256": "e8ca8ce2ffa6fe846deecfd62c6334daa4cf25c1d019c70582dc324d515c0cdc", "max_ledger_id_characters": 50},
+    "model_deployments": {"count": 9, "exact_normalized_match": true, "canonical_sha256": "95b223d37f8a21fa258bd7e199f90398e71548b9f94aea1911654889701ed74e"},
+    "usage_settlements": {"count": 48, "exact_normalized_match": true, "canonical_sha256": "2b764622e7930fd12c46b77f77e4a5a69e63761925ae962635e169ed43a67387", "settled_cost_sum_micros": 18104016},
+    "audit_events": {"count_at_migration": 727, "verified": true},
+    "organization_project_dek_envelopes": {"count": 5, "bytewise_match": true, "trial_decryption": "PASS"}
+  },
+  "post_migration_live_checks": {
+    "runtime_health_http": 200,
+    "owner_console_login": "PASS",
+    "overview_rendered": "PASS",
+    "finops_budget_inventory_rendered": "PASS",
+    "a2a_budget_reservation_and_partial_settlement": "PASS: three synthetic loopback tasks settled 350 micro-USD each",
+    "audit_events_after_runtime_login": 728,
+    "runtime_side_effects_not_migration_differences": ["one successful login audit event", "cluster node heartbeat count changed from 2 to 1"]
+  },
+  "source_rows_not_present": ["secret_credentials: 0 rows; secret-envelope decryption was not exercised"],
+  "sqlite_rc8_upgrade": {
+    "source_copy": "full SQLite source clone",
+    "schema_version_before": 25,
+    "schema_version_after_exact_rc8_start": 27,
+    "budgets_preserved": 12,
+    "reservation_links_preserved": 43,
+    "new_a2a_cancel_columns_present": true,
+    "health_http": 200
+  },
+  "limitations": [
+    "Post-migration no real paid provider was called; accounting continuity was exercised through authorized synthetic A2A fixture tasks.",
+    "Secret credential envelope decryption/use after migration remains UNVERIFIED because the source had no secret_credentials rows.",
+    "PostgreSQL/Valkey cluster failover and backup/restore from the migrated target were not exercised."
+  ]
+}

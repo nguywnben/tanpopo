@@ -1,0 +1,66 @@
+{
+  "checkpoint": "CP46",
+  "scope": "shared Valkey-backed Virtual Key RPM enforcement across two separate exact-source Data Plane runtimes",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": {
+    "control_plane": "127.0.0.1:18151",
+    "data_planes": ["127.0.0.1:18152", "127.0.0.1:18153"],
+    "persistence": "fresh disposable PostgreSQL 16 database and isolated least-privilege app role",
+    "valkey": "three local Valkey 8.1 cluster-enabled instances at 127.0.0.1:17001-17003; all nodes reached cluster_state=ok, 16384 assigned/healthy slots, 3 known nodes",
+    "browser": "Chromium; synthetic QA Owner; fresh first-time setup",
+    "provider": "none configured or called; requests intentionally used an unconfigured synthetic model"
+  },
+  "reproduction": [
+    "Complete fresh instance setup through Chromium on the Control Plane.",
+    "Create an environment-bound PROVIDER Virtual Key through Access & Keys UI with allow-all model and route grants.",
+    "Use authenticated Admin API PATCH with the captured login CSRF token and If-Match version to set rpm_limit=1.",
+    "Issue one valid synthetic no-route POST /v1/chat/completions through Data Plane 18152, then a second through independent Data Plane 18153, using the one-time key in process memory only.",
+    "Inspect durable Trace rows and the key's sanitized inventory readback, then revoke the test key through the UI."
+  ],
+  "key": {
+    "id": "vky_01m8d0h73ee00av58j730pm2d5",
+    "last_four": "a2sm",
+    "rpm_limit": 1,
+    "final_state": "REVOKED",
+    "final_version": 3,
+    "plaintext_evidence": "not recorded; held in process memory only and discarded after requests"
+  },
+  "requests": [
+    {
+      "order": 1,
+      "dataplane": "127.0.0.1:18152",
+      "trace_id": "trc_01m8d0h7vee00bnvghv17av6x4",
+      "http_status": 503,
+      "error": "no_compliant_deployment_available",
+      "interpretation": "request admitted past key authorization/RPM limit and then failed closed because no deployment/route was configured; no upstream provider traffic"
+    },
+    {
+      "order": 2,
+      "dataplane": "127.0.0.1:18153",
+      "trace_id": "trc_01m8d0h7vze00bx18aze6y9ez6",
+      "http_status": 429,
+      "error": "rate_limit_exceeded",
+      "interpretation": "second process observed the first process's shared RPM usage and rejected before routing"
+    }
+  ],
+  "readback": {
+    "trace_ui_count": 2,
+    "cluster_status_control_plane_http": 200,
+    "healthy_node_count_after_test": 3,
+    "cluster_config_epoch_after_key_issue_update_revoke": 6,
+    "key_inventory_final_state": "REVOKED"
+  },
+  "screenshots": [
+    "evidence/screenshots/CP46-vkey-form.png",
+    "evidence/screenshots/CP46-rpm-traces.png",
+    "evidence/screenshots/CP46-vkey-revoked.png",
+    "evidence/screenshots/CP46-three-node-inventory.png"
+  ],
+  "visual_inspection": "The key issuance form, metadata-only two-trace outcomes, key revoked inventory and three-node Operations view were visually inspected.",
+  "limits": [
+    "One Virtual Key, one-minute RPM boundary, two Data Plane processes, no route/deployment.",
+    "Does not cover concurrent boundary races, TPM/budget cross-node consistency, Valkey failure/failover/rebuild, active requests, production network partitions, multiple organizations or real provider interoperability.",
+    "Three-primary test Valkey cluster had no replicas; automatic replica promotion was not tested."
+  ]
+}

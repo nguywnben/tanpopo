@@ -1,0 +1,55 @@
+{
+  "baseline": "RC6 2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "18133 PostgreSQL 16 + configured Valkey cluster; singleton all-role runtime",
+  "scope": "No project\n/\nNo env\n(Active workspace scope)",
+  "agent": {
+    "id": "agt_01m8ax4jhme00bq35e10hnrvv7",
+    "slug": "qa004-cp108-cancel-agent"
+  },
+  "key": {
+    "scope": "environment-bound",
+    "plane": "A2A only",
+    "routes": [
+      "/a2a/*"
+    ]
+  },
+  "request": {
+    "dispatch_async": false,
+    "synthetic_input": true,
+    "sub_budget_hold_micros": 1
+  },
+  "before": {
+    "id": "tsk_01m8axgwtye00bkpn8jss9k59s",
+    "state": "working",
+    "version": 2,
+    "row": "tsk_01m8axgwtye00bkpn8jss9k59s\nqa004-cp108-cancel-agent\n\tWorking\t1 / 5\tUS\t$0.000001\t$0.000000\t\nCancel",
+    "actions": [
+      "Cancel"
+    ]
+  },
+  "cancel_http": 200,
+  "state_after_cancel": {
+    "state": "canceled",
+    "version": 3
+  },
+  "create_response_after_fixture_release": {
+    "status": 400,
+    "error": {
+      "code": "invalid_request",
+      "message": "a2a: invalid SM-09 state transition: canceled -> completed",
+      "request_id": "trc_01m8axh6m0e00bm4djryqyzmgw",
+      "type": "invalid_request_error"
+    },
+    "task_id": null
+  },
+  "fixture": {
+    "path": "/tasks",
+    "input_parts_count": 1,
+    "authorization_forwarded": false,
+    "state": "completed_response_sent"
+  },
+  "final_task": {
+    "state": "canceled",
+    "version": 3
+  }
+}

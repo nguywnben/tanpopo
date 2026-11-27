@@ -1,0 +1,212 @@
+{
+  "checkpoint": "CP51",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": {
+    "control_plane": "127.0.0.1:18151",
+    "data_planes": [
+      "127.0.0.1:18152",
+      "127.0.0.1:18153"
+    ],
+    "postgresql": "isolated PostgreSQL 16; remained available during outage",
+    "valkey": "three-node Valkey 8.1 Cluster; all three primary containers stopped during degraded-mode tests",
+    "browser": "Chromium; synthetic QA Owner",
+    "real_or_paid_provider": false
+  },
+  "documented_contract": {
+    "sources": [
+      "docs/operations/monitoring-incidents.md: Valkey Unreachable with PostgreSQL Healthy",
+      "docs/planning/units/TP-IMP-0040.md: degraded behavior and Local Fallback Quotient",
+      "docs/operations/monitoring-incidents.md: FMEA-07 and INC-07"
+    ],
+    "expectations": [
+      "rate limiting uses conservative per-node local slices while Valkey is unreachable and PostgreSQL remains healthy",
+      "key revocation uses PostgreSQL fallback so revoked credentials do not remain usable",
+      "readiness fails after partition from both PostgreSQL and Valkey exceeds 10 seconds"
+    ]
+  },
+  "test_key": {
+    "id": "vky_01m8d2dnhme00bqp42dydwpknx",
+    "last_four": "DVNF",
+    "name": "CP51 Valkey outage fallback",
+    "rpm_limit": 6,
+    "patched_version": 2,
+    "final_state": "REVOKED",
+    "final_version": 3,
+    "plaintext_included": false
+  },
+  "during_full_valkey_outage": {
+    "containers_stopped": 3,
+    "postgresql_available": true,
+    "readiness": [
+      {
+        "role": "control-plane",
+        "http_status": 200,
+        "body_status": "ready"
+      },
+      {
+        "role": "data-plane-1",
+        "http_status": 200,
+        "body_status": "ready"
+      },
+      {
+        "role": "data-plane-2",
+        "http_status": 200,
+        "body_status": "ready"
+      }
+    ],
+    "rpm_requests": {
+      "per_data_plane": {
+        "data-plane-1": [
+          {
+            "ordinal": 1,
+            "http_status": 503,
+            "error": "no_compliant_deployment_available"
+          },
+          {
+            "ordinal": 2,
+            "http_status": 503,
+            "error": "no_compliant_deployment_available"
+          },
+          {
+            "ordinal": 3,
+            "http_status": 429,
+            "error": "rate_limit_exceeded"
+          },
+          {
+            "ordinal": 4,
+            "http_status": 429,
+            "error": "rate_limit_exceeded"
+          }
+        ],
+        "data-plane-2": [
+          {
+            "ordinal": 1,
+            "http_status": 503,
+            "error": "no_compliant_deployment_available"
+          },
+          {
+            "ordinal": 2,
+            "http_status": 503,
+            "error": "no_compliant_deployment_available"
+          },
+          {
+            "ordinal": 3,
+            "http_status": 429,
+            "error": "rate_limit_exceeded"
+          },
+          {
+            "ordinal": 4,
+            "http_status": 429,
+            "error": "rate_limit_exceeded"
+          }
+        ]
+      },
+      "interpretation": "Each Data Plane received a two-request local allowance, consistent with rpm_limit 6 divided by 3 process nodes; requests admitted by the fallback limiter then failed closed for the intentionally absent route. No upstream provider traffic occurred.",
+      "trace_ui": "All 8 status/error records appeared in the metadata-only Traces screen."
+    },
+    "revocation": {
+      "ui_action": "Access & Keys > Revoke key > Revoke (graceful drain)",
+      "http_status": 200,
+      "state": "REVOKED",
+      "version": 3,
+      "replay": [
+        {
+          "data_plane": "127.0.0.1:18152",
+          "http_status": 401,
+          "error": "invalid_virtual_key",
+          "timing_note": "Sent after the completed Control Plane revoke action; no numeric propagation latency claim is made."
+        },
+        {
+          "data_plane": "127.0.0.1:18153",
+          "http_status": 401,
+          "error": "invalid_virtual_key",
+          "timing_note": "Sent after the completed Control Plane revoke action; no numeric propagation latency claim is made."
+        }
+      ]
+    },
+    "operator_ui": "Operations showed Ready/Serving traffic and 3 process nodes OK; the screen did not show Valkey dependency health."
+  },
+  "after_recovery": {
+    "valkey_cluster_state": "ok",
+    "healthy_slots": 16384,
+    "known_nodes": 3,
+    "primary_count": 3,
+    "readiness_http": {
+      "control_plane": 200,
+      "data_plane_1": 200,
+      "data_plane_2": 200
+    },
+    "operations_ui": "Three process nodes listed at current config epoch with fresh heartbeat and OK health.",
+    "key_state": "REVOKED"
+  },
+  "classifications": {
+    "per_node_rpm_fallback": "PASS (scoped documented behavior)",
+    "postgresql_revocation_fallback": "PASS (scoped: both Data Planes immediately rejected replay)",
+    "valkey_recovery": "PASS (cluster converged to 16384/16384 healthy slots and all application readiness probes returned 200)",
+    "DEF_072": "not adjudicated by this checkpoint",
+    "new_implementation_defect": "none established",
+    "product_gap": "PG-007: Operations view lacks explicit Valkey dependency health; baseline does not state that it must display it"
+  },
+  "screenshots": [
+    "screenshots/CP51-valkey-outage-key-form.png",
+    "screenshots/CP51-valkey-revoke-fallback.png",
+    "screenshots/CP51-operations-during-valkey-outage.png",
+    "screenshots/CP51-valkey-fallback-traces.png",
+    "screenshots/CP51-valkey-recovered-ops.png",
+    "screenshots/CP51-all-test-keys-revoked.png"
+  ],
+  "visual_inspection": "The Virtual Key form, in-outage revoked-key inventory, eight metadata-only trace outcomes, in-outage Operations state and recovered cluster Operations view were visually inspected. The final inventory showing all 10 campaign keys as Revoked was also visually inspected.",
+  "limitations": [
+    "Three-primary Valkey test cluster had no replicas; primary failover/promotion was not exercised.",
+    "No concurrent rate-limit boundary races, budget reservation margins, 2-second notification latency bound, emergency revocation, active stream, or second-tenant cases.",
+    "A simultaneous PostgreSQL+Valkey partition longer than 10 seconds and readiness fail-closed behavior remain unverified.",
+    "An earlier isolated single-node Valkey interruption (cluster_state=fail, PostgreSQL healthy) is not treated as a complete Valkey outage or defect."
+  ],
+  "final_qa_virtual_key_inventory": {
+    "count": 10,
+    "all_states": "REVOKED",
+    "items": [
+      {
+        "name": "CP51 Valkey outage fallback",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP51 Valkey node-loss probe",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP50b PostgreSQL A2A cancel probe",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP50 PostgreSQL A2A cancel probe",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP49 provider-only A2A task boundary",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP49 provider-plane A2A boundary",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP48 A2A lifecycle probe",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP47 cross-node revoke probe",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP45 distributed RPM probe 2",
+        "state": "REVOKED"
+      },
+      {
+        "name": "CP45 distributed RPM probe",
+        "state": "REVOKED"
+      }
+    ]
+  }
+}

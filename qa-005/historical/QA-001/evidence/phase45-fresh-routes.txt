@@ -1,0 +1,49 @@
+Skip to main content
+Tanpopo
+Monitor
+Overview
+Traces
+FinOps
+Gateway
+Providers
+Models
+Routes & Policies
+Ecosystem
+Extensions
+MCP Hub
+Playground
+Governance
+Access & Keys
+Security
+Operations
+qa-fresh-cp38@example.invalid
+Operator, Org Owner
+QA Fresh Install CP38
+/
+qa-fresh-project
+/
+dev
+(Active workspace scope)
+Jump
+Ctrl
+K
+Language
+English
+Kill Switch
+Routes & Policies
+
+Deterministic capability routing, dry-run simulation, and monotonic policy inheritance.
+
+Create route
+Routes
+Route Explain
+Policies
+
+Inherited data residency ceiling: EU, US, APAC, ON_PREM
+
+Configured routes
+0
+No routes in this environment
+Create a route to map model slugs to ordered or weighted deployments.
+Create route
+No routes in this environment Create a route to map model slugs to ordered or weighted deployments.

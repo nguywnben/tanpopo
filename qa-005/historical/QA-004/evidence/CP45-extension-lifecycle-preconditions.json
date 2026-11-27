@@ -1,0 +1,32 @@
+{
+  "install_status": 200,
+  "catalog_status": 200,
+  "installations": [
+    {
+      "id": "ins_01m895ph2ge00a3evn7jxp86st",
+      "canonical_name": "@tanpopo/ollama",
+      "state": "ENABLED_ACTIVE",
+      "active_version": "0.1.0",
+      "candidate_version": null,
+      "previous_rollback_version": null,
+      "version": 2
+    }
+  ],
+  "ollama_catalog": [
+    {
+      "package_id": "@tanpopo/ollama",
+      "canonical_name": "Ollama Local & Self-Hosted Adapter",
+      "version": "0.1.0",
+      "signature_verified": true,
+      "origin_trust_tier": "official",
+      "source_uri": "tanpopo-builtin://ollama.tpkg"
+    }
+  ],
+  "role": "OPERATOR + ORG_OWNER",
+  "menu_items": [
+    "Review permissions",
+    "Upgrade package",
+    "Quarantine package"
+  ],
+  "upgrade_candidate_submitted": false
+}

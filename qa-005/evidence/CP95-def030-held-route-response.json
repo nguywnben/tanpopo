@@ -1,0 +1,41 @@
+{
+  "checkpoint": "CP95",
+  "finding": "DEF-030",
+  "classification": "PASS (scoped QA-005 delayed prior-scope response race retest)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER (qa005-owner@example.invalid)",
+  "held_old_scope_response": {
+    "environment_id": "env_01m8cj8phze00a0t3c590b5mdw",
+    "method": "GET",
+    "path": "/admin/v1/routes?env_id=env_01m8cj8phze00a0t3c590b5mdw&limit=100",
+    "http": 200,
+    "row_count": 4,
+    "route_slugs": ["qa005-native-image-unit", "qa005-native-accounting-route", "qa005-priced-route", "qa005-chat-route"],
+    "delivery": "held after genuine route.fetch response; released after new scope settled"
+  },
+  "new_scope_before_release": {
+    "environment_id": "env_01m8d6f78xe00a9w53vt41rnqg",
+    "http": 200,
+    "ui_row_count": 3,
+    "ui_route_slugs": ["qa005-playground-openai", "qa005-playground-low", "qa005-budgetless-route"],
+    "screenshot": "CP95-def030-new-scope-before-release.png"
+  },
+  "new_scope_after_release": {
+    "environment_id": "env_01m8d6f78xe00a9w53vt41rnqg",
+    "ui_row_count": 3,
+    "ui_route_slugs": ["qa005-playground-openai", "qa005-playground-low", "qa005-budgetless-route"],
+    "old_scope_rows_visible": false,
+    "screenshot": "CP95-def030-new-scope-after-release.png"
+  },
+  "page_errors": [],
+  "product_writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "remaining_scope": ["hard refresh", "navigation away/back", "rapid repeated switches", "stale row actions", "other roles", "PostgreSQL/Valkey", "WebKit/Firefox"],
+  "historical_qa002_failure_preserved": true,
+  "historical_qa004_partial_preserved": true,
+  "gate_rel_07": "BLOCKED"
+}

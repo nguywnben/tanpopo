@@ -1,0 +1,14 @@
+{
+  "runtime": 18084,
+  "task_id": "tsk_01m86na134e008tk710rvda636",
+  "ui": "tsk_01m86na134e008tk710rvda636\nqa002-cp68-private-agent\n\tCompleted\t1 / 5\tUS\t$0.005000\t$0.003000\t—",
+  "terminal_controls_visible": false,
+  "api": {
+    "status": 200,
+    "task": {
+      "state": "completed",
+      "version": 5,
+      "settled_cost_micros": 3000
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "checkpoint": "CP37",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "storage": "new isolated SQLite",
+    "base_url": "http://127.0.0.1:18150",
+    "healthz_http_status": 200,
+    "bootstrap_status_http_status": 200,
+    "browser": "Chromium 1440x1000",
+    "bootstrap_completed": false
+  },
+  "defect": "DEF-001",
+  "classification": "PASS (scoped)",
+  "progress_controls": [
+    {"visible_text": "Owner account", "accessible_label": "Go to step 1: Owner account", "aria_disabled": false},
+    {"visible_text": "First connection", "accessible_label": "Go to step 2: First connection", "aria_disabled": true},
+    {"visible_text": "Key custody", "accessible_label": "Go to step 3: Key custody", "aria_disabled": true},
+    {"visible_text": "Review", "accessible_label": "Go to step 4: Review", "aria_disabled": true}
+  ],
+  "screenshot": "screenshots/CP37-fresh-setup-start.png",
+  "limitations": [
+    "No bootstrap data submitted.",
+    "Keyboard progression, axe-core, screen readers, other browsers, localization and responsive states remain unverified."
+  ]
+}

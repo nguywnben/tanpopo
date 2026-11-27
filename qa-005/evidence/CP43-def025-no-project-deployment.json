@@ -1,0 +1,29 @@
+{
+  "checkpoint": "CP43",
+  "finding": "DEF-025",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "baseline": "unsigned RC7 exact-source Linux runtime",
+  "environment": "isolated SQLite runtime at 127.0.0.1:18145; Chromium; QA005 Org Owner",
+  "scope": "QA005 Org / No project / No env; Models & Deployments > Add deployment",
+  "steps": [
+    "Sign in as the QA005 organization owner.",
+    "Select No project in the active workspace scope.",
+    "Open Models & Deployments and select Add deployment.",
+    "Inspect the drawer prerequisite message and Save deployment state.",
+    "Observe requests for any deployment POST."
+  ],
+  "observations": {
+    "add_deployment_enabled": true,
+    "empty_state": "No deployments found",
+    "prerequisite_message": "No environments exist in the active project yet. Create an environment in the top bar before registering a deployment.",
+    "save_deployment_enabled": false,
+    "deployment_posts": 0
+  },
+  "classification": "PASS (scoped QA-005 retest)",
+  "limitations": ["Does not cover other roles, project scopes with environments, alternate storage backends, keyboard/screen reader interaction, or request failure recovery."],
+  "screenshots": [
+    "evidence/screenshots/CP43-no-project-models.png",
+    "evidence/screenshots/CP43-no-project-deployment-form.png"
+  ],
+  "visual_inspection": "Both screenshots visually inspected. The empty state is legible, the drawer explains the missing environment prerequisite, and Save deployment is visibly disabled."
+}

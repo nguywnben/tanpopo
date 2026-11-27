@@ -1,0 +1,84 @@
+{
+  "checkpoint": "CP124",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "127.0.0.1:18128",
+  "scope": "QA004 Test Root Org / default / dev; isolated local synthetic OpenAI-compatible fixture at 127.0.0.1:18125",
+  "purpose": "Verify normalized OpenAI image requests are blocked before upstream dispatch while project spend is above its restored hard limit.",
+  "budget_before": {
+    "scope_tier": "PROJECT",
+    "scope_id": "prj_01m895k8pee008b440xk2ef12p",
+    "hard_limit_micro_usd": 100,
+    "settled_exact_micro_usd": 2036,
+    "settled_estimated_micro_usd": 14,
+    "reserved_hold_micro_usd": 0,
+    "version": 148
+  },
+  "request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "virtual_key_id": "vky_01m8b74ex7e0088y7vtrnja38s",
+    "virtual_key_name": "QA004 CP124 Normalized Image Budget Block",
+    "allowed_plane": "PROVIDER",
+    "allowed_path": "/v1/*",
+    "allowed_model": "qa004-cp121-priced-vision",
+    "input_images": 2,
+    "ordered_sha256": [
+      "b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640",
+      "9d9e18e597b11d30abba0dcc7f27ca50b050fe431596f06da7d6f9524208cc00"
+    ],
+    "expected_media_cost_micro_usd": 2000,
+    "http_status": 429,
+    "error_code": "project_budget_exceeded",
+    "retryable": false,
+    "request_id": "req_01m8b74fmje00a371pkjetqyqj",
+    "trace_id": "trc_01m8b74fmke008jsm30cr76zbp"
+  },
+  "pre_egress_evidence": {
+    "synthetic_fixture_dispatch_count": 0,
+    "synthetic_fixture_records": [],
+    "external_provider_contacted": false
+  },
+  "persistent_trace": {
+    "http_status": 200,
+    "status_code": 429,
+    "error_code": "project_budget_exceeded",
+    "usage_accuracy": "EXACT",
+    "total_cost_micros": 0
+  },
+  "chargeback": {
+    "endpoint": "/admin/v1/usage/summary?group_by=key",
+    "http_status": 200,
+    "group_key": "QA004 CP124 Normalized Image Budget Block",
+    "rows": []
+  },
+  "budget_after": {
+    "scope_tier": "PROJECT",
+    "scope_id": "prj_01m895k8pee008b440xk2ef12p",
+    "hard_limit_micro_usd": 100,
+    "settled_exact_micro_usd": 2036,
+    "settled_estimated_micro_usd": 14,
+    "reserved_hold_micro_usd": 0,
+    "version": 148,
+    "unchanged_from_before": true
+  },
+  "cleanup": {
+    "virtual_key_state": "REVOKED",
+    "virtual_key_version": 2,
+    "original_fixture_restored": true,
+    "restored_fixture_api_tags_http_status": 200,
+    "no_request_cost_added": true
+  },
+  "visual_inspection": [
+    "CP124-normalized-budget-key-form.png",
+    "CP124-normalized-budget-traces.png",
+    "CP124-normalized-budget-after.png",
+    "CP124-normalized-budget-key-revoked.png"
+  ],
+  "classification": {
+    "normalized_openai_budget_boundary": "PASS for one project-level hard-limit overrun case: 429 before fixture dispatch, no hold, no settlement",
+    "DEF-074": "Still FAIL for native Ollama image-unit extraction/settlement and budget bypass; CP123/CP124 show the normalized path bills and blocks correctly on this route and deployment.",
+    "new_defect": false,
+    "qa_status": "ONGOING",
+    "release_gate": "BLOCKED"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "runtime": 18084,
+  "agent_id": "agt_01m8641yq4e00a440gccs7v6x0",
+  "test": "complete fresh synthetic A2A task, then attempt invalid terminal resume/cancel",
+  "key": {
+    "status": 201,
+    "id": "vky_01m86na047e009k3adznza29j7",
+    "name": "QA002 CP104 A2A terminal guard",
+    "allowed_planes": [
+      "A2A"
+    ],
+    "allowed_routes": [
+      "/a2a/*"
+    ],
+    "ui_plane_label": "A2A (/a2a/*)"
+  },
+  "task_create": {
+    "status": 201,
+    "task_id": "tsk_01m86na134e008tk710rvda636",
+    "state": "input-required"
+  },
+  "task_id": "tsk_01m86na134e008tk710rvda636",
+  "input_required_ui": "tsk_01m86na134e008tk710rvda636\nqa002-cp68-private-agent\nSynthetic agent needs approval input\n\tInput required\t1 / 5\tUS\t$0.005000\t$0.000000\t\nResume\nCancel",
+  "normal_resume": {
+    "status": 200,
+    "state": "completed",
+    "task_id": "tsk_01m86na134e008tk710rvda636",
+    "request_body": {
+      "input_parts": [
+        {
+          "kind": "text",
+          "text": "APPROVED: complete this synthetic task."
+        }
+      ]
+    }
+  },
+  "completed_ui": "tsk_01m86na134e008tk710rvda636\nqa002-cp68-private-agent\n\tCompleted\t1 / 5\tUS\t$0.005000\t$0.003000\t—",
+  "terminal_attempts": {
+    "duplicate_resume": {
+      "status": 415,
+      "error": "unsupported_media_type",
+      "message": "Content-Type must be application/json"
+    },
+    "duplicate_cancel": {
+      "status": 409,
+      "error": "invalid_state_transition",
+      "message": "a2a: invalid SM-09 state transition: completed -> canceled"
+    },
+    "final_get_status": 200,
+    "final_state": "completed",
+    "final_version": 5,
+    "settled_cost_micros": 3000,
+    "fixture_calls_before": 1,
+    "fixture_calls_after": 3,
+    "new_fixture_calls": [
+      {
+        "task_id": "tsk_01m86na134e008tk710rvda636",
+        "approval_marker_present": false,
+        "authorization_forwarded": false
+      },
+      {
+        "task_id": "tsk_01m86na134e008tk710rvda636",
+        "approval_marker_present": true,
+        "authorization_forwarded": false
+      }
+    ],
+    "attempts_added_fixture_calls": 2
+  },
+  "terminal_ui_after_attempts": "tsk_01m86na134e008tk710rvda636\nqa002-cp68-private-agent\n\tCompleted\t1 / 5\tUS\t$0.005000\t$0.003000\t—",
+  "key_revocation": {
+    "replay_status": 401,
+    "replay_error": "invalid_virtual_key"
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "synthetic_infrastructure": {
+    "failing_primary": "127.0.0.1:18125; Ollama-compatible test fixture; HTTP 503 mode only during threshold phase",
+    "healthy_secondary": "127.0.0.1:18126; local Ollama-compatible fixture",
+    "external_provider_calls": 0,
+    "original_primary_fixture_restored": true
+  },
+  "threshold_route": {
+    "route_slug": "qa004-circuit-threshold-failover",
+    "strategy": "PRIORITY_FAILOVER",
+    "max_failover_hops": 1,
+    "targets": [
+      {"deployment_id": "dpl_01m8969kjme00br1mjja9gam7q", "priority_order": 1, "fixture_port": 18125},
+      {"deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae", "priority_order": 2, "fixture_port": 18126}
+    ],
+    "consecutive_primary_503s": 5,
+    "routed_requests": [
+      {"sequence": 1, "status": 200, "primary_calls": 1, "fallback_calls": 1, "trace_id": "trc_01m89knwwae00bxkt7fxsa4ytc", "selected_deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae"},
+      {"sequence": 2, "status": 200, "primary_calls": 2, "fallback_calls": 2, "trace_id": "trc_01m89knwwye008xcn71d9z47g3", "selected_deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae"},
+      {"sequence": 3, "status": 200, "primary_calls": 3, "fallback_calls": 3, "trace_id": "trc_01m89knwxhe009xncrqxkv40t3", "selected_deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae"},
+      {"sequence": 4, "status": 200, "primary_calls": 4, "fallback_calls": 4, "trace_id": "trc_01m89knwy7e00b5wemzhb9qwm6", "selected_deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae"},
+      {"sequence": 5, "status": 200, "primary_calls": 5, "fallback_calls": 5, "trace_id": "trc_01m89knwyye008mwcnbqenbg1p", "selected_deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae"},
+      {"sequence": 6, "status": 200, "primary_calls": 5, "fallback_calls": 6, "trace_id": "trc_01m89knx12e00akjv2w71dzgk3", "selected_deployment_id": "dpl_01m897vpcve008s9jjtnxtxvae"}
+    ],
+    "observation": "After five consecutive primary 503s, the sixth routed request did not increment the primary fixture count and still succeeded from the secondary.",
+    "primary_fixture_log_rows": 5,
+    "primary_log_metadata": "POST /v1/chat/completions, model qa004-mock, no provider Authorization header",
+    "trace_table_screenshot_visually_inspected": "CP33-circuit-threshold-traces.png"
+  },
+  "post_cooldown_recovery": {
+    "elapsed_after_open_observation": "more than 30 seconds",
+    "primary_fixture_mode": "success (original fixture restored)",
+    "route_slug": "qa004-circuit-halfopen-recovery",
+    "requests": [
+      {"sequence": 1, "status": 200, "response_text": "Hello from synthetic Ollama.", "trace_id": "trc_01m89ktk69e00avw447d2maqm9", "selected_deployment_id": "dpl_01m8969kjme00br1mjja9gam7q", "primary_call_delta": 1, "fallback_call_delta": 0},
+      {"sequence": 2, "status": 200, "response_text": "Hello from synthetic Ollama.", "trace_id": "trc_01m89ktk71e008yxgypact8dpy", "selected_deployment_id": "dpl_01m8969kjme00br1mjja9gam7q", "primary_call_delta": 2, "fallback_call_delta": 0},
+      {"sequence": 3, "status": 200, "response_text": "Hello from synthetic Ollama.", "trace_id": "trc_01m89ktk88e00asavr1wym95gz", "selected_deployment_id": "dpl_01m8969kjme00br1mjja9gam7q", "primary_call_delta": 3, "fallback_call_delta": 0}
+    ],
+    "trace_table_screenshot_visually_inspected": "CP33-circuit-recovery-traces.png"
+  },
+  "cleanup": {
+    "temporary_key_name": "QA004 circuit half-open recovery",
+    "temporary_key_state": "REVOKED",
+    "temporary_key_version": 2,
+    "temporary_route_delete_status": 204,
+    "remaining_routes": ["qa004-loopback"],
+    "one_time_key_secret_files_removed": true,
+    "primary_test_fixture": "original success fixture restarted",
+    "healthy_recovery_fixture": "success mode"
+  },
+  "status": "PASS (scoped)",
+  "new_defect_id": null,
+  "remaining_gaps": [
+    "internal breaker-state API/screen readback",
+    "concurrent half-open probe admission and exact transition timing",
+    "failed half-open probe behavior",
+    "429 Retry-After cooldown",
+    "mid-stream failure with no fallback",
+    "other adapters and roles"
+  ],
+  "sanitization": "No plaintext keys, cookies, credentials, database files, or raw provider logs included."
+}

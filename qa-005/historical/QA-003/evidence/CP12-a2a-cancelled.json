@@ -1,0 +1,13 @@
+{
+  "responses": [
+    {
+      "status": 200,
+      "state": "canceled"
+    },
+    {
+      "status": 200,
+      "state": "canceled"
+    }
+  ],
+  "text": "MCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister agent\nMCP servers\n3\nA2A Agents & Active Tasks\n6\nCanceled A2A task and released held budget.\nRegistered A2A agents\n2\nAgent\tEndpoint\tRegion\tMax hops\tState\n\nQA003 Input Required Lifecycle Agent\nqa003-input-required-lifecycle\n\thttp://127.0.0.1:19190/a2a\tON_PREM\t5\tActive\n\nQA003 SSRF A2A\nqa003-ssrf-a2a2\n\thttp://127.0.0.1:19189/a2a\tON_PREM\t5\tActive\nActive & recent A2A tasks\n4\nTask\tState\tHops\tRegion\tSub-budget hold\tSettled cost\tActions\n\ntsk_01m87hpcc5e008gc6kxzzg29z3\nqa003-input-required-lifecycle\n\tCompleted\t1 / 5\tON_PREM\t$0.010000\t$0.001234\t—\n\ntsk_01m87hnw6ce00bxfyf86bj7swv\nqa003-input-required-lifecycle\n\tCanceled\t1 / 5\tON_PREM\t$0.010000\t$0.000000\t—\n\ntsk_01m87hn9tme008bvbv0jdmy3gs\nqa003-input-required-lifecycle\n\tCanceled\t1 / 5\tON_PREM\t$0.010000\t$0.000000\t—\n\ntsk_01m87hjn8te008v29dr4nfnspm\nqa003-input-required-lifecycle\n\tCompleted\t1 / 5\tON_PREM\t$0.010000\t$0.001234\t—"
+}

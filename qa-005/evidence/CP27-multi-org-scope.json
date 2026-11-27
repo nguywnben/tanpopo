@@ -1,0 +1,36 @@
+{
+  "checkpoint": "CP27",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact": "local exact-source Linux amd64 Tanpopo build",
+    "base_url": "http://127.0.0.1:18145",
+    "database": "isolated SQLite",
+    "browser": "Chromium, Playwright, 1440x1000",
+    "production_credentials_or_data": false
+  },
+  "principal": "synthetic QA Operator and Org Owner",
+  "secondary_organization": {
+    "name": "QA005 Secondary Org",
+    "slug": "qa005-secondary",
+    "id": "org_01m8crmjtje009gbep9v278fpe",
+    "state": "created via Operations UI; intentionally empty"
+  },
+  "steps_and_results": [
+    {"step": "Operations > Organizations > create organization", "result": "UI showed created row; API 201; scoped project list after switching HTTP 200 empty"},
+    {"step": "Switch to secondary organization", "result": "Picker showed QA005 Secondary Org / No project / No env; remained selected while navigating"},
+    {"step": "Access & Keys > Members & Roles", "result": "API GET /admin/v1/members?limit=100 HTTP 200, zero records; UI No members found"},
+    {"step": "FinOps", "result": "API GET /admin/v1/budgets?limit=100 HTTP 200 empty; GET /admin/v1/usage/summary?group_by=project HTTP 200 empty; zero totals displayed"},
+    {"step": "Hard refresh after selecting secondary org", "result": "Picker returned to QA005 Org / Initial Project / dev; Access & Keys then showed original-scope key rows matching its environment-filtered API response"}
+  ],
+  "classification": "PG-005 observation; no accepted criterion found for persistence of operator-selected organization across hard refresh. Project/environment refresh persistence is evidenced separately in historical CP15 and CP110.",
+  "evidence_screenshots": [
+    "screenshots/CP27-secondary-org-created.png",
+    "screenshots/CP27-secondary-org-switch-settled.png",
+    "screenshots/CP27-secondary-org-members.png",
+    "screenshots/CP27-secondary-org-finops.png",
+    "screenshots/CP27-secondary-org-after-refresh.png",
+    "screenshots/CP27-access-secondary-org-before-refresh.png",
+    "screenshots/CP27-access-after-refresh.png"
+  ],
+  "limitations": ["Synthetic organization has no project/environment or workloads", "Operator role does not establish non-operator tenant isolation", "Post-refresh organization preference contract is not defined", "No destructive cleanup/erasure attempted"]
+}

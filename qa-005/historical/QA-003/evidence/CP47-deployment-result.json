@@ -1,0 +1,16 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "page": "Models & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\n3\nLogical Models\n1\nDeployment activated cleanly as ACTIVE_HEALTHY.\nData region\nAll regions\nHealth state\nAll states\nEnvironment deployments\n3\nUpstream model\tConnection\tRegion\tHealth\tIn / Out (nano-USD)\tActions\n\nqa003-mock-ollama:latest\nlmd_01m87f6xp5e00928y9d7g8kdth\n\tQA003 CP47 Ollama loopback mock\tON_PREM\tHealthy\t0 / 0\t\n\n\nqa003-synthetic-unauthorized\nlmd_01m87f6xp5e00928y9d7g8kdth\n\tQA003 SSRF redirect boundary\tON_PREM\tProvisioned\t0 / 0\t\n\n\nqa003-synthetic-unauthorized\nlmd_01m87f6xp5e00928y9d7g8kdth\n\tQA003 RC5 Ollama 401\tON_PREM\tProvisioned\t0 / 0\t",
+  "deployments": {
+    "status": 200,
+    "data": [
+      {
+        "id": "dpl_01m885jc6be009ja93p3dk758j",
+        "connection_id": "con_01m885fw4ce009jrgv758n3737",
+        "state": "ACTIVE_HEALTHY",
+        "env_id": "env_01m87axgx7e008ejsny065s8qz",
+        "version": 1
+      }
+    ]
+  }
+}

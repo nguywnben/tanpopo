@@ -1,0 +1,122 @@
+{
+  "checkpoint": "CP22",
+  "baseline_commit": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "isolated SQLite 127.0.0.1:18086",
+  "synthetic_provider": "loopback Ollama-compatible fixture 127.0.0.1:19106",
+  "extension": {
+    "package": "@tanpopo/ollama",
+    "installation_id": "ext_01m8555e4se009kted81kw5ye6",
+    "lifecycle": "ACTIVE",
+    "publisher_signature": "unsigned",
+    "execution_tier": "declarative",
+    "consent_reviewed": true
+  },
+  "connection": {
+    "id": "con_01m855jjqze00b6qf38eamvqas",
+    "name": "QA002 CP22 Synthetic Ollama",
+    "billing_mode": "SELF_HOSTED_INFRA",
+    "data_region": "ON_PREM",
+    "probe": "HTTP 200; Active"
+  },
+  "models": [
+    {
+      "canonical_slug": "qa002-cp22-ollama",
+      "base_capabilities_json": "{}",
+      "deployment_id": "dpl_01m855ssqce00bdjs9hz6dkmx4",
+      "upstream_model_name": "qa002:latest",
+      "state": "ACTIVE_HEALTHY",
+      "connection_id": "con_01m855jjqze00b6qf38eamvqas"
+    },
+    {
+      "canonical_slug": "qa002-cp22-streaming",
+      "base_capabilities_json": "{\"streaming\":\"DECLARED\"}",
+      "deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "upstream_model_name": "qa002:latest",
+      "state": "ACTIVE_HEALTHY",
+      "connection_id": "con_01m855jjqze00b6qf38eamvqas"
+    }
+  ],
+  "routes": [
+    {
+      "route_slug": "qa002-cp22-route",
+      "deployment_id": "dpl_01m855ssqce00bdjs9hz6dkmx4",
+      "logical_model_id": "lmd_01m855rv0me00921asmdz1qy8z",
+      "canonical_slug": "qa002-cp22-ollama",
+      "target_health": "ACTIVE_HEALTHY"
+    },
+    {
+      "route_slug": "qa002-cp22-streamroute",
+      "deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "logical_model_id": "lmd_01m8561rake008zvkzt3eg2vaa",
+      "canonical_slug": "qa002-cp22-streaming",
+      "target_health": "ACTIVE_HEALTHY"
+    }
+  ],
+  "requests": [
+    {
+      "request_id": "trc_01m856b4yze00960j2ygdcaha2",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "route_slug": "qa002-cp22-streamroute",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "total_duration_ms": 5
+    },
+    {
+      "request_id": "trc_01m856a0rje00b375h6f9ycwq3",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "route_slug": "qa002-cp22-streamroute",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "total_duration_ms": 4
+    },
+    {
+      "request_id": "trc_01m856843ke009qbt74j28f191",
+      "http_status": 502,
+      "canonical_error_code": "upstream_malformed_response",
+      "route_slug": "qa002-cp22-streamroute",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "total_duration_ms": 10
+    },
+    {
+      "request_id": "trc_01m855yr25e00aktd6kanjebg8",
+      "http_status": 400,
+      "canonical_error_code": "capability_not_supported",
+      "route_slug": "/v1/chat/completions",
+      "selected_deployment_id": null,
+      "total_duration_ms": 0
+    },
+    {
+      "request_id": "trc_01m853j3swe00ah0dwr098z919",
+      "http_status": 503,
+      "canonical_error_code": "no_compliant_deployment_available",
+      "route_slug": "/v1/chat/completions",
+      "selected_deployment_id": null,
+      "total_duration_ms": 0
+    }
+  ],
+  "settlements": [
+    {
+      "request_id": "trc_01m856b4yze00961hse6j1qfpx",
+      "logical_model_slug": "qa002-cp22-streaming",
+      "billing_mode": "SELF_HOSTED_INFRA",
+      "usage_accuracy": "EXACT",
+      "input_tokens": 13,
+      "output_tokens": 10,
+      "total_cost_micros": 1
+    },
+    {
+      "request_id": "trc_01m856a0rje00b386h4a6f4vqb",
+      "logical_model_slug": "qa002-cp22-streaming",
+      "billing_mode": "SELF_HOSTED_INFRA",
+      "usage_accuracy": "EXACT",
+      "input_tokens": 13,
+      "output_tokens": 10,
+      "total_cost_micros": 1
+    }
+  ],
+  "limitations": [
+    "Synthetic fixture only; no real Ollama service was used.",
+    "RC4 DevBox artifact remains UNVERIFIED.",
+    "No Tanpopo source was changed."
+  ]
+}

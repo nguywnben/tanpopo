@@ -1,0 +1,21 @@
+{
+  "confirmationExcerpt": "ublisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nInstalled packages\n2\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\next_01m87ttzhne00b8e2rcc0f4aj0\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tsandboxed_wasm\t\n\n\next_01m87em5w7e008efqnwz2d6the\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tdeclarative\t\nQuarantine ext_01m87ttzhne00b8e2rcc0f4aj0\n\nDisable immediately and sever active streams. Affected projects: None. Affected connections: None.\n\nAudit reason (minimum 5 characters)\n∙ Required\nType the exact package ID to confirm quarantine\nCancel\nConfirm quarantine",
+  "confirmEnabled": true,
+  "mutationResponses": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/extensions/ins_01m87ttzhne00b8gr5mvk3rgns/quarantine",
+      "status": 200,
+      "code": null
+    }
+  ],
+  "postQuarantineApi": {
+    "status": 200,
+    "installation": {
+      "state": "QUARANTINED",
+      "origin_trust_tier": "official",
+      "active_version": "0.1.0",
+      "candidate_version": null
+    }
+  }
+}

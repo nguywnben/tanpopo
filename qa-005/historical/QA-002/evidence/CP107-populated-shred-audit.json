@@ -1,0 +1,70 @@
+{
+  "list": {
+    "status": 200,
+    "count": 6,
+    "events": [
+      {
+        "seq_no": 6,
+        "action": "organization.crypto_shredded",
+        "target_type": "organization",
+        "target_id": "org_01m86p7bkde0080hg96yq33ywf",
+        "metadata": {
+          "revoked_keys": 1,
+          "confirm_slug_present": true
+        }
+      },
+      {
+        "seq_no": 5,
+        "action": "virtual_key.created",
+        "target_type": "virtual_key",
+        "target_id": "vky_01m86pq15de009mpxzqhkja4w1",
+        "metadata": {
+          "confirm_slug_present": false
+        }
+      },
+      {
+        "seq_no": 4,
+        "action": "environment.created",
+        "target_type": "environment",
+        "target_id": "env_01m86pj8nqe009ap14wpeesfa1",
+        "metadata": {
+          "confirm_slug_present": false
+        }
+      },
+      {
+        "seq_no": 3,
+        "action": "project.created",
+        "target_type": "project",
+        "target_id": "prj_01m86phfage00bb5ev9cgkqj8n",
+        "metadata": {
+          "confirm_slug_present": false
+        }
+      },
+      {
+        "seq_no": 2,
+        "action": "member.created",
+        "target_type": "principal",
+        "target_id": "prc_01m86pepdme00anhm6zq4rpa89",
+        "metadata": {
+          "confirm_slug_present": false
+        }
+      },
+      {
+        "seq_no": 1,
+        "action": "organization.created",
+        "target_type": "organization",
+        "target_id": "org_01m86p7bkde0080hg96yq33ywf",
+        "metadata": {
+          "confirm_slug_present": false
+        }
+      }
+    ]
+  },
+  "verify": {
+    "status": 200,
+    "intact": true,
+    "checked_events_count": 6,
+    "first_broken_seq_no": null,
+    "error": null
+  }
+}

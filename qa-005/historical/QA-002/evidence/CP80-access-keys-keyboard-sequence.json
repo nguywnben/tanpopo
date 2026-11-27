@@ -1,0 +1,297 @@
+{
+  "url": "http://127.0.0.1:18084/access/virtual-keys",
+  "initial": {
+    "heading": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic.",
+    "focused": "<a href=\"/access/virtual-keys\" class=\"tp-nav-link\" aria-current=\"page\"><span class=\"tp-nav-link-main\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"15\" height=\"15\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-key-round\" aria-hidden=\"true\" style=\"flex-shrink: 0;\"><path d=\"M2.586 17.414A2 2 0 0 0 2 18.82"
+  },
+  "steps": [
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Security",
+      "href": "/security/approvals",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 8,
+        "y": 507,
+        "w": 211,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Operations",
+      "href": "/ops/health",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 8,
+        "y": 540,
+        "w": 211,
+        "h": 32
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "ariaLabel": "Sign out",
+      "text": "",
+      "href": null,
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 187,
+        "y": 860,
+        "w": 28,
+        "h": 28
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "ariaLabel": null,
+      "text": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env (Active workspace scope)",
+      "href": null,
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 248,
+        "y": 10,
+        "w": 395,
+        "h": 28
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Jump Ctrl K",
+      "href": null,
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 1002,
+        "y": 10,
+        "w": 148,
+        "h": 28
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": "combobox",
+      "ariaLabel": null,
+      "text": "English",
+      "href": null,
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(17, 17, 19) none 3px",
+      "bounds": {
+        "x": 1170,
+        "y": 14,
+        "w": 44,
+        "h": 20
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "ariaLabel": "Switch to dark theme",
+      "text": "",
+      "href": null,
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 1260,
+        "y": 10,
+        "w": 28,
+        "h": 28
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Kill Switch",
+      "href": null,
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 1305,
+        "y": 10,
+        "w": 115,
+        "h": 28
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": null,
+      "ariaLabel": "Issue key",
+      "text": "Issue key",
+      "href": null,
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 1317,
+        "y": 73,
+        "w": 103,
+        "h": 28
+      }
+    },
+    {
+      "tag": "BUTTON",
+      "role": "tab",
+      "ariaLabel": null,
+      "text": "Virtual Keys",
+      "href": null,
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 248,
+        "y": 122,
+        "w": 102,
+        "h": 32
+      }
+    },
+    {
+      "tag": "BODY",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Skip to main content Tanpopo Monitor Overview Traces FinOps Gateway Providers Models Routes & Policies Ecosystem Extensi",
+      "href": null,
+      "tabIndex": -1,
+      "focusVisible": false,
+      "outline": "rgb(17, 17, 19) none 3px",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "w": 1440,
+        "h": 900
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Skip to main content",
+      "href": "#main-content",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 12,
+        "y": 12,
+        "w": 149,
+        "h": 35
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Tanpopo",
+      "href": "/overview",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 14,
+        "y": 10,
+        "w": 88,
+        "h": 28
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Overview",
+      "href": "/overview",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 8,
+        "y": 80,
+        "w": 211,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Traces",
+      "href": "/observability/traces",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 8,
+        "y": 113,
+        "w": 211,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "FinOps",
+      "href": "/finops/budgets",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 8,
+        "y": 146,
+        "w": 211,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Providers",
+      "href": "/providers/connections",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 8,
+        "y": 211,
+        "w": 211,
+        "h": 32
+      }
+    },
+    {
+      "tag": "A",
+      "role": null,
+      "ariaLabel": null,
+      "text": "Models",
+      "href": "/models",
+      "tabIndex": 0,
+      "focusVisible": true,
+      "outline": "rgb(24, 24, 27) solid 2px",
+      "bounds": {
+        "x": 8,
+        "y": 244,
+        "w": 211,
+        "h": 32
+      }
+    }
+  ]
+}

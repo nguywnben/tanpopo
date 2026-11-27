@@ -1,0 +1,27 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "environment": "exact RC8 release binary, isolated PostgreSQL 16 DB, Chromium-created A2A-only key, loopback synthetic fixture",
+  "result": {
+    "task_id": "tsk_01m8er5rnre00ac3j0sj3dpkhq",
+    "hold_micros": 1000,
+    "create_http": 200,
+    "create_state": "canceled",
+    "create_cancel_status": "acknowledged",
+    "cancel_http": 200,
+    "cancel_state": "canceled",
+    "cancel_status": "acknowledged",
+    "final_state": "canceled",
+    "final_cancel_status": "acknowledged",
+    "settled_cost_micros": 350,
+    "fixture_dispatch_count": 1,
+    "fixture_cancel_count": 1,
+    "fixture_auth_forwarded": false,
+    "db": {
+      "task_state": "CANCELED",
+      "task_spent": 350,
+      "reservation_state": "SETTLED_EXACT",
+      "settlement_count": 1,
+      "settlement_micros": 350
+    }
+  }
+}

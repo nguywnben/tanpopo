@@ -1,0 +1,47 @@
+{
+  "status": 200,
+  "count": 2,
+  "records": [
+    {
+      "id": "prc_01m8ayg3zpe00aeyemfz7kh3n5",
+      "email": "qa004-cp110-developer@example.invalid",
+      "kind": "HUMAN",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "projects": [
+        "prj_01m8awtt8we00b41f10ekb4bxt"
+      ],
+      "fieldNames": [
+        "created_at",
+        "email",
+        "enrollment_pending",
+        "has_password",
+        "id",
+        "kind",
+        "project_ids",
+        "roles",
+        "version"
+      ]
+    },
+    {
+      "id": "prc_01m8awayeke00bfjv073fafrb6",
+      "email": "qa004-pg-owner@example.invalid",
+      "kind": "HUMAN",
+      "roles": [
+        "ORG_OWNER"
+      ],
+      "projects": null,
+      "fieldNames": [
+        "created_at",
+        "email",
+        "enrollment_pending",
+        "has_password",
+        "id",
+        "kind",
+        "roles",
+        "version"
+      ]
+    }
+  ]
+}

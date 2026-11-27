@@ -1,0 +1,37 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156",
+  "principal": {"role": "TEAM_ADMIN", "project_id": "prj_01m8d6dbtxe008w7fphkgp2e24", "environment_id": "env_01m8d6f78xe00a9w53vt41rnqg"},
+  "normal_runtime_run": {
+    "initial_routes": {"request": "GET /admin/v1/routes?env_id=<assigned-env>&limit=100", "http": 200, "count": 3, "route_ids": ["rte_01m8d8f3wxe00bbak58gsew8ch", "rte_01m8d7pj4he00bbkndgg05c8tx", "rte_01m8d6s37se00a7q0spwy9wanq"], "ui_rows": 3, "screenshot": "CP93-def054-teamadmin-routes.png"},
+    "after_hard_refresh": {"request": "GET /admin/v1/routes?env_id=<assigned-env>&limit=100", "http": 200, "count": 3, "same_rows_visible": true, "screenshot": "CP93-def054-teamadmin-routes-refresh.png"},
+    "effective_policy_requests": [
+      {"request": "GET /admin/v1/policies/effective?project_id=<assigned-project>", "http": 200},
+      {"request": "GET /admin/v1/policies/effective?project_id=<assigned-project>&env_id=<assigned-env>", "http": 200}
+    ],
+    "create_route_target_options": 5,
+    "target_options_screenshot": "CP93-def054-teamadmin-route-target-options.png"
+  },
+  "failure_injection_run": {
+    "mocked_only_path": "/admin/v1/policies/effective*",
+    "mock_http": 403,
+    "mock_error_code": "insufficient_role_permission",
+    "mock_hits": 2,
+    "real_route_request": "GET /admin/v1/routes?env_id=<assigned-env>&limit=100",
+    "real_route_http": 200,
+    "real_route_count": 3,
+    "ui_route_rows_retained": 3,
+    "target_options_retained": 5,
+    "screenshots": ["CP93-def054-policy-error-routes-retained.png", "CP93-def054-policy-error-targets.png"]
+  },
+  "page_errors": [],
+  "product_writes": 0,
+  "provider_calls": 0,
+  "paid_provider_calls": 0,
+  "classification": "PASS (scoped fresh RC7 retest of DEF-054; failure injection is browser-only, route/deployment data real)",
+  "historical_qa004_fail_preserved": true,
+  "remaining_scope": ["other roles", "cross-project and cross-org scope", "in-flight scope races", "write behavior", "other API failures", "database engines", "browser engines"],
+  "gate_rel_07": "BLOCKED"
+}

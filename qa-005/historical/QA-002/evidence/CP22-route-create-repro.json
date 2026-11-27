@@ -1,0 +1,23 @@
+{
+  "api": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/routes",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"rte_01m8563j7be00avawvz62dmrg4\",\"slug\":\"qa002-cp22-streamroute\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\",\"strategy\":\"PRIORITY_FAILOVER\",\"allowed_data_regions\":[],\"max_failover_hops\":3,\"request_timeout_ms\":60000,\"targets\":[{\"deployment_id\":\"dpl_01m8562ktme0087wb258b43c11\",\"priority_order\":1,\"weight\":100}],\"version\":1,\"updated_at\":\"2026-11-23T21:48:30.315Z\"},{\"id\":\"rte_01m855wt6me008719hg7hcpqeh\",\"slug\":\"qa002-cp22-route\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\",\"strategy\":\"PRIORITY_FAILOVER\",\"allowed_data_regions\":[],\"max_failover_hops\":3,\"request_timeout_ms\":60000,\"targets\":[{\"deployment_id\":\"dpl_01m855ssqce00bdjs9hz6dkmx4\",\"priority_order\":1,\"weight\":100}],\"version\":1,\"updated_at\":\"2026-11-23T21:44:49.108Z\"}],\"has_more\":false}\n"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/routes",
+      "status": 201,
+      "body": "{\"id\":\"rte_01m856md8te009yhkjg0gg11sd\",\"slug\":\"qa002-cp22-route-repro\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\",\"strategy\":\"PRIORITY_FAILOVER\",\"allowed_data_regions\":[],\"max_failover_hops\":3,\"request_timeout_ms\":60000,\"targets\":[{\"deployment_id\":\"dpl_01m8562ktme0087wb258b43c11\",\"priority_order\":1,\"weight\":100}],\"version\":1,\"updated_at\":\"2026-11-23T21:57:42.298Z\"}\n"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/routes",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"rte_01m856md8te009yhkjg0gg11sd\",\"slug\":\"qa002-cp22-route-repro\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\",\"strategy\":\"PRIORITY_FAILOVER\",\"allowed_data_regions\":[],\"max_failover_hops\":3,\"request_timeout_ms\":60000,\"targets\":[{\"deployment_id\":\"dpl_01m8562ktme0087wb258b43c11\",\"priority_order\":1,\"weight\":100}],\"version\":1,\"updated_at\":\"2026-11-23T21:57:42.298Z\"},{\"id\":\"rte_01m8563j7be00avawvz62dmrg4\",\"slug\":\"qa002-cp22-streamroute\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\",\"strategy\":\"PRIORITY_FAILOVER\",\"allowed_data_regions\":[],\"max_failover_hops\":3,\"request_timeout_ms\":60000,\"targets\":[{\"deployment_id\":\"dpl_01m8562ktme0087wb258b43c11\",\"priority_order\":1,\"weight\":100}],\"version\":1,\"updated_at\":\"2026-11-23T21:48:30.315Z\"},{\"id\":\"rte_01m855wt6me008719hg7hcpqeh\",\"slug\":\"qa002-cp22-route\",\"env_id\":\"env_01m853e561e00byx2a58rbj8wz\",\"strategy\":\"PRIORITY_FAILOVER\",\"allowed_data_regions\":[],\"max_failover_hops\":3,\"request_timeout_ms\":60000,\"targets\":[{\"deployment_id\":\"dpl_01m855ssqce"
+    }
+  ],
+  "body": "cies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nRoutes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\n3\nRoute Explain\nPolicies\nCreated route \"qa002-cp22-route-repro\".\n\nInherited data residency ceiling: EU, US, APAC, ON_PREM\n\nConfigured routes\n3\nRoute slug\tStrategy\tFallback chain\tTarget health\tActions\nqa002-cp22-route-repro\tPriority failover\tqa002:latest (100%)\t\nHealthy\n\t\n\nqa002-cp22-streamroute\tPriority failover\tqa002:latest (100%)\t\nHealthy\n\t\n\nqa002-cp22-route\tPriority failover\tqa002:latest (100%)\t\nHealthy\n\t"
+}

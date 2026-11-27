@@ -1,0 +1,27 @@
+{
+  "initial_scope": "No project / No env",
+  "selected_organization_scope": "QA002 CP18 Audit Status Org / No project / No env",
+  "authorized_api_counts": {
+    "members": {
+      "status": 200,
+      "count": 4,
+      "hasMore": false
+    },
+    "projects": {
+      "status": 200,
+      "count": 3,
+      "hasMore": false
+    },
+    "connections": {
+      "status": 200,
+      "count": 5,
+      "hasMore": false
+    }
+  },
+  "ui": {
+    "member_count": 0,
+    "empty_message": true,
+    "text": "Access & Keys Environment-scoped Virtual Keys and 6-role RBAC principal assignments. Add member Virtual Keys Members & Roles Select a project and environment in the top bar to manage Virtual Keys. Organization members 0 No members found"
+  },
+  "screenshot": "/workspace/tanpopo-qa-002/qa-002/evidence/CP101-audit-org-members.png"
+}

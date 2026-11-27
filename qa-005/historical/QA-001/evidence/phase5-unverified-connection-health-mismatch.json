@@ -1,0 +1,47 @@
+{
+  "checkpoint": "5 — 2026-11-23",
+  "baseline": "a771311107c4e4c2c7d9b53a3f5a0926f114b799",
+  "isolated_instance": "SQLite under /tmp/qa-tanpopo; no production data",
+  "provider_connection": {
+    "name": "QA Gemini connection",
+    "ui_state_after_two_failed_probes": "Created Unverified",
+    "provider_response": "Tanpopo connection probe returned upstream_unreachable; direct Google call from host separately succeeded"
+  },
+  "deployment": {
+    "logical_model": "qa-gemini-flash-lite",
+    "upstream_model": "gemini-3.5-flash-lite",
+    "create_http_status": 201,
+    "initial_state": "PROVISIONED",
+    "owner_activation_ui_state": "ACTIVE_HEALTHY",
+    "activation_ui_notice": "Deployment activated cleanly as ACTIVE_HEALTHY."
+  },
+  "route": {
+    "slug": "qa-gemini-live-probe",
+    "create_http_status": 201,
+    "target_health_ui": "Healthy"
+  },
+  "data_plane_probe": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "model": "qa-gemini-live-probe",
+    "max_tokens": 1,
+    "http_status": 503,
+    "error_type": "residency_unavailable_error",
+    "error_code": "no_compliant_deployment_available",
+    "message": "No compliant active deployment is available for model \"qa-gemini-live-probe\"."
+  },
+  "interpretation": "Management screens reported Healthy after explicit owner activation despite a known unverified provider connection; the resolver correctly rejected the request before provider egress. No successful Google inference occurred.",
+  "cleanup": {
+    "virtual_key": "QA-only-live-probe was revoked through graceful drain; 0 active streams severed",
+    "route": "qa-gemini-live-probe deleted after evidence capture",
+    "deployment": "test deployment deleted after evidence capture",
+    "rate_card": "temporary sentinel rates in isolated QA database; deployment removed, no ledger inference was claimed"
+  },
+  "visual_evidence": [
+    "providers-live-probe-post-activation.png",
+    "models-unverified-activation-marked-healthy.png",
+    "routes-live-provider-created.png",
+    "access-live-probe-key-list.png",
+    "access-live-probe-key-revoked.png"
+  ]
+}

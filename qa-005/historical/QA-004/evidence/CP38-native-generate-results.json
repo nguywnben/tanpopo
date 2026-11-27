@@ -1,0 +1,61 @@
+{
+  "inference": {
+    "status": 200,
+    "content_type": "application/json",
+    "request_id": "req_01m89nyjake009a92aqe36bbb5",
+    "usage_accuracy": "ESTIMATED",
+    "body": {
+      "model": "qa004-mock",
+      "created_at": "2026-11-25T10:00:00Z",
+      "message": {
+        "role": "assistant",
+        "content": "Native synthetic response."
+      },
+      "done": true,
+      "prompt_eval_count": 6,
+      "eval_count": 3
+    }
+  },
+  "traces": [
+    {
+      "request_id": "trc_01m89nyjake009aa209mbs3035",
+      "plane": "NATIVE",
+      "route_slug": "qa004-loopback",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "duration_ms": 20
+    }
+  ],
+  "finops": [
+    {
+      "group_key": "QA004 native generate dialect probe",
+      "exact_micro_usd": 0,
+      "estimated_micro_usd": 1,
+      "exact_request_count": 0,
+      "estimated_request_count": 1,
+      "unmetered_request_count": 0
+    }
+  ],
+  "keyState": {
+    "state": "REVOKED",
+    "version": 2
+  },
+  "postRevokeReplay": {
+    "status": 401,
+    "error": "invalid_virtual_key"
+  },
+  "upstream_request": {
+    "path": "/api/generate",
+    "model": "qa004-loopback",
+    "stream": false,
+    "keys": [
+      "keep_alive",
+      "model",
+      "prompt",
+      "stream"
+    ],
+    "authorization_header_received": false
+  }
+}

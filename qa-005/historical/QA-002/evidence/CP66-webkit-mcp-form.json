@@ -1,0 +1,107 @@
+{
+  "browser": "WebKit",
+  "viewport": "375x844",
+  "before": {
+    "text": "Register MCP server\nOnly Streamable HTTP transport is permitted.\nServer slug\n∙ Required\nDisplay name\n∙ Required\nStreamable HTTP endpoint URL\n∙ Required\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal MCP servers.\nCancel\nRegister server",
+    "inputs": [
+      {
+        "type": "text",
+        "label": "Server slug\n∙ Required",
+        "required": false,
+        "placeholder": "e.g. github-ops"
+      },
+      {
+        "type": "text",
+        "label": "Display name\n∙ Required",
+        "required": false,
+        "placeholder": "e.g. GitHub Operations"
+      },
+      {
+        "type": "url",
+        "label": "Streamable HTTP endpoint URL\n∙ Required",
+        "required": false,
+        "placeholder": "https://mcp.example.com/mcp"
+      },
+      {
+        "type": "checkbox",
+        "label": "Allow private or loopback endpoint",
+        "required": false,
+        "placeholder": ""
+      }
+    ],
+    "widths": {
+      "viewport": 375,
+      "doc": 375,
+      "body": 375
+    }
+  },
+  "after": {
+    "text": "Register MCP server\nOnly Streamable HTTP transport is permitted.\nServer slug\n∙ Required\nDisplay name\n∙ Required\nStreamable HTTP endpoint URL\n∙ Required\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal MCP servers.\nAllowed CIDRs\n∙ Required\nCancel\nRegister server",
+    "cidr_value": "127.0.0.1/33",
+    "validation": [
+      {
+        "text": "",
+        "name": null
+      },
+      {
+        "text": "",
+        "name": null
+      },
+      {
+        "text": "",
+        "name": null
+      }
+    ],
+    "inputs": [
+      {
+        "type": "text",
+        "label": "Server slug\n∙ Required",
+        "required": false,
+        "valid": true,
+        "message": ""
+      },
+      {
+        "type": "text",
+        "label": "Display name\n∙ Required",
+        "required": false,
+        "valid": true,
+        "message": ""
+      },
+      {
+        "type": "url",
+        "label": "Streamable HTTP endpoint URL\n∙ Required",
+        "required": false,
+        "valid": true,
+        "message": ""
+      },
+      {
+        "type": "checkbox",
+        "label": "Allow private or loopback endpoint",
+        "required": false,
+        "valid": true,
+        "message": ""
+      },
+      {
+        "type": "text",
+        "label": "Allowed CIDRs\n∙ Required",
+        "required": false,
+        "valid": true,
+        "message": ""
+      }
+    ],
+    "widths": {
+      "viewport": 375,
+      "doc": 375,
+      "body": 375
+    }
+  },
+  "mutation_requests": [
+    {
+      "method": "POST",
+      "url": "https://127.0.0.1:18445/admin/v1/mcp/servers",
+      "body": "{\"project_id\":\"prj_01m85ry2gme00an7wydh1pd1gc\",\"slug\":\"qa002-cp66-invalid-only\",\"name\":\"QA002 CP66 invalid CIDR no-submit\",\"transport\":\"streamable_http\",\"endpoint_url\":\"http://127.0.0.1:19996/mcp\",\"allow_private_ip\":true,\"allowed_cidrs\":[\"127.0.0.1/33\"]}"
+    }
+  ],
+  "submitted": true,
+  "api_mutation": false
+}

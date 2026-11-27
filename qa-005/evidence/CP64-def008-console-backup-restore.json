@@ -1,0 +1,85 @@
+{
+  "checkpoint": "CP64",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_artifact": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "build_metadata": "linux/amd64; vcs.revision=737079ddb847d97dbcf832f610ed0048556cb65b; vcs.modified=false"
+  },
+  "environment": {
+    "source_runtime": "fresh isolated SQLite instance at 127.0.0.1:18158; no provider connection or credential was configured",
+    "role": "synthetic bootstrap Owner, instance Operator; Chromium 156.0.8078.79 via Playwright",
+    "restore_runtime": "127.0.0.1:18159 using clean destination /tmp/qa005-runtime/cp64-restore and the same synthetic test KEK",
+    "provider_calls": 0,
+    "paid_usage": false,
+    "source_changes": 0
+  },
+  "user_workflow": {
+    "fresh_install": {
+      "setup": "Real Chromium completed Owner/org/project bootstrap, explicitly skipped initial provider connection, acknowledged master-key custody, and completed setup.",
+      "bootstrap_complete_http": 201,
+      "subsequent_login_http": 200,
+      "screenshots": [
+        "evidence/screenshots/CP64-fresh-setup-loaded.png",
+        "evidence/screenshots/CP64-first-connection.png",
+        "evidence/screenshots/CP64-key-custody.png",
+        "evidence/screenshots/CP64-review.png",
+        "evidence/screenshots/CP64-operations.png"
+      ]
+    },
+    "console_backup": {
+      "workflow": "Operations > Backups; initial count zero; clicked Create encrypted backup",
+      "post_http": 201,
+      "backup_id": "7ba69dc6aaedde09e1dc3e946e270a4c",
+      "archive_filename": "tanpopo-backup-7ba69dc6aaedde09e1dc3e946e270a4c.tpop.enc",
+      "size_bytes": 25283,
+      "sha256": "1d38015669e9a01da2a2cb8ab20a8551458ea6e02cef3809027e321e9a2f6f16",
+      "api_receipt": "Receipt filename, size and SHA-256 matched the actual archive in the isolated runtime's data/backups directory.",
+      "persistence": "After hard reload, the Backups tab still displayed count 1 and the same receipt metadata.",
+      "archive_verify": "Exact-source `tanpopo backup verify` returned the same backup ID and reported files=4.",
+      "audit_event": {
+        "read_method": "read-only SQLite query and authenticated GET /admin/v1/audit-events?chain_partition=SYSTEM&action=ops.backup_created&limit=20",
+        "api_status": 200,
+        "event_type": "ops.backup_created",
+        "target_id_matches_backup_id": true,
+        "chain_partition": "SYSTEM",
+        "sequence": 2,
+        "metadata_keys": ["archive_filename", "sha256_hex", "size_bytes"],
+        "system_chain_verify_http": 200,
+        "system_chain_intact": true,
+        "checked_events_count": 2
+      },
+      "screenshots": [
+        "evidence/screenshots/CP64-backups-empty.png",
+        "evidence/screenshots/CP64-backup-created.png",
+        "evidence/screenshots/CP64-backup-persisted-after-refresh.png"
+      ]
+    },
+    "restore_and_recovery": {
+      "command_result": "Exact-source `tanpopo backup restore --verify-secrets-decrypt` succeeded into a previously absent destination.",
+      "restored_db_integrity": "PRAGMA integrity_check = ok",
+      "restored_counts": {"organizations": 1, "projects": 1, "environments": 1, "principals": 1},
+      "healthz_http": 200,
+      "readyz_http": 200,
+      "owner_login_http": 200,
+      "cross_screen_readback": "The restored Console Overview showed the same QA005 CP64 organization, project and dev environment; zero requests/spend matched the no-provider test setup.",
+      "screenshot": "evidence/screenshots/CP64-restored-owner-overview.png"
+    }
+  },
+  "observation": {
+    "product_gap": "PG-010: Operations Backups shows the receipt and correctly states that it is recorded in the SYSTEM audit partition. Security > Audit Log's action filter queried the default organization partition and returned 0 for ops.backup_created; the view exposed no partition selector. The authenticated System audit API did return the backup event and System chain verification passed. No accepted requirement mandating an in-Console SYSTEM-partition selector was found; record as an audit-workflow visibility observation, not a defect.",
+    "evidence": [
+      "evidence/screenshots/CP64-system-audit.png",
+      "evidence/screenshots/CP64-audit-filter-backup-org-chain.png"
+    ]
+  },
+  "classification": {
+    "DEF-008": "PASS (scoped QA-005 retest): actual exact-RC7 Console backup creation reached the configured SQLite backup destination, persisted receipt/hash, recorded and verified a SYSTEM audit event, passed archive authentication, restored to a clean directory and served a successful restored Owner session.",
+    "remaining": [
+      "The database contained no provider secret, so active credential-envelope trial decrypt was not exercised despite the restore verifier flag.",
+      "Concurrent-write snapshot, tamper/corruption, low-disk/interrupted-write, retention and rotation scenarios remain unverified.",
+      "PostgreSQL/Valkey backup and recovery, Windows/macOS and multi-node disaster recovery remain unverified.",
+      "Historical QA-004 result was also a scoped PASS for creation; this fresh RC7 result strengthens but does not extend its single-node local SQLite boundary."
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "results": {
+    "DEF-022": {"status": "PASS (scoped)", "result": "Owner role downgrade invalidated the Team Admin's active session; its next session check returned 401 and reload redirected to login.", "evidence": "def022-session-revocation.json"},
+    "DEF-050": {"status": "UNVERIFIED", "result": "Round 5 updated native and unified streaming response paths; RC8 stream success/failure trailer verification did not complete. Native attempt returned 503 no_compliant_deployment_available before fixture dispatch. Unified stream did not reach an eligible local provider.", "evidence": "../evidence/CP123-filtered-pricing-migration-parity.json (historical migration context); see REPORT.md"},
+    "DEF-069": {"status": "PASS (scoped)", "result": "PostgreSQL/Valkey loopback A2A ack cancellation settled partial spend (350 of 1000); unsupported cancellation released unused hold; concurrent cancellation settled both tasks independently. Each persisted task/hold/settlement agreed.", "evidence": ["def069-ack-cancel.json", "def069-unsupported-cancel.json", "def069-concurrent.json"]},
+    "DEF-075": {"status": "PASS (scoped)", "result": "In two live 60-second grace tests, old and replacement key both authenticated before expiry; afterward old key returned 401 invalid_virtual_key, replacement returned 200, row finalized CREATED_ACTIVE v3, and virtual_key.rotation_finalized audit event existed.", "evidence": "def075-rotation-expiry.json"},
+    "DEF-080": {"status": "UNVERIFIED", "result": "FinOps Viewer denial behavior not independently repeated on RC8."},
+    "DEF-081": {"status": "PARTIAL", "result": "The existing activated PostgreSQL installations and adapter records agreed on readback after runtime restart. A fresh activate/re-enable transition was not reached because quarantine failed to establish its emergency stream barrier (HTTP 503); no state change was committed."},
+    "DEF-082": {"status": "BLOCKED", "result": "Could not reach successful quarantine/unquarantine path: prerequisite quarantine failed with HTTP 503 quarantine_kill_switch_failed; no badge-clearing state transition was made."},
+    "DEF-083": {"status": "BLOCKED", "result": "Native Ollama stream attempt received 503 no_compliant_deployment_available and the loopback provider saw no request; unified streaming was not exercised. Trailer behavior remains unverified."},
+    "DEF-084": {"status": "UNVERIFIED", "result": "320px mobile screenshot visually inspected with no horizontal overflow in the no-alert state, but no long-ID active alert was loaded; historical defect acceptance condition not tested."},
+    "DEF-085": {"status": "PASS (scoped)", "result": "On exact RC8 PostgreSQL/Valkey, zero-hold request returned 403 budget_or_privilege_exceeded before dispatch; synthetic fixture call count remained zero."},
+    "DEF-086": {"status": "PASS (scoped)", "result": "Full-source SQLite-to-PostgreSQL migration copied and verified all source budgets/reservation references, deployment pricing, settlements, and audit records without filtering/rewriting. Live migrated Console and synthetic A2A settlement worked."}
+  },
+  "new_confirmed_defects": [],
+  "new_product_gap_observations": ["PG-014: Team Admin Security screen presents an empty/clear MCP approval queue and visible Trigger kill switch control alongside an insufficient-role-permission banner; API denies the inventory/operation. No accepted UI contract located, so recorded as product research input, not a defect."],
+  "verdict": "BASELINE_REMEDIATION_REQUIRED"
+}

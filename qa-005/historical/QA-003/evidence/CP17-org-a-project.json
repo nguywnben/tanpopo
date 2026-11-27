@@ -1,0 +1,17 @@
+{
+  "scopeAfterProject": "QA003 Multi-shred A\n/\nQA003 Shred A Project\n/\nNo env\n(Active workspace scope)",
+  "actions": [
+    "New project",
+    "New environment"
+  ],
+  "newEnvironmentButtonCount": 1,
+  "responses": [
+    {
+      "path": "/admin/v1/projects",
+      "status": 201,
+      "idSuffix": "fz8kdgxc",
+      "name": "QA003 Shred A Project",
+      "slug": "qa003-shred-a-proj"
+    }
+  ]
+}

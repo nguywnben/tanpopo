@@ -1,0 +1,5 @@
+{
+  "status": 401,
+  "error": "invalid_virtual_key",
+  "message": "Virtual Key is invalid, expired, or revoked."
+}

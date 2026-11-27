@@ -1,0 +1,24 @@
+{
+  "project": {
+    "id": "prj_01m87bd75xe008vmrnbevambr7",
+    "name": "Backup Validation Project"
+  },
+  "environment": {
+    "id": "env_01m87bd8ywe009gze2n6tcsagb",
+    "slug": "backup-validation-environment"
+  },
+  "createStatus": 201,
+  "key": {
+    "id": "vky_01m87bnmate008k9q7qwsnnzj7",
+    "name": "QA003 populated-org active synthetic key",
+    "key_prefix": "vk_tp_backup-validatio_",
+    "last_four": "0JVF",
+    "state": "CREATED_ACTIVE",
+    "allowed_planes": [
+      "PROVIDER"
+    ]
+  },
+  "error": null,
+  "screenshot": "CP02-key-listed.png",
+  "credentialHandling": "secret_key field intentionally omitted; no screenshot of one-time secret"
+}

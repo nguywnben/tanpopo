@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-23",
+  "binary": "/tmp/qa-tools/tanpopo",
+  "command": "tanpopo --output json config show",
+  "exitCode": 0,
+  "stdout": "Validate and reconcile declarative configuration\n\nUsage:\n  tanpopo config [flags]\n  tanpopo config [command]\n\nAvailable Commands:\n  reconcile   Validate tanpopo.yaml and immutable tanpopo.lock, then apply atomically\n\nFlags:\n  -h, --help   help for config\n\nGlobal Flags:\n      --lang string     Display language (auto or locale code such as en, vi, ja, zh-Hans) (default \"auto\")\n      --output string   Output format (table|json|yaml) (default \"table\")\n\nUse \"tanpopo config [command] --help\" for more information about a command.\n",
+  "classification": "Confirmed CLI command collision: root config group exposes local reconcile help; expected server config inspection subcommand is inaccessible."
+}

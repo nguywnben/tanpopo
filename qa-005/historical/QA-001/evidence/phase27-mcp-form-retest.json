@@ -1,0 +1,17 @@
+{
+  "mcpEmpty": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\nA2A Agents & Active Tasks\nRegistered MCP servers\n0\nNo MCP servers registered\nRegister a Streamable HTTP MCP endpoint to discover tools and enforce schema pins.\nRegister server\nNo MCP servers registered Register a Streamable HTTP MCP endpoint to discover tools and enforce schema pins.",
+  "mcpButtons": [
+    "",
+    "Default Organization / QA Isolation 2026-11-23 / qa-sandbox (Active workspace scope)",
+    "JumpCtrlK",
+    "English",
+    "",
+    "Kill Switch",
+    "Register server",
+    "MCP serversMCP servers",
+    "A2A Agents & Active TasksA2A Agents & Active Tasks",
+    "Register server"
+  ],
+  "mcpForm": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nMCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\nA2A Agents & Active Tasks\nRegistered MCP servers\n0\nNo MCP servers registered\nRegister a Streamable HTTP MCP endpoint to discover tools and enforce schema pins.\nRegister server\nRegister MCP server\nOnly Streamable HTTP transport is permitted.\nServer slug\n∙ Required\nDisplay name\n∙ Required\nStreamable HTTP endpoint URL\n∙ Required\nAllow private or loopback endpoint\nOnly enable for explicitly trusted internal MCP servers.\nCancel\nRegister server\nNo MCP servers registered Register a Streamable HTTP MCP endpoint to discover tools and enforce schema pins.",
+  "allowedCidrsInputCount": 0
+}

@@ -1,0 +1,13 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "scope": "default/dev",
+  "trigger_status": 401,
+  "trigger_error_code": "invalid_virtual_key",
+  "ui_text": "Trace not available yet.",
+  "trace_id": "trc_01m8879tv6e00921e9cfhr7321",
+  "fresh_authenticated_trace_list_status": 200,
+  "trace_found_in_scoped_list": false,
+  "trace_detail_status": 404,
+  "interpretation": "Inconclusive for DEF-045: this was a revoked-key pre-authorization rejection, and the trace was not found in the scoped list/detail read. This does not reproduce the persisted-trace case that defines DEF-045.",
+  "prompt_or_key_material_recorded": false
+}

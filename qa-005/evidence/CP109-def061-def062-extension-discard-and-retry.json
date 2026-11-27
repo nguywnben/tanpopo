@@ -1,0 +1,117 @@
+{
+  "checkpoint": "CP109",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "database": "isolated SQLite online-backup clone of QA-005 baseline state",
+    "listener": "127.0.0.1:18164",
+    "browser": "Chromium 156",
+    "principal": "synthetic QA Owner"
+  },
+  "fixture": {
+    "package_id": "@qa004/lifecycle-canary",
+    "kind": "manifest-only declarative extension; no executable code",
+    "active_version": "0.1.0",
+    "candidate_version": "0.1.1",
+    "permissions_added": ["extra.qa004.invalid"],
+    "tls_required": true,
+    "private_ip_access": false,
+    "provenance": "unverified external synthetic package; explicitly acknowledged in Console",
+    "provider_calls": 0
+  },
+  "DEF-061": {
+    "sequence": [
+      {
+        "step": "Stage permission-escalating 0.1.1 candidate while 0.1.0 is active",
+        "http": 202,
+        "candidate_state": "UPDATING_PENDING_RECONSENT",
+        "active_version": "0.1.0",
+        "candidate_version": "0.1.1",
+        "permission_delta": ["extra.qa004.invalid"]
+      },
+      {
+        "step": "Close review dialog without approval",
+        "ui_button": "Close (keep pending)",
+        "persisted_state": "UPDATING_PENDING_RECONSENT"
+      },
+      {
+        "step": "Open Installed row Actions and select Discard staged upgrade",
+        "confirmation_text": "Discard candidate 0.1.1 and return @qa004/lifecycle-canary to ENABLED_ACTIVE on version 0.1.0 without granting escalated permissions.",
+        "confirmation_button": "Discard candidate",
+        "http": 204,
+        "readback_http": 200,
+        "persisted_state": "ENABLED_ACTIVE",
+        "active_version": "0.1.0",
+        "candidate_version": null,
+        "installation_version": 4
+      }
+    ],
+    "audit": {
+      "event": "extension.escalated_upgrade_rejected",
+      "target_type": "extension_installation",
+      "target_id": "ins_01m8e0hbh3e00asxjy0ty2xdze",
+      "sequence": 598,
+      "verify_http": 200,
+      "intact": true,
+      "checked_events": 601
+    },
+    "result": "PASS scoped"
+  },
+  "DEF-062": {
+    "retry": {
+      "request": "Repeat the exact discarded tanpopo-local://v0.1.1-escalation.tpkg archive and SHA-256 through the real Upgrade package drawer",
+      "http": 409,
+      "api_error_code": "resource_already_exists",
+      "api_message": "extension package or candidate version already exists",
+      "console_message": "This exact immutable candidate version was already registered or rejected. Publish a new version with a bumped SemVer tag and updated digest to proceed.",
+      "readback_http": 200,
+      "final_state": "ENABLED_ACTIVE",
+      "active_version": "0.1.0",
+      "candidate_version": null
+    },
+    "result": "PASS scoped"
+  },
+  "limitations": [
+    "One synthetic declarative package and Owner/SQLite/Chromium path only.",
+    "Other roles, production OCI sources, cross-instance operation, browser engines, concurrency and stale-ETag conflict UX remain untested.",
+    "Clone writes are test-only and excluded; the QA-005 baseline database was not mutated by this workflow.",
+    "No extension code ran and no provider/network request was made."
+  ],
+  "screenshots": [
+    {
+      "path": "screenshots/CP109-def061-initial-stage-review.png",
+      "sha256": "8d5f6e3f04e678f8578e8372126a07637f722010ec42ebb040e7c1e45863f8fe",
+      "inspection": "Reviewed the real permission review screen and explicit unsigned-source acknowledgement before approval."
+    },
+    {
+      "path": "screenshots/CP109-def061-escalated-review.png",
+      "sha256": "d38c594ca0b687ea576073c27dc0057d91973f929ddef0722ed127af3bba5cfd",
+      "inspection": "Visually confirmed active api.qa004.invalid versus added candidate permission extra.qa004.invalid and the explicit consent controls."
+    },
+    {
+      "path": "screenshots/CP109-def061-pending-actions.png",
+      "sha256": "98371bab930845a09e3d7fc9d27b339244f9c9a92854e325fc9c090f970c50fb",
+      "inspection": "Visually confirmed UPDATING_PENDING_RECONSENT and the explicit Discard staged upgrade row action."
+    },
+    {
+      "path": "screenshots/CP109-def061-discard-confirm.png",
+      "sha256": "f9db77403572864d21097a7cfa85d828b1c20341d9c68425de457ddba1a26c51",
+      "inspection": "Confirmation names candidate version and states prior active version returns without granting escalated permission."
+    },
+    {
+      "path": "screenshots/CP109-def061-discarded-readback.png",
+      "sha256": "e5ad0e6e26454f10ebfc9b510f865d2a8d352632184b81cb0de1ff9c825935e7",
+      "inspection": "Visually confirmed success notice and active 0.1.0 row with no candidate."
+    },
+    {
+      "path": "screenshots/CP109-def061-security-audit.png",
+      "sha256": "f8ed820ae13ac3852fee295191c97b8d07ef57da7730988a9d76269724972b0b",
+      "inspection": "Visually confirmed extension.escalated_upgrade_rejected event #598 targets the synthetic installation; hash-chain Verify control visible."
+    },
+    {
+      "path": "screenshots/CP109-def062-duplicate-retry-error.png",
+      "sha256": "4f1b98f3198158545e5e979a97c6a0960a6798d46a44d9138bcc9ccf10e9e885",
+      "inspection": "Visually confirmed red 409 guidance names the exact immutable candidate and instructs publishing a new SemVer with updated digest; prior active row remains intact."
+    }
+  ]
+}

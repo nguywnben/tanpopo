@@ -1,0 +1,42 @@
+{
+  "api": [
+    {
+      "id": "con_01m8530p3we00828f2x8mp6vs2",
+      "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+      "name": "QA002 Google Gemini",
+      "endpoint_url": "https://generativelanguage.googleapis.com",
+      "adapter_id": "adp_01m852w4yze009v8wf6e76wgty",
+      "state": "CREATED_UNVERIFIED",
+      "billing_mode": "COMMERCIAL_API",
+      "data_region": "US",
+      "secret_slot_fingerprints": {
+        "api_key": "...1d03"
+      },
+      "version": 5
+    },
+    {
+      "id": "con_01m852zx84e008qspa6bkat3wm",
+      "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+      "name": "QA002 Google Gemini",
+      "endpoint_url": "https://generativelanguage.googleapis.com",
+      "adapter_id": "adp_01m852w4yze009v8wf6e76wgty",
+      "state": "CREATED_UNVERIFIED",
+      "billing_mode": "COMMERCIAL_API",
+      "data_region": "US",
+      "secret_slot_fingerprints": {
+        "api_key": "...1d03"
+      },
+      "version": 1
+    }
+  ],
+  "menu": "Edit, Probe, Disable, Delete for each row",
+  "distinctFieldsShownInEdit": [
+    "name",
+    "endpoint_url",
+    "adapter_id",
+    "billing_mode",
+    "data_region",
+    "secret_slot_fingerprints"
+  ],
+  "externalProbe": "not run"
+}

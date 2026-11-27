@@ -1,0 +1,58 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084 isolated RC4 QA Console",
+  "product_source_changed": false,
+  "connection_probe": {
+    "ui_action": "Providers \u2192 Connections \u2192 first visible QA002 Google Gemini \u2192 Probe connection",
+    "connection_id": "con_01m8530p3we00828f2x8mp6vs2",
+    "request_path": "/admin/v1/connections/{connection_id}/test",
+    "http_status": 200,
+    "valid": false,
+    "failure_code": "upstream_unreachable",
+    "latency_ms": 2068,
+    "sanitized_message": "upstream connection could not be reached",
+    "ui_state_after": "Unverified",
+    "inference_sent": false
+  },
+  "direct_environment_control": {
+    "destination": "https://generativelanguage.googleapis.com/",
+    "proxy_disabled": true,
+    "http_status": 0,
+    "connect_time_seconds": 0,
+    "timeout_seconds": 6,
+    "result": "TCP connection timed out before TLS"
+  },
+  "configured_proxy_control": {
+    "destination_path": "/v1beta/models?pageSize=1",
+    "ambient_proxy_used": true,
+    "credential_source": "QA_GOOGLE_AI_STUDIO_API_KEY environment binding; value not logged or saved",
+    "http_status": 200,
+    "models_returned_in_requested_page": 1,
+    "result": "Google API reachable and supplied test credential accepted through configured proxy",
+    "proxy_bypass_for_google": false,
+    "verification": "Python urllib proxy_bypass(generativelanguage.googleapis.com) returned false; HTTPS proxy is configured."
+  },
+  "adapter_source_contract": {
+    "probe_method": "GET",
+    "probe_path": "/v1beta/models",
+    "api_key_transport": "host-blind x-goog-api-key header injection",
+    "source_changed": false
+  },
+  "classification": {
+    "product_defect_assigned": false,
+    "supported_explanation": "The Tanpopo guarded broker does not use ambient HTTP proxies; Cloud no-proxy TCP egress times out, while the configured proxy reaches the identical Google model-list API.",
+    "limits": [
+      "The stored connection's secret was not compared with the environment-bound test key; equality is not established.",
+      "This does not establish app-mediated Google inference or probe success in a supported direct-egress environment.",
+      "QA-001 probe_runtime_unavailable remains historical and is not reproduced on RC4."
+    ]
+  },
+  "screenshots": [
+    "CP112-google-probe-upstream-unreachable.png"
+  ],
+  "privacy": {
+    "provider_key_or_secret_saved": false,
+    "full_secret_fingerprint_saved": false,
+    "raw_logs_or_database_saved": false
+  }
+}

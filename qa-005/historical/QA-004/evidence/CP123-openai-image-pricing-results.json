@@ -1,0 +1,99 @@
+{
+  "checkpoint": "CP123",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "127.0.0.1:18128",
+  "scope": "QA004 Test Root Org / default / dev; isolated local synthetic Ollama fixture at 127.0.0.1:18125",
+  "comparison": {
+    "native_ollama_prior_result": "DEF-074: two forwarded images at 1000000 nano-USD/image settled at zero",
+    "normalized_openai_path": "POST /v1/chat/completions",
+    "model": "qa004-cp121-priced-vision",
+    "deployment_id": "dpl_01m8b5ke10e00ayywg90zeryye",
+    "image_unit_nano_usd": 1000000,
+    "zero_token_rates": true,
+    "self_hosted_zero_rate": false
+  },
+  "fixture_harness_attempt": {
+    "result": "INVALID_FIXTURE_CONFIGURATION; excluded from product behavior conclusion",
+    "detail": "The first OpenAI-path attempt reached /v1/chat/completions on a fixture that implemented only /api/chat, which returned a fixture-generated 404. The temporary key was revoked. The fixture was corrected to inspect OpenAI image_url data blocks and return a valid OpenAI response before the controlled retry."
+  },
+  "valid_request": {
+    "method": "POST",
+    "path": "/v1/chat/completions",
+    "virtual_key_name": "QA004 CP123 OpenAI Normalized Image Pricing",
+    "virtual_key_plane": "PROVIDER",
+    "allowed_path": "/v1/*",
+    "allowed_model": "qa004-cp121-priced-vision",
+    "http_status": 200,
+    "synthetic_response": "Synthetic fixture accepted OpenAI image blocks",
+    "input_images": 2,
+    "sha256_ordered": [
+      "b1ff9c8ea3a780bad09b346c423d2d0e46815926879b18e841d928376a946640",
+      "9d9e18e597b11d30abba0dcc7f27ca50b050fe431596f06da7d6f9524208cc00"
+    ],
+    "fixture_path": "/v1/chat/completions",
+    "fixture_image_content_parts": 2,
+    "fixture_authorization_header_present": false,
+    "prompt_or_image_bytes_persisted": false,
+    "external_provider_contacted": false
+  },
+  "expected_charge": {
+    "images": 2,
+    "nano_usd_per_image": 1000000,
+    "expected_total_nano_usd": 2000000,
+    "expected_total_micro_usd": 2000,
+    "expected_usd": "0.002000"
+  },
+  "persistent_result": {
+    "trace_request_id": "trc_01m8b6qppke00akgdd1jkkz6xg",
+    "trace_http_status": 200,
+    "trace_usage_accuracy": "EXACT",
+    "trace_total_cost_micros": 0,
+    "finops_endpoint": "/admin/v1/usage/summary?group_by=key",
+    "finops_group_key": "QA004 CP123 OpenAI Normalized Image Pricing",
+    "finops_exact_micro_usd": 2000,
+    "finops_estimated_micro_usd": 0,
+    "finops_exact_request_count": 1,
+    "finops_estimated_request_count": 0,
+    "finops_unmetered_request_count": 0,
+    "real_chargeback_ui": "Exact $0.002000; Estimated $0.000000; 1 / 0 requests"
+  },
+  "project_budget_control": {
+    "original_hard_limit_micro_usd": 100,
+    "prior_settled_exact_micro_usd": 36,
+    "prior_settled_estimated_micro_usd": 14,
+    "prior_remaining_micro_usd": 50,
+    "temporary_limit_micro_usd": 5000,
+    "temporary_change_method": "Real Console FinOps Budgets & Holds UI; save HTTP 200",
+    "restored_limit_micro_usd": 100,
+    "post_test_project_exact_micro_usd": 2036,
+    "post_test_project_estimated_micro_usd": 14,
+    "post_test_reserved_hold_micro_usd": 0,
+    "post_restore_negative_carryover_micro_usd": 1950,
+    "post_restore_budget_version": 148,
+    "restoration": "Real Console save returned HTTP 200; authenticated GET and visually inspected screenshot show the original 100-micro limit. The temporary 5000-micro limit is not left in place."
+  },
+  "cleanup": {
+    "temporary_provider_keys": [
+      {"id": "vky_01m8b6n9qve00b7g51ezr6sxt3", "name": "QA004 CP123 OpenAI Normalized Image Pricing", "state": "REVOKED", "version": 2, "attempt": "fixture 404; excluded"},
+      {"id": "vky_01m8b6qnz3e00bjz5q24ct60z6", "name": "QA004 CP123 OpenAI Normalized Image Pricing", "state": "REVOKED", "version": 2, "attempt": "valid successful control"}
+    ],
+    "original_fixture_restored": true,
+    "restored_fixture_api_tags_http_status": 200,
+    "fixture_logs": "Sanitized to request path/model/image count and SHA-256 only; no tokens, prompts, or image bytes retained."
+  },
+  "defect_classification": {
+    "DEF-074": "FAIL, narrowed to native Ollama messages[].images[] image-unit settlement and corresponding pre-egress budget enforcement. The normalized OpenAI image_url shape settled the expected 2000 micro-USD on this same Ollama-backed model/deployment.",
+    "DEF-052": "Further reproduced: the exact same successful request trace API says EXACT / zero micro-USD while persistent FinOps and the real Chargeback UI record EXACT / 2000 micro-USD. This is a cross-surface projection discrepancy already tracked by DEF-052; no duplicate defect assigned.",
+    "new_defect": false,
+    "qa_status": "ONGOING",
+    "release_gate": "BLOCKED"
+  },
+  "visual_inspection": [
+    "CP123-openai-image-key-form.png",
+    "CP123-openai-image-traces.png",
+    "CP123-openai-image-chargeback.png",
+    "CP123-openai-image-key-revoked.png",
+    "CP123-image-budget-increased.png",
+    "CP123-image-budget-restored.png"
+  ]
+}

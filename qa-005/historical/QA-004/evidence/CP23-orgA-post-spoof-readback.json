@@ -1,0 +1,20 @@
+{
+  "organization_count": 2,
+  "organization_slugs": [
+    "qa004-cross-tenant-boundary",
+    "qa004-test-root-org"
+  ],
+  "orgA_projects": [
+    {
+      "slug": "qa004-isolation-canary",
+      "name": "QA-004 Isolated Canary",
+      "id": "prj_01m89cf7vce008saenf6dyw8gk"
+    },
+    {
+      "slug": "default",
+      "name": "default",
+      "id": "prj_01m895k8pee008b440xk2ef12p"
+    }
+  ],
+  "spoof_project_exists": false
+}

@@ -1,0 +1,54 @@
+{
+  "baseline": "RC6 2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "role": "ORG_OWNER",
+  "runtime": "A2A-enabled 18128; isolated loopback agent 18127",
+  "active_scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "agent": {
+    "id": "agt_01m8987bbqe009959qp1mwgybg",
+    "slug": "qa004-a2a-loopback"
+  },
+  "request": {
+    "dispatch_async": false,
+    "sub_budget_hold_micros": 1,
+    "synthetic_input": true
+  },
+  "working_task_before_cancel": {
+    "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+    "task_id": "tsk_01m8agq31ke009j8th0r3wgbgw",
+    "state": "working",
+    "version": 2,
+    "sub_budget_hold_micros": 1,
+    "row": "tsk_01m8agq31ke009j8th0r3wgbgw\nqa004-a2a-loopback\n\tWorking\t1 / 5\tUS\t$0.000001\t$0.000000\t\nCancel",
+    "actions": [
+      "Cancel"
+    ]
+  },
+  "console_cancel_http_status": 200,
+  "cancel_error": null,
+  "task_state_while_dispatch_pending": {
+    "state": "canceled",
+    "version": 3,
+    "sub_budget_hold_micros": 1
+  },
+  "create_response_after_fixture_release": {
+    "status": 400,
+    "error": {
+      "code": "invalid_request",
+      "message": "a2a: invalid SM-09 state transition: canceled -> completed",
+      "request_id": "trc_01m8agqct9e00asp0dqz3q26wb",
+      "type": "invalid_request_error"
+    }
+  },
+  "final_task": {
+    "state": "canceled",
+    "version": 3,
+    "sub_budget_hold_micros": 1
+  },
+  "fixture": {
+    "path": "/tasks",
+    "input_parts_count": 1,
+    "authorization_forwarded": false,
+    "state": "completed_response_sent"
+  },
+  "product_source_modified": false
+}

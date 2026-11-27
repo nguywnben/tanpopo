@@ -1,0 +1,39 @@
+{
+  "checkpoint": "CP53",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": {
+    "runtime": "recovered isolated PostgreSQL 16 with 3-node Valkey 8.1 Cluster; exact-source Control Plane 127.0.0.1:18151",
+    "identity": "fresh synthetic QA Org Owner",
+    "browser": "Chromium, headless browser automation with screenshot capture",
+    "provider": "none; no paid provider usage"
+  },
+  "procedure": "Signed in through the real Console, opened the responsive navigation menu, and navigated each listed product screen. Captured full-page screenshots at 375x812 and measured document/body/main scroll widths. Repeated the full navigation smoke at 320x740. Captured additional 320px screenshots for Access & Keys, Playground, and Operations, then visually inspected all 15 screenshots in the campaign viewer.",
+  "pages": [
+    {"name": "Overview", "path": "/overview"},
+    {"name": "Traces", "path": "/observability/traces"},
+    {"name": "FinOps", "path": "/finops/budgets"},
+    {"name": "Providers", "path": "/providers/connections"},
+    {"name": "Models & Deployments", "path": "/models"},
+    {"name": "Routes & Policies", "path": "/routes"},
+    {"name": "Extensions", "path": "/extensions/installed"},
+    {"name": "MCP Hub", "path": "/mcp/servers"},
+    {"name": "Playground", "path": "/devtools/playground"},
+    {"name": "Access & Keys", "path": "/access/virtual-keys"},
+    {"name": "Security", "path": "/security/approvals"},
+    {"name": "Operations", "path": "/ops/health"}
+  ],
+  "viewport_results": {
+    "375x812": {"pages_navigated": 12, "document_body_main_horizontal_overflow": 0, "screenshots": "CP53-mobile-{overview,traces,finops,providers,models,routes,extensions,mcp,playground,keys,security,operations}.png", "visual_inspection": "All 12 screenshots inspected; no clipped page content or navigation failure observed in these fresh-install empty states."},
+    "320x740": {"pages_navigated": 12, "document_body_main_horizontal_overflow": 0, "additional_visually_inspected_screenshots": ["CP53-mobile320-keys.png", "CP53-mobile320-playground.png", "CP53-mobile320-operations.png"], "visual_inspection": "The navigation menu, Access & Keys tabs, Playground form, and Operations tab carousel/cluster cards remained visible and usable in these empty-state screens."}
+  },
+  "classification": "PASS (scoped responsive navigation and empty-state rendering smoke only)",
+  "limitations": [
+    "No populated tables, dialogs, keyboard-only task, screen reader, contrast analysis, or touch-target measurements in this checkpoint.",
+    "Chromium only; Firefox, WebKit, desktop native browsers, and physical devices remain unverified.",
+    "This does not close the existing broad accessibility, responsive, locale, or browser coverage gaps."
+  ],
+  "new_defect": false,
+  "new_product_gap": false,
+  "screenshots_directory": "evidence/screenshots/CP53-mobile*"
+}

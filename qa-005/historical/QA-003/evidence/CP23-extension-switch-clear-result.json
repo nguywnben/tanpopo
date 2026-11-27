@@ -1,0 +1,8 @@
+{
+  "api": {
+    "status": 200,
+    "activeCount": 0,
+    "items": []
+  },
+  "text": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nActive kill switches\n0\nNo active kill switches\nAll Virtual Keys, Projects, Connections, and Extensions are operating normally."
+}

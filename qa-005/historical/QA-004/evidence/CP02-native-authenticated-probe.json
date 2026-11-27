@@ -1,0 +1,48 @@
+{
+  "scope": {
+    "org_id": "org_01m894k1d3e0082ek1d53md0j2",
+    "project_id": "prj_01m894k1d3e0082fyhy9mytpre",
+    "env_id": "env_01m894k1d3e0082gwhqnhh4j6b"
+  },
+  "key": {
+    "created_status": 201,
+    "id": "vky_01m894srwhe00bzh5ba54syzzf",
+    "allowed_planes": [
+      "PROVIDER"
+    ],
+    "state": "CREATED_ACTIVE",
+    "plaintext_saved_to_ephemeral_0600_file": true
+  },
+  "native": {
+    "status": 401,
+    "headers": {
+      "request_id": "req_01m894srwxe008xt3bd5x9zxnw",
+      "content_type": "application/json; charset=utf-8"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_credential_plane",
+        "message": "Admin session cookies are prohibited on /native/* inference endpoints; authenticate with a Virtual Key."
+      },
+      "keys": [
+        "error"
+      ]
+    }
+  },
+  "native_cookie_free": {
+    "status": 503,
+    "headers": {
+      "request_id": "req_01m894t3zje00ah10c2fh69kxd",
+      "content_type": "application/json; charset=utf-8"
+    },
+    "body": {
+      "error": {
+        "code": "no_compliant_deployment_available",
+        "message": "No compliant active deployment is available for model \"qa-native-model\"."
+      },
+      "keys": [
+        "error"
+      ]
+    }
+  }
+}

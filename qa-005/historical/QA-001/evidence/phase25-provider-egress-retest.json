@@ -1,0 +1,33 @@
+{
+  "checkpoint": 25,
+  "scope": "isolated test runtime only; no product code changed",
+  "cloud_network": "revision 9 enforced; unrestricted; configured QA credential bindings ready",
+  "credential_direct_test": "Earlier CP3 direct Google AI Studio GenerateContent returned HTTP 200 with one token; no key or provider payload retained.",
+  "active_runtime": {
+    "origin": "configured isolated browser origin on port 8444",
+    "adapter_installation": "ENABLED_ACTIVE, sandboxed_wasm (read-only metadata)",
+    "probe_http_status": 503,
+    "error_code": "probe_runtime_unavailable",
+    "ui_message": "connection validation runtime unavailable",
+    "connection_state_after": "CREATED_UNVERIFIED",
+    "assessment": "Request stopped during Tanpopo extension-runtime acquisition, before provider egress; exact factory error is not returned by the API."
+  },
+  "restored_runtime": {
+    "proxy_origin_attempt": {
+      "https_port": 8445,
+      "status": 403,
+      "message": "CSRF token or origin validation failed",
+      "state_changed": false
+    },
+    "retry_origin": "direct allowed isolated HTTP origin on port 8082",
+    "probe_http_status": 200,
+    "probe_result": "upstream_unreachable; upstream connection could not be reached",
+    "connection_state_after": "CREATED_UNVERIFIED",
+    "assessment": "Extension validation path ran but did not reach/validate Google. No successful Tanpopo-mediated Google inference."
+  },
+  "evidence": [
+    "phase25-provider-probe-after-republish.png",
+    "phase25-restored-direct-provider-probe.png",
+    "phase25-runtime-capability-summary.json"
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "browser": "Chromium Playwright 1.62",
+  "scope": "Default Organization test DB",
+  "steps": [
+    {
+      "step": "preview",
+      "targetState": "CREATED_UNVERIFIED",
+      "blastText": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nActive kill switches\n0\nNo active kill switches\nAll Virtual Keys, Projects, Connections, and Extensions are operating normally.\nTrigger emergency kill switch\nPropagates immediately across snapshots and writes an immutable audit event.\nTarget level\nProvider connection\nTarget ID\n∙ Required\nPreview blast radius\nEstimated blast radius\n0 orgs · 0 projects · 0 virtual keys · 0 connections\nReason (minimum 5 characters)\n∙ Required\nAbort active streams immediately\nSevers live SSE inference and MCP streams using this entity.\nCancel\nReview & trigger\nNo active kill switches All Virtual Keys, Projects, Connections, and Extensions are operating normally.",
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase22-killswitch-preview.png"
+    },
+    {
+      "step": "confirmation",
+      "text": "normally.\nTrigger emergency kill switch\nPropagates immediately across snapshots and writes an immutable audit event.\nTarget level\nProvider connection\nTarget ID\n∙ Required\nPreview blast radius\nEstimated blast radius\n0 orgs · 0 projects · 0 virtual keys · 0 connections\nReason (minimum 5 characters)\n∙ Required\nAbort active streams immediately\nSevers live SSE inference and MCP streams using this entity.\nCancel\nReview & trigger\nConfirm emergency kill switch\nTrigger Provider connection kill switch for \"con_01m83qvb7te008xt7y9bbgrgjq\"? Active streams will be terminated.\nCancel\nTrigger kill switch\nNo active kill switches All Virtual Keys, Projects, Connections, and Extensions are operating normally.",
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase22-killswitch-confirm.png"
+    },
+    {
+      "step": "triggered",
+      "text": "stem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nCSRF token or origin validation failed\nActive kill switches\n0\nNo active kill switches\nAll Virtual Keys, Projects, Connections, and Extensions are operating normally.\nTrigger emergency kill switch\nPropagates immediately across snapshots and writes an immutable audit event.\nTarget level\nProvider connection\nTarget ID\n∙ Required\nPreview blast radius\nEstimated blast radius\n0 orgs · 0 projects · 0 virtual keys · 0 connections\nReason (minimum 5 characters)\n∙ Required\nAbort active streams immediately\nSevers live SSE inference and MCP streams using this entity.\nCancel\nReview & trigger",
+      "switchCount": 0,
+      "screenshot": "/workspace/tanpopo/qa/evidence/phase22-killswitch-active.png"
+    }
+  ],
+  "error": "TimeoutError: locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /Clear/i }).last()\n",
+  "url": "https://127.0.0.1:8443/security/kill-switches",
+  "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nCSRF token or origin validation failed\nActive kill switches\n0\nNo active kill switches\nAll Virtual Keys, Projects, Connections, and Extensions are operating normally.\nTrigger emergency kill switch\nPropagates immediately across snapshots and writes an immutable audit event.\nTarget level\nProvider connection\nTarget ID\n∙ Required\nPreview blast radius\nEstimated blast radius\n0 orgs · 0 projects · 0 virtual keys · 0 connections\nReason (minimum 5 characters)\n∙ Required\nAbort active streams immediately\nSevers live SSE inference and MCP streams using this entity.\nCancel\nReview & trigger",
+  "responses": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/connections",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/blast-radius",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 403,
+      "method": "POST"
+    }
+  ]
+}

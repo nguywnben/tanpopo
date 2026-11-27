@@ -1,0 +1,25 @@
+{
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "Synthetic inference completed.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1795464825,
+    "id": "chatcmpl-qa002",
+    "model": "qa002:latest",
+    "object": "chat.completion",
+    "usage": {
+      "completion_tokens": 10,
+      "prompt_tokens": 13,
+      "total_tokens": 23
+    }
+  }
+}

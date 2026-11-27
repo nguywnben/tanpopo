@@ -1,0 +1,17 @@
+{
+  "checkpoint": "CP36",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "storage": "isolated SQLite",
+    "base_url": "http://127.0.0.1:18145",
+    "browser": "Chromium 1440x1000"
+  },
+  "defect": "DEF-005",
+  "classification": "PASS (scoped)",
+  "forms": [
+    {"workflow": "MCP Hub → Register server", "private_toggle": true, "required_cidr_field_visible": true, "submitted_without_cidr": true, "inline_error": "Private upstream access requires explicit non-wildcard CIDRs.", "registration_post_count": 0, "record_created": false, "screenshot": "screenshots/CP36-mcp-register-cidr-required.png"},
+    {"workflow": "MCP Hub → A2A Agents & Active Tasks → Register agent", "private_toggle": true, "required_cidr_field_visible": true, "submitted_without_cidr": true, "inline_error": "Private upstream access requires explicit non-wildcard CIDRs.", "registration_post_count": 0, "record_created": false, "screenshot": "screenshots/CP36-a2a-cidr-required.png"}
+  ],
+  "limitations": ["Invalid/wildcard/IPv6/multiple CIDR cases remain unverified.", "Valid new endpoint submission and actual MCP/A2A data-plane invocation were not repeated.", "Responsive, keyboard and screen-reader accessibility not tested.", "No external or paid service was used."]
+}

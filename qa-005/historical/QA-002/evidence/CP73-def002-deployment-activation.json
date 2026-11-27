@@ -1,0 +1,27 @@
+{
+  "session_status": 200,
+  "roles": [
+    "OPERATOR",
+    "ORG_OWNER"
+  ],
+  "patch": {
+    "status": 422,
+    "body": {
+      "error": {
+        "code": "connection_not_active",
+        "type": "invalid_request_error",
+        "message": "backing provider connection con_01m866netce00a8wcj86nft2xq is CREATED_UNVERIFIED; verify the connection before activating deployment",
+        "request_id": "req_01m866vm7de00bn6t1zmejpfhf",
+        "retryable": false
+      }
+    }
+  },
+  "post_read": {
+    "list_status": 200,
+    "deployment": {
+      "state": "PROVISIONED",
+      "connection_state": "CREATED_UNVERIFIED",
+      "version": 1
+    }
+  }
+}

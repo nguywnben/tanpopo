@@ -1,0 +1,60 @@
+{
+  "checkpoint": "CP74",
+  "finding": "DEF-045",
+  "qa005_status": "PASS (scoped)",
+  "historical_failure_preserved": true,
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "platform": "linux/amd64",
+    "reported_version": "0.1.0-dev (commit=none built=unknown)"
+  },
+  "environment": {
+    "kind": "disposable SQLite clone of isolated QA runtime",
+    "base_url": "http://127.0.0.1:18162",
+    "browser": "Chromium 156",
+    "identity": "synthetic Org Owner",
+    "scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Environment",
+    "provider_calls": 0
+  },
+  "runs": [
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "selected_route_slug": "qa005-no-such-route-cp74",
+      "http_status": 503,
+      "error_code": "no_compliant_deployment_available",
+      "trace_id": "trc_01m8dh3hmfe00ajn8snnzytgkf",
+      "direct_trace_detail_http": 200,
+      "playground_inline_trace_card": true,
+      "placeholder_trace_not_available": false
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "selected_route_slug": "qa005-no-such-route-cp74",
+      "http_status": 503,
+      "error_code": "no_compliant_deployment_available",
+      "trace_id": "trc_01m8dh6gyce0081zy70whd0ert",
+      "playground_inline_trace_card": true,
+      "inspect_trace_navigated": true,
+      "trace_list_row_matches_id": true,
+      "trace_detail_http_status": 503,
+      "usage_accuracy": "Unsettled",
+      "duration_ms": 1,
+      "placeholder_trace_not_available": false
+    }
+  ],
+  "evidence": [
+    "../evidence/screenshots/CP74-playground-failed-trace.png",
+    "../evidence/screenshots/CP74-playground-inspect-trace.png"
+  ],
+  "limitations": [
+    "Only the missing-route, pre-dispatch 503 error path was freshly exercised.",
+    "Other provider, stream, timeout, cancellation, revoked-session, role, scope, database and browser paths remain unverified.",
+    "QA-003 historical failure evidence remains in the record and is not superseded globally by this scoped retest."
+  ],
+  "production_signing": "not tested; blocked and deferred",
+  "gate_rel_07": "BLOCKED"
+}

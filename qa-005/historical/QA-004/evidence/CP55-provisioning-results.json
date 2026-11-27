@@ -1,0 +1,30 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "artifact": "45581179274",
+  "runtime": "isolated 127.0.0.1:18132",
+  "actor": "synthetic Org Owner in isolated QA tenant",
+  "project": {
+    "workflow": "Workspace scope picker > New project",
+    "submitted": {"name": "QA004 CP55 Ops Billing", "slug": "qa004-cp55-ops-billing"},
+    "uiAfterCreate": "Project became active and displayed its human name",
+    "authenticatedList": {"request": "GET /admin/v1/projects?limit=100", "status": 200, "matchingNameAndSlugPersisted": true, "projectId": "prj_01m8a2ff3te00arpehp0h1hhkj"},
+    "audit": {"action": "project.created", "sequence": 95, "targetId": "prj_01m8a2ff3te00arpehp0h1hhkj"}
+  },
+  "environment": {
+    "workflow": "Selected project > workspace scope picker > New environment",
+    "submitted": {"name": "QA004 CP55 Staging West", "slug": "qa004-cp55-staging-west"},
+    "createResponse": {"status": 201, "name": "QA004 CP55 Staging West", "slug": "qa004-cp55-staging-west", "environmentId": "env_01m8a2k9jxe0085dgceaze1w4a"},
+    "authenticatedList": {"request": "GET /admin/v1/projects/prj_01m8a2ff3te00arpehp0h1hhkj/environments", "status": 200, "name": "qa004-cp55-staging-west", "slug": "qa004-cp55-staging-west"},
+    "workspacePickerAfterRefresh": "Displays qa004-cp55-staging-west, not the submitted human name",
+    "audit": {"action": "environment.created", "sequence": 102, "targetId": "env_01m8a2k9jxe0085dgceaze1w4a"}
+  },
+  "auditVerification": {"method": "Security > Audit Log > Verify hash chain in real Chromium UI", "result": "Cryptographic RFC 8785 JCS chain intact across 104 events"},
+  "visualInspection": "All screenshots linked in CP55 were inspected during the run.",
+  "classification": {
+    "projectCreatePersistence": "PASS (scoped)",
+    "environmentNameReadbackAndScopeLabel": "FAIL (reproduces DEF-055)",
+    "successfulProjectAndEnvironmentCreateAuditEvents": "PASS (scoped; DEF-007 successful paths only)",
+    "provisioningFailureAtomicity": "UNVERIFIED"
+  },
+  "sensitiveData": "No credentials, session tokens, secret values, provider access, or production data included."
+}

@@ -1,0 +1,18 @@
+{
+  "before": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nqa-boundary-probe@example.invalid\nDeveloper, Team Admin\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n4\nOrganization members\n4\nPrincipal\tKind\tAssigned roles\tActions\nqa-boundary-probe@example.invalid\tHUMAN\t\nDeveloper\nTeam Admin\n\t\nEdit roles\n\nqa-second-reviewer@example.invalid\tHUMAN\t\nSecurity Reviewer\n\t\nEdit roles\n\nqa-reviewer@example.invalid\tHUMAN\t\nSecurity Reviewer\n\t\nEdit roles\n\nqa-owner@example.invalid\tHUMAN\t\nOrg Owner\n\t\nEdit roles\nNo Virtual Keys in this environment Issue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic.",
+  "form": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nqa-boundary-probe@example.invalid\nDeveloper, Team Admin\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n4\nOrganization members\n4\nPrincipal\tKind\tAssigned roles\tActions\nqa-boundary-probe@example.invalid\tHUMAN\t\nDeveloper\nTeam Admin\n\t\nEdit roles\n\nqa-second-reviewer@example.invalid\tHUMAN\t\nSecurity Reviewer\n\t\nEdit roles\n\nqa-reviewer@example.invalid\tHUMAN\t\nSecurity Reviewer\n\t\nEdit roles\n\nqa-owner@example.invalid\tHUMAN\t\nOrg Owner\n\t\nEdit roles\nAdd organization member\nMember email\n∙ Required\nAssign roles\nDeveloper\nCancel\nAdd member\nNo Virtual Keys in this environment Issue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic.",
+  "labels": [
+    {
+      "name": null,
+      "type": "email",
+      "placeholder": ""
+    }
+  ],
+  "projectScopeFieldCount": 0,
+  "post": {
+    "status": 403,
+    "code": "role_escalation_denied",
+    "message": "rbac: insufficient_role_permission: project-scoped admin must specify project_ids and cannot grant organization-scoped bindings"
+  },
+  "rejected": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nqa-boundary-probe@example.invalid\nDeveloper, Team Admin\nQA Isolation 2026-11-23\n/\nqa-sandbox\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\n4\nrbac: insufficient_role_permission: project-scoped admin must specify project_ids and cannot grant organization-scoped bindings\nOrganization members\n4\nPrincipal\tKind\tAssigned roles\tActions\nqa-boundary-probe@example.invalid\tHUMAN\t\nDeveloper\nTeam Admin\n\t\nEdit roles\n\nqa-second-reviewer@example.invalid\tHUMAN\t\nSecurity Reviewer\n\t\nEdit roles\n\nqa-reviewer@example.invalid\tHUMAN\t\nSecurity Reviewer\n\t\nEdit roles\n\nqa-owner@example.invalid\tHUMAN\t\nOrg Owner\n\t\nEdit roles\nAdd organization member\nMember email\n∙ Required\nAssign roles\nDeveloper\nCancel\nAdd member\nNo Virtual Keys in this environment Issue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic."
+}

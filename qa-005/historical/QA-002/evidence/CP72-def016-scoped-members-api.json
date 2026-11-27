@@ -1,0 +1,38 @@
+{
+  "status": 200,
+  "count": 3,
+  "records": [
+    {
+      "id": "prc_01m8667t7ye00bacznhftww7sf",
+      "email": "qa002-cp71-def016@example.invalid",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "project_ids": [
+        "prj_01m84ymb7we009px5hb5pfwsns"
+      ]
+    },
+    {
+      "id": "prc_01m851gad9e00bsgradv1n799z",
+      "email": "qa002-team-admin-created@example.invalid",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "project_ids": [
+        "prj_01m84ymb7we009px5hb5pfwsns"
+      ]
+    },
+    {
+      "id": "prc_01m851dr7ke009rasm25sqyxp1",
+      "email": "qa002-team-admin@example.invalid",
+      "roles": [
+        "DEVELOPER",
+        "TEAM_ADMIN"
+      ],
+      "project_ids": [
+        "prj_01m84ymb7we009px5hb5pfwsns"
+      ]
+    }
+  ],
+  "syntheticCreatedPresent": true
+}

@@ -1,0 +1,86 @@
+{
+  "session": {
+    "status": 200,
+    "roles": [
+      "OPERATOR",
+      "ORG_OWNER"
+    ]
+  },
+  "orgs": {
+    "status": 200,
+    "items": [
+      {
+        "id": "org_01m894k1d3e0082ek1d53md0j2",
+        "name": "QA004 RC6 Fresh Org",
+        "slug": "qa004-rc6-fresh-org"
+      }
+    ]
+  },
+  "projects": {
+    "status": 200,
+    "items": [
+      {
+        "id": "prj_01m894k1d3e0082fyhy9mytpre",
+        "name": "default",
+        "slug": "default",
+        "org_id": "org_01m894k1d3e0082ek1d53md0j2"
+      }
+    ]
+  },
+  "environments": {
+    "status": 200,
+    "items": [
+      {
+        "id": "env_01m894k1d3e0082gwhqnhh4j6b",
+        "name": "dev",
+        "slug": "dev",
+        "project_id": "prj_01m894k1d3e0082fyhy9mytpre"
+      }
+    ]
+  },
+  "audit": {
+    "status": 200,
+    "events": [
+      {
+        "action": "virtual_key.created",
+        "target_type": "virtual_key",
+        "target_id": "vky_01m894srwhe00bzh5ba54syzzf",
+        "actor_id": "prc_01m894k1d3e0082hm7vwhvy21a",
+        "chain_partition": "org_01m894k1d3e0082ek1d53md0j2"
+      },
+      {
+        "action": "auth.login_succeeded",
+        "target_type": "principal",
+        "target_id": "prc_01m894k1d3e0082hm7vwhvy21a",
+        "actor_id": "prc_01m894k1d3e0082hm7vwhvy21a",
+        "chain_partition": "org_01m894k1d3e0082ek1d53md0j2"
+      },
+      {
+        "action": "environment.created",
+        "target_type": "environment",
+        "target_id": "env_01m894k1d3e0082gwhqnhh4j6b",
+        "actor_id": "prc_01m894k1d3e0082hm7vwhvy21a",
+        "chain_partition": "org_01m894k1d3e0082ek1d53md0j2"
+      },
+      {
+        "action": "project.created",
+        "target_type": "project",
+        "target_id": "prj_01m894k1d3e0082fyhy9mytpre",
+        "actor_id": "prc_01m894k1d3e0082hm7vwhvy21a",
+        "chain_partition": "org_01m894k1d3e0082ek1d53md0j2"
+      },
+      {
+        "action": "organization.created",
+        "target_type": "organization",
+        "target_id": "org_01m894k1d3e0082ek1d53md0j2",
+        "actor_id": "prc_01m894k1d3e0082hm7vwhvy21a",
+        "chain_partition": "org_01m894k1d3e0082ek1d53md0j2"
+      }
+    ]
+  },
+  "audit_verification": {
+    "status": 200,
+    "intact": true,
+    "checked_events_count": 5
+  }
+}

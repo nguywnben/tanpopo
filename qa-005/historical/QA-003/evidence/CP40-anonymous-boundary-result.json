@@ -1,0 +1,110 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "authentication": "no cookies, bearer headers, or other credentials supplied",
+  "checks": [
+    {
+      "case": "admin_orgs",
+      "port": 18116,
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "http_status": 401,
+      "content_type": "application/json; charset=utf-8",
+      "error_code": "unauthenticated",
+      "sanitized_message": "authentication required",
+      "json_top_level_keys": [
+        "error"
+      ]
+    },
+    {
+      "case": "admin_audit",
+      "port": 18116,
+      "method": "GET",
+      "path": "/admin/v1/audit-events",
+      "http_status": 401,
+      "content_type": "application/json; charset=utf-8",
+      "error_code": "unauthenticated",
+      "sanitized_message": "authentication required",
+      "json_top_level_keys": [
+        "error"
+      ]
+    },
+    {
+      "case": "admin_connections",
+      "port": 18116,
+      "method": "GET",
+      "path": "/admin/v1/connections",
+      "http_status": 401,
+      "content_type": "application/json; charset=utf-8",
+      "error_code": "unauthenticated",
+      "sanitized_message": "authentication required",
+      "json_top_level_keys": [
+        "error"
+      ]
+    },
+    {
+      "case": "inference",
+      "port": 18116,
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "http_status": 401,
+      "content_type": "application/json; charset=utf-8",
+      "error_code": "invalid_virtual_key",
+      "sanitized_message": "Missing or malformed Bearer Virtual Key.",
+      "json_top_level_keys": [
+        "error"
+      ]
+    },
+    {
+      "case": "a2a_discovery",
+      "port": 18107,
+      "method": "GET",
+      "path": "/a2a/agents",
+      "http_status": 401,
+      "content_type": "application/json",
+      "error_code": "invalid_credential_plane",
+      "sanitized_message": "A2A endpoints require a Data Plane Virtual Key.",
+      "json_top_level_keys": [
+        "error"
+      ]
+    },
+    {
+      "case": "mcp_initialize",
+      "port": 18107,
+      "method": "POST",
+      "path": "/mcp",
+      "http_status": 401,
+      "content_type": "application/json",
+      "error_code": "invalid_virtual_key",
+      "sanitized_message": null,
+      "json_top_level_keys": [
+        "error"
+      ]
+    },
+    {
+      "case": "healthz",
+      "port": 18116,
+      "method": "GET",
+      "path": "/healthz",
+      "http_status": 200,
+      "content_type": "application/json",
+      "error_code": null,
+      "sanitized_message": null,
+      "json_top_level_keys": [
+        "status"
+      ]
+    },
+    {
+      "case": "readyz",
+      "port": 18116,
+      "method": "GET",
+      "path": "/readyz",
+      "http_status": 200,
+      "content_type": "application/json",
+      "error_code": null,
+      "sanitized_message": null,
+      "json_top_level_keys": [
+        "status"
+      ]
+    }
+  ]
+}

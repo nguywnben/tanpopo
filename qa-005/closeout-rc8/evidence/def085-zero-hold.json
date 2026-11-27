@@ -1,0 +1,17 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "runtime_sha256": "30f85f6da82676dc82b27d02e2d409b60e73c99c4aade2a72e8c2af520f019cd",
+  "environment": "isolated PostgreSQL 16 migrated QA clone; Chromium provisioned A2A-only key; loopback agent fixture 127.0.0.1:19188",
+  "request": {
+    "sub_budget_hold_micros": 0
+  },
+  "result": {
+    "http": 403,
+    "error_code": "budget_or_privilege_exceeded",
+    "message": "a2a: 403 budget_or_privilege_exceeded: sub_budget_hold_micros must be greater than 0 before dispatching downstream A2A task",
+    "task_id": null,
+    "fixture_calls_before": 0,
+    "fixture_calls_after": 0,
+    "fixture_rows_after": 0
+  }
+}

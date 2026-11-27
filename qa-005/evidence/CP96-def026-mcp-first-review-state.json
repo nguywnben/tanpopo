@@ -1,0 +1,72 @@
+{
+  "checkpoint": "CP96",
+  "finding": "DEF-026",
+  "classification": "PASS (scoped QA-005 first-review sync-message/state consistency)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source SQLite at 127.0.0.1:18162",
+  "browser": "Playwright Chromium 156",
+  "principal": "ORG_OWNER (qa005-owner@example.invalid)",
+  "fixture": {
+    "transport": "Streamable HTTP",
+    "endpoint": "http://127.0.0.1:19098/mcp",
+    "private_ip_consent": true,
+    "allowed_cidr": "127.0.0.1/32",
+    "tool_name": "qa_ready",
+    "side_effect_class": "read_only"
+  },
+  "initial_discovery": {
+    "http": 200,
+    "sync_endpoint": "/admin/v1/mcp/servers/<synthetic-server-id>/sync-tools",
+    "synced_count": 1,
+    "drifted_count": 0,
+    "schema_hash": "1bb301dd3460e34c2142335a6d608cd469f772b69017b38e638be21e6a001da6",
+    "version": 1,
+    "drift_locked": true,
+    "server_state": "SCHEMA_DRIFT_LOCKED",
+    "banner": "Synced 1 tools on QA005 DEF026 First Review Fixture; 1 tool(s) locked pending schema approval.",
+    "screenshot": "CP96-def026-initial-sync.png"
+  },
+  "unchanged_resync": {
+    "http": 200,
+    "synced_count": 1,
+    "drifted_count": 0,
+    "schema_hash_unchanged": true,
+    "version": 1,
+    "drift_locked": true,
+    "banner_still_reports_pending_review": true,
+    "screenshot": "CP96-def026-unchanged-resync.png"
+  },
+  "schema_drift": {
+    "http": 200,
+    "synced_count": 1,
+    "drifted_count": 1,
+    "schema_hash": "1def4cc9e1b49ac1a3bd69a79aa698d0e14c3f1c2ce37cd16c459e14e907b7a6",
+    "version": 2,
+    "drift_locked": true,
+    "server_state": "SCHEMA_DRIFT_LOCKED",
+    "banner_still_reports_pending_review": true,
+    "screenshot": "CP96-def026-schema-drift-sync.png"
+  },
+  "first_pin": {
+    "http": 200,
+    "endpoint": "/admin/v1/mcp/tools/<tool-id>/approve-schema",
+    "approved_schema_hash_matches_observed": true,
+    "side_effect_class": "read_only",
+    "schema_drift_locked": false,
+    "version": 3,
+    "post_pin_server_state": "ACTIVE",
+    "post_pin_tool_state": "Pinned",
+    "screenshot_dialog": "CP96-def026-approval-dialog.png",
+    "screenshot_result": "CP96-def026-first-pin-complete.png"
+  },
+  "tool_key_grant_attempted": false,
+  "tool_call_sent": false,
+  "page_errors": [],
+  "paid_provider_calls": 0,
+  "real_provider_calls": 0,
+  "harness_note": "An initial automation click targeted the older second server whose loopback fixture was stopped, yielding the expected upstream failure. This was a selector/harness miss; the corrected run explicitly synced the newly registered first-row fixture and is the reported result.",
+  "remaining_scope": ["pre-pin grant denial with an eligible test key", "pre-pin invocation denial", "other roles", "PostgreSQL/Valkey", "WebKit/Firefox", "multiple tools", "concurrent syncs", "pagination"],
+  "historical_qa003_scoped_pass_preserved_not_inherited": true,
+  "gate_rel_07": "BLOCKED"
+}

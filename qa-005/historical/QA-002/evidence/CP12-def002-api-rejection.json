@@ -1,0 +1,10 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "fixture": {"kind": "synthetic local Ollama-compatible HTTP endpoint", "address": "127.0.0.1:19107", "behavior": "returns 401 invalid_api_key to every request"},
+  "probe": {"admin_api_status": 200, "valid": false, "failure_message": "synthetic fixture rejects probe credentials", "connection_state": "CREATED_UNVERIFIED"},
+  "deployment": {"id": "dpl_01m850zp5qe0083acpb9f738e5", "initial_state": "PROVISIONED", "ui_activation_action": "absent", "activation_patch_status": 422, "activation_error": "connection_not_active", "post_state": "PROVISIONED"},
+  "route": {"slug": "qa002-failed-provider-route", "target_health": "PROVISIONED"},
+  "data_plane": {"method": "POST", "path": "/v1/chat/completions", "status": 503, "error": "no_compliant_deployment_available"},
+  "result": "DEF-002 VERIFIED FIXED (scoped)",
+  "google_provider_failures": "not exercised; no inference about Google Cloud egress or adapter health"
+}

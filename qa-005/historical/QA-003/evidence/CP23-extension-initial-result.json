@@ -1,0 +1,31 @@
+{
+  "page": "http://127.0.0.1:18116/extensions/installed",
+  "text": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n1\nMarketplace\n8\nLockfile\nInstalled packages\n1\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\next_01m87em5w7e008efqnwz2d6the\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tdeclarative\t",
+  "buttons": [
+    "",
+    "Default Organization / default / dev (Active workspace scope)",
+    "JumpCtrlK",
+    "",
+    "Kill Switch",
+    "Stage package",
+    ""
+  ],
+  "tabs": [
+    "InstalledInstalled1",
+    "MarketplaceMarketplace8",
+    "LockfileLockfile"
+  ],
+  "events": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/extensions/installations?limit=100",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/marketplace/catalog?limit=100",
+      "status": 200
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,25 @@
+{
+  "source_commit": "3fb156bb51ab462ec5ae46a8bcb213f1a0714d7c",
+  "environment": "exact RC8 release binary, isolated PostgreSQL 16 DB, loopback synthetic fixture returning HTTP 404 for cancellation",
+  "result": {
+    "task_id": "tsk_01m8er6cmke00a2mr2xc6xr2zr",
+    "create_http": 200,
+    "create_state": "canceled",
+    "cancel_http": 200,
+    "cancel_state": "canceled",
+    "cancel_status": "unsupported",
+    "final_state": "canceled",
+    "final_status": "unsupported",
+    "db": {
+      "task_state": "CANCELED",
+      "reservation_state": "RELEASED_UNUSED",
+      "settlement_count": 0
+    },
+    "fixture_dispatch_count": 2,
+    "fixture_cancel_event": {
+      "kind": "cancel",
+      "task_id": "tsk_01m8er6cmke00a2mr2xc6xr2zr",
+      "mode": "unsupported"
+    }
+  }
+}

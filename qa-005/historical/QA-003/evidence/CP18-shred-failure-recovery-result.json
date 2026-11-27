@@ -1,0 +1,72 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "runtime": "isolated SQLite clone on 127.0.0.1:18114",
+  "tenantIdSuffix": "g8c3g2th",
+  "seededBeforeFailure": {
+    "organizations": 1,
+    "org_encryption_keys": 1,
+    "projects": 1,
+    "environments": 1,
+    "virtual_keys": 1,
+    "project_encryption_keys": 1
+  },
+  "auditInsertFault": "BEFORE INSERT trigger aborting only organization.crypto_shredded; no product code changed",
+  "failedDelete": {
+    "httpStatus": 500,
+    "error": "failed recording shred audit event",
+    "uiErrorVisible": true
+  },
+  "stateAfterFailure": {
+    "organizationStatus": "DELETING",
+    "organizations": 1,
+    "org_encryption_keys": 0,
+    "projects": 1,
+    "environments": 1,
+    "virtual_keys": 1,
+    "project_encryption_keys": 0,
+    "secret_credentials": 0,
+    "auditEvents": [
+      "organization.created",
+      "project.created",
+      "environment.created",
+      "virtual_key.created"
+    ],
+    "shredRequests": [
+      {
+        "status": "COMPLETED",
+        "count": 1
+      }
+    ]
+  },
+  "downstreamScopeAttempt": {
+    "clone": "separate empty-tenant reproduction (id suffix r484979d)",
+    "action": "Create project through Console after failed shred",
+    "actual": "organization is not active; project not created"
+  },
+  "recovery": {
+    "action": "Drop only the injected trigger and retry crypto-shred using exact slug",
+    "uiResult": "success; organization row removed; 1 Virtual Key revoked",
+    "databaseAfterRetry": {
+      "organizationRows": 0,
+      "orgKeyRows": 0,
+      "projectRows": 0,
+      "environmentRows": 0,
+      "virtualKeyRows": 0,
+      "projectKeyRows": 0
+    },
+    "auditEvents": [
+      "organization.created",
+      "project.created",
+      "environment.created",
+      "virtual_key.created",
+      "organization.crypto_shredded"
+    ],
+    "auditVerify": {
+      "httpStatus": 200,
+      "intact": true,
+      "checkedEvents": 5
+    }
+  },
+  "classification": "The failure state is recoverable by retry and caused no data exposure. The deletion is non-atomic across irreversible key destruction and final audit/purge phases; the Console does not identify the destructive partial state or give recovery guidance. See DEF-041 handoff.",
+  "uiStateNote": "The Organizations list does not label DELETING; in the separate follow-up capture the selected tenant is marked Active while the project-create error says organization is not active."
+}

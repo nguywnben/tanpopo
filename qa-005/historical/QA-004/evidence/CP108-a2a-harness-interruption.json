@@ -1,0 +1,8 @@
+{
+  "task_id": "tsk_01m8axasbqe0084bg4t6nvq84z",
+  "observed_api_state": "failed",
+  "fixture_observation": "client_disconnected_before_response",
+  "cause": "test browser was closed after the automation queried the task row before refreshing the A2A list; no cancellation action was issued",
+  "original_create_response": "not captured",
+  "classification": "harness interruption; excluded from product defect evidence"
+}

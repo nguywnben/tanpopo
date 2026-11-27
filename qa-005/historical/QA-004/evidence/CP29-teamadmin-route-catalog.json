@@ -1,0 +1,70 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 at 127.0.0.1:18128",
+  "actor": {
+    "role": "TEAM_ADMIN",
+    "project_slug": "default",
+    "project_id": "prj_01m895k8pee008b440xk2ef12p",
+    "environment_slug": "dev",
+    "environment_id": "env_01m895k8pee008b5ah423mhysr"
+  },
+  "persisted_catalog": {
+    "routes_get_status": 200,
+    "routes_count": 1,
+    "route_slugs": ["qa004-loopback"],
+    "models_get_status": 200,
+    "models_count": 1,
+    "deployments_get_status": 200,
+    "deployments_count": 2
+  },
+  "rendered_models_page": {
+    "visible_model_count": 1,
+    "visible_deployment_count": 2,
+    "shows_healthy_and_unverified_deployment_states": true,
+    "screenshot": "CP29-teamadmin-models.png"
+  },
+  "rendered_routes_page": {
+    "visible_route_count": 0,
+    "empty_message": "No routes in this environment",
+    "banner": "insufficient role permission",
+    "hard_reload_reproduced": true,
+    "screenshots": ["CP29-teamadmin-routes.png", "CP29-teamadmin-routes-repro.png"]
+  },
+  "policy_requests": {
+    "unscoped_effective_policy_status": 403,
+    "unscoped_error": "insufficient_role_permission",
+    "project_scoped_effective_policy_status": 200,
+    "environment_scoped_effective_policy_status": 200
+  },
+  "create_route_drawer": {
+    "visible": true,
+    "deployment_target_options": 0,
+    "save_enabled": false,
+    "screenshot": "CP29-teamadmin-route-create-drawer.png"
+  },
+  "controlled_unverified_route_guard": {
+    "temporary_slug": "qa004-unverified-route-guard",
+    "target_deployment_state": "PROVISIONED",
+    "route_create_status": 201,
+    "route_explain_status": 200,
+    "dry_run": true,
+    "selected_candidate_count": 0,
+    "rejected_rule_code": "CONNECTION_INACTIVE",
+    "cleanup_delete_status": 204,
+    "final_route_count": 1,
+    "final_route_slugs": ["qa004-loopback"]
+  },
+  "frozen_source_inspection": {
+    "file": "web/console/src/pages/routes/RoutingPage.tsx",
+    "lines": "141-152,154-160",
+    "finding": "Authorized route/deployment/model reads and the unscoped organization policy read are awaited in one Promise.all; route state is set only after every promise succeeds. The runtime's unscoped Team Admin policy request is denied, matching the observed failed refresh.",
+    "screen_contract": "docs/ux/screen-specifications.md:136-140 grants TEAM_ADMIN route management and documents the route list and create APIs."
+  },
+  "status": "DEF-054 scope expanded to Team Admin route management; DEF-002 route dry-run exclusion verified for this unverified synthetic deployment.",
+  "limitations": [
+    "No real provider request was issued during Route Explain.",
+    "Provider recovery and live Data Plane dispatch against an unverified route remain unverified.",
+    "The temporary route was created and deleted through the authorized project API because the UI drawer had no target choices."
+  ],
+  "sanitization": "No credentials, CSRF tokens, cookies, database files, or raw logs are included."
+}

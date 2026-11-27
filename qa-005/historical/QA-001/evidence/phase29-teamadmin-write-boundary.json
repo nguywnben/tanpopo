@@ -1,0 +1,23 @@
+{
+  "date": "2026-11-23",
+  "browser": "Chromium",
+  "runtime": "8081 / configured HTTPS origin 8444",
+  "principal": "qa-boundary-probe@example.invalid; Developer + Team Admin; no Operator",
+  "route": "POST /admin/v1/projects",
+  "method": "empty JSON body is intentionally invalid and cannot create a resource",
+  "csrfCaptured": true,
+  "checks": {
+    "bound": {
+      "status": 403,
+      "code": "insufficient_role_permission",
+      "message": "insufficient role permission"
+    },
+    "other": {
+      "status": 404,
+      "code": "resource_not_found",
+      "message": "the requested resource was not found"
+    }
+  },
+  "created": false,
+  "conclusion": "Compare validation response under bound and alternate organization IDs; no mutation can occur because required create fields are absent."
+}

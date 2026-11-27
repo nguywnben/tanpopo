@@ -1,0 +1,46 @@
+{
+  "fresh_org_owner_ui": "ound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOverview\n\nUpdated 1:43:18 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.\nAll systems nominal No active operational alerts or pending remediation items.",
+  "checks": {
+    "role": [
+      "ORG_OWNER"
+    ],
+    "org_id": "org_01m89ezzx6e0083hrjy2r7s14f",
+    "organizations": {
+      "status": 200,
+      "count": 1,
+      "ids": [
+        "org_01m89ezzx6e0083hrjy2r7s14f"
+      ]
+    },
+    "projects": {
+      "status": 200,
+      "count": 0,
+      "ids": []
+    },
+    "foreign_org_header": {
+      "status": 404,
+      "error": "resource_not_found",
+      "message": "the requested resource was not found",
+      "data": null
+    },
+    "foreign_project_id": {
+      "status": 404,
+      "error": "resource_not_found",
+      "message": "project not found",
+      "data": null
+    },
+    "body_org_spoof": {
+      "status": 403,
+      "error": "org_id_spoofing_forbidden",
+      "message": "request body org_id cannot override authenticated session organization",
+      "data": null
+    },
+    "instance_org_create": {
+      "status": 403,
+      "error": "insufficient_role_permission",
+      "message": "insufficient role permission",
+      "data": null
+    },
+    "project_count_after": 0
+  }
+}

@@ -1,0 +1,362 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084",
+  "role": "Org Owner + Operator",
+  "browser": "Chromium 1440x1000",
+  "rows": [
+    {
+      "scope": "org",
+      "title": "QA-002 A2A Org / No project / No env",
+      "page": "providers",
+      "path": "/providers/connections",
+      "main": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t",
+      "api": [
+        {
+          "path": "/admin/v1/secrets",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/provider-adapters",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/connections",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "org",
+      "title": "QA-002 A2A Org / No project / No env",
+      "page": "mcp",
+      "path": "/mcp/servers",
+      "main": "MCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n1\nA2A Agents & Active Tasks\n16\nRegistered MCP servers\n1\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 synthetic MCP CIDR\nqa002-mcp-cidr\n\thttp://127.0.0.1:19105/mcp\tActive\t0\t\nSync tools",
+      "api": [
+        {
+          "path": "/admin/v1/a2a/agents",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/mcp/servers",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/a2a/tasks",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "org",
+      "title": "QA-002 A2A Org / No project / No env",
+      "page": "security",
+      "path": "/security/approvals",
+      "main": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.",
+      "api": [
+        {
+          "path": "/admin/v1/kill-switches",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/audit-events",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/approvals",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "org",
+      "title": "QA-002 A2A Org / No project / No env",
+      "page": "operations",
+      "path": "/ops/health",
+      "main": "Operations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\n1\nUpgrades\nOrganizations\nWebhooks\nReadiness (/readyz)\nReady\nServing traffic\nConfig epoch\n75\nCopy-on-write snapshot\nSnapshot age\n—\nLast config refresh\nStorage engine\nsqlite_wal\nActive persistence backend\nCluster nodes\n1\nNode ID\tConfig epoch\tSnapshot age\tHealth\nstandalone\t75\t0 ms\tOK",
+      "api": [
+        {
+          "path": "/admin/v1/ops/cluster-status",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/audit-events",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/secrets",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/extensions/lockfile",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/webhooks",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "org",
+      "title": "QA-002 A2A Org / No project / No env",
+      "page": "access-members",
+      "path": "/access/members",
+      "main": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nOrganization members\n0\nNo members found",
+      "api": []
+    },
+    {
+      "scope": "org",
+      "title": "QA-002 A2A Org / No project / No env",
+      "page": "playground",
+      "path": "/devtools/playground",
+      "main": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nLive Playground\nSDK Snippets\nSelect an active environment in the top bar to start a Playground session.\nModel or route slug\nComparison model (optional)\nSession budget cap (micro-USD)\n\nNo turns yet. Send a prompt below to mint an ephemeral key and stream from /v1/chat/completions.\n\nPrompt\nSend",
+      "api": []
+    },
+    {
+      "scope": "proj",
+      "title": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "page": "providers",
+      "path": "/providers/connections",
+      "main": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t",
+      "api": [
+        {
+          "path": "/admin/v1/connections",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/provider-adapters",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/secrets",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "proj",
+      "title": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "page": "mcp",
+      "path": "/mcp/servers",
+      "main": "MCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n1\nA2A Agents & Active Tasks\n16\nRegistered MCP servers\n1\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 synthetic MCP CIDR\nqa002-mcp-cidr\n\thttp://127.0.0.1:19105/mcp\tActive\t0\t\nSync tools",
+      "api": [
+        {
+          "path": "/admin/v1/a2a/agents",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/a2a/tasks",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/mcp/servers",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "proj",
+      "title": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "page": "security",
+      "path": "/security/approvals",
+      "main": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.",
+      "api": [
+        {
+          "path": "/admin/v1/approvals",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/audit-events",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/kill-switches",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "proj",
+      "title": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "page": "operations",
+      "path": "/ops/health",
+      "main": "Operations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\n1\nUpgrades\nOrganizations\nWebhooks\nReadiness (/readyz)\nReady\nServing traffic\nConfig epoch\n75\nCopy-on-write snapshot\nSnapshot age\n—\nLast config refresh\nStorage engine\nsqlite_wal\nActive persistence backend\nCluster nodes\n1\nNode ID\tConfig epoch\tSnapshot age\tHealth\nstandalone\t75\t0 ms\tOK",
+      "api": [
+        {
+          "path": "/admin/v1/ops/cluster-status",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/secrets",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/extensions/lockfile",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/audit-events",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/webhooks",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "proj",
+      "title": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "page": "access-members",
+      "path": "/access/members",
+      "main": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nOrganization members\n0\nNo members found",
+      "api": []
+    },
+    {
+      "scope": "proj",
+      "title": "QA-002 A2A Org / QA002 CP78 Fresh Budget / No env",
+      "page": "playground",
+      "path": "/devtools/playground",
+      "main": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nLive Playground\nSDK Snippets\nSelect an active environment in the top bar to start a Playground session.\nModel or route slug\nComparison model (optional)\nSession budget cap (micro-USD)\n\nNo turns yet. Send a prompt below to mint an ephemeral key and stream from /v1/chat/completions.\n\nPrompt\nSend",
+      "api": []
+    },
+    {
+      "scope": "env",
+      "title": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "page": "providers",
+      "path": "/providers/connections",
+      "main": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t",
+      "api": [
+        {
+          "path": "/admin/v1/provider-adapters",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/secrets",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/connections",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "env",
+      "title": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "page": "mcp",
+      "path": "/mcp/servers",
+      "main": "MCP Hub\n\nStreamable HTTP MCP server registry, RFC 8785 JCS schema pinning, and per-tool Virtual Key grants.\n\nRegister server\nMCP servers\n1\nA2A Agents & Active Tasks\n16\nRegistered MCP servers\n1\nServer\tEndpoint\tSchema state\tTools\tActions\n\nQA002 synthetic MCP CIDR\nqa002-mcp-cidr\n\thttp://127.0.0.1:19105/mcp\tActive\t0\t\nSync tools",
+      "api": [
+        {
+          "path": "/admin/v1/mcp/servers",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/a2a/agents",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/virtual-keys",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/a2a/tasks",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "env",
+      "title": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "page": "security",
+      "path": "/security/approvals",
+      "main": "Security\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.",
+      "api": [
+        {
+          "path": "/admin/v1/audit-events",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/approvals",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/kill-switches",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "env",
+      "title": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "page": "operations",
+      "path": "/ops/health",
+      "main": "Operations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\n1\nUpgrades\nOrganizations\nWebhooks\nReadiness (/readyz)\nReady\nServing traffic\nConfig epoch\n75\nCopy-on-write snapshot\nSnapshot age\n—\nLast config refresh\nStorage engine\nsqlite_wal\nActive persistence backend\nCluster nodes\n1\nNode ID\tConfig epoch\tSnapshot age\tHealth\nstandalone\t75\t0 ms\tOK",
+      "api": [
+        {
+          "path": "/admin/v1/ops/cluster-status",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/secrets",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/webhooks",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/extensions/lockfile",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/audit-events",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "env",
+      "title": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "page": "access-members",
+      "path": "/access/members",
+      "main": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n11\nMembers & Roles\n4\nOrganization members\n4\nPrincipal\tKind\tAssigned roles\tActions\nqa002-cp71-def016@example.invalid\tHUMAN\t\nDeveloper\n\t\nEdit roles\n\nqa002-team-admin-created@example.invalid\tHUMAN\t\nDeveloper\n\t\nEdit roles\n\nqa002-team-admin@example.invalid\tHUMAN\t\nDeveloper\nTeam Admin\n\t\nEdit roles\n\nqa-002-a2a-owner@example.invalid\tHUMAN\t\nOrg Owner\n\t\nEdit roles",
+      "api": [
+        {
+          "path": "/admin/v1/virtual-keys",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/members",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/traces",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/models",
+          "status": 200
+        },
+        {
+          "path": "/admin/v1/deployments",
+          "status": 200
+        }
+      ]
+    },
+    {
+      "scope": "env",
+      "title": "QA-002 A2A Org / QA002 Audit mwto47wa / stage",
+      "page": "playground",
+      "path": "/devtools/playground",
+      "main": "Playground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nLive Playground\nSDK Snippets\nModel or route slug\nqa002-failed-provider-route\nComparison model (optional)\nSession budget cap (micro-USD)\n\nNo turns yet. Send a prompt below to mint an ephemeral key and stream from /v1/chat/completions.\n\nPrompt\nSend",
+      "api": [
+        {
+          "path": "/admin/v1/routes",
+          "status": 200
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "url": "http://127.0.0.1:18087/overview",
+  "postBootstrap": {
+    "initialized": true,
+    "projects": [
+      {
+        "name": "default",
+        "org_id": "org_01m86ehh3ae009fxwnytewwb8x"
+      }
+    ],
+    "memberCount": 1,
+    "memberStatus": 200
+  },
+  "overview": "Overview\n\nUpdated 9:35:44 AM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items."
+}

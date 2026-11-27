@@ -1,0 +1,30 @@
+{
+  "posted": {
+    "status": 201,
+    "body": {
+      "id": "dpl_01m88acwb1e0092mkgxh7hq69e",
+      "env_id": "env_01m889dz02e00bzn9ddxth5hhn",
+      "logical_model_id": "lmd_01m88abkqee0096xad67rdj042",
+      "connection_id": "con_01m889mse8e00a3mxsevra4wnp",
+      "connection_state": "ACTIVE",
+      "upstream_model_name": "qa003-cp56-local",
+      "data_region": "ON_PREM",
+      "state": "ACTIVE_HEALTHY",
+      "idle_chunk_timeout_ms": 15000,
+      "first_byte_timeout_ms": 30000,
+      "rate_card": {
+        "input_token_nano_usd": 0,
+        "output_token_nano_usd": 0,
+        "cache_read_token_nano_usd": 0,
+        "cache_write_token_nano_usd": 0,
+        "reasoning_token_nano_usd": 0,
+        "image_unit_nano_usd": 0,
+        "audio_sec_nano_usd": 0,
+        "document_page_nano_usd": 0,
+        "self_hosted_zero_rate": true
+      },
+      "version": 1
+    }
+  },
+  "screen": "Models & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\n1\nLogical Models\n1\nDeployment activated cleanly as ACTIVE_HEALTHY.\nData region\nAll regions\nHealth state\nAll states\nEnvironment deployments\n1\nUpstream model\tConnection\tRegion\tHealth\tIn / Out (nano-USD)\tActions\n\nqa003-cp56-local\nlmd_01m88abkqee0096xad67rdj042\n\tQA003 CP55 Ollama defaults\tON_PREM\tHealthy\t0 / 0\t"
+}

@@ -1,0 +1,68 @@
+{
+  "scope": "QA004 Test Root Org\n/\ndefault\n/\ndev\n(Active workspace scope)",
+  "models": [
+    {
+      "id": "lmd_01m8asq07ke00bbscjzzvqg5nb",
+      "slug": "qa004-cp99-embedding-batch",
+      "display_name": "qa004-cp99-embedding-batch",
+      "capabilities": {
+        "streaming": false,
+        "tool_calling": false,
+        "parallel_tool_calls": false,
+        "strict_json_schema": false,
+        "json_object": false,
+        "vision": false,
+        "audio_input": false,
+        "document_input": false,
+        "reasoning": false,
+        "prompt_caching": false,
+        "embeddings": true,
+        "rerank": false
+      }
+    }
+  ],
+  "deployments": [],
+  "routes": [],
+  "keys": [
+    {
+      "id": "vky_01m8asv1kse0099zk7gwa63pv2",
+      "name": "QA004 CP99 embeddings batch final",
+      "state": "REVOKED",
+      "allowed_routes": [
+        "/v1/embeddings"
+      ],
+      "version": 2
+    },
+    {
+      "id": "vky_01m8ash2m5e009pwanae9f53ja",
+      "name": "QA004 CP99 embeddings batch verified",
+      "state": "REVOKED",
+      "allowed_routes": [
+        "/v1/embeddings"
+      ],
+      "version": 2
+    },
+    {
+      "id": "vky_01m8asf15ge009en604bzq3hjp",
+      "name": "QA004 CP99 embeddings batch",
+      "state": "REVOKED",
+      "allowed_routes": [
+        "/v1/embeddings"
+      ],
+      "version": 2
+    }
+  ],
+  "fixtureRestored": {
+    "endpoint": "http://127.0.0.1:18125/api/tags",
+    "response": {
+      "models": [
+        {
+          "name": "qa004-mock",
+          "model": "qa004-mock",
+          "size": 0,
+          "digest": "synthetic"
+        }
+      ]
+    }
+  }
+}

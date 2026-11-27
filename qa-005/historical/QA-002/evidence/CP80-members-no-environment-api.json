@@ -1,0 +1,47 @@
+{
+  "visibleText": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\nSelect a project and environment in the top bar to manage Virtual Keys.\nOrganization members\n0\nNo members found",
+  "scope": "QA-002 A2A Org\n/\nQA002 CP78 Fresh Budget\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch",
+  "apiStatus": 200,
+  "memberCount": 4,
+  "hasMore": false,
+  "members": [
+    {
+      "id": "prc_01m8667t7ye00bacznhftww7sf",
+      "email": "qa002-cp71-def016@example.invalid",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "project_ids": [
+        "prj_01m84ymb7we009px5hb5pfwsns"
+      ]
+    },
+    {
+      "id": "prc_01m851gad9e00bsgradv1n799z",
+      "email": "qa002-team-admin-created@example.invalid",
+      "roles": [
+        "DEVELOPER"
+      ],
+      "project_ids": [
+        "prj_01m84ymb7we009px5hb5pfwsns"
+      ]
+    },
+    {
+      "id": "prc_01m851dr7ke009rasm25sqyxp1",
+      "email": "qa002-team-admin@example.invalid",
+      "roles": [
+        "DEVELOPER",
+        "TEAM_ADMIN"
+      ],
+      "project_ids": [
+        "prj_01m84ymb7we009px5hb5pfwsns"
+      ]
+    },
+    {
+      "id": "prc_01m84xhbtwe00939kr14qg3khv",
+      "email": "qa-002-a2a-owner@example.invalid",
+      "roles": [
+        "ORG_OWNER"
+      ]
+    }
+  ]
+}

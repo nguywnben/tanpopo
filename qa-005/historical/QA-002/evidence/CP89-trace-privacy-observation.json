@@ -1,0 +1,31 @@
+{
+  "checkpoint": "CP89",
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "browser": "Chromium",
+  "role": "Organization Owner",
+  "route": "/observability/traces",
+  "api": {
+    "method": "GET",
+    "path": "/admin/v1/traces?limit=100",
+    "status": 200,
+    "rows_observed": 2,
+    "payload_fields_present": false,
+    "has_debug_payload_values": [false, false],
+    "has_more": false
+  },
+  "ui": {
+    "privacy_badge": "Metadata-Only",
+    "table_columns": ["Request ID", "Route", "Status", "Error", "Metering", "Duration", "Timestamp"],
+    "selected_trace_detail": ["Request ID", "Route", "HTTP Status / Error", "Usage accuracy & Cost", "Total duration", "Recorded at", "Execution stages"],
+    "prompt_or_completion_content_rendered": false
+  },
+  "runtime_observation": {
+    "yaml_otel_or_otlp_settings_found": false,
+    "local_collector_listener_4317_or_4318_found": false,
+    "runtime_process_environment_readable": false
+  },
+  "acceptance_criteria": "TP-AC-F0804 not completed: no marker-bearing inference or configured collector outage was exercised",
+  "classification": "Partial positive observation; full privacy and fail-open exporter behavior UNVERIFIED",
+  "mutation_performed": false,
+  "gate": "GATE-REL-07 BLOCKED"
+}

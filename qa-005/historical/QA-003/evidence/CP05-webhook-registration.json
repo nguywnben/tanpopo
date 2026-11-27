@@ -1,0 +1,36 @@
+{
+  "syntheticCredential": {
+    "status": 200,
+    "found": true,
+    "secretKind": "WEBHOOK_HMAC_SECRET",
+    "plaintextReturned": false
+  },
+  "registration": {
+    "httpStatus": 201,
+    "id": "whk_01m87dnjnde009t7c9vkvt62kz",
+    "enabled": true,
+    "events": [
+      "kill_switch.triggered",
+      "mcp.approval.pending"
+    ],
+    "targetOrigin": "https://example.com",
+    "errorCode": null
+  },
+  "credentialOptionsIncluded": true,
+  "list": {
+    "status": 200,
+    "count": 1,
+    "items": [
+      {
+        "id": "whk_01m87dnjnde009t7c9vkvt62kz",
+        "enabled": true,
+        "events": [
+          "kill_switch.triggered",
+          "mcp.approval.pending"
+        ],
+        "targetOrigin": "https://example.com",
+        "version": 1
+      }
+    ]
+  }
+}

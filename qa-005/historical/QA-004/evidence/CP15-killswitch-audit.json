@@ -1,0 +1,10 @@
+{
+  "kill_switch.triggered": {
+    "status": 200,
+    "found": 1
+  },
+  "kill_switch.cleared": {
+    "status": 200,
+    "found": 1
+  }
+}

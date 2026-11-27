@@ -1,0 +1,34 @@
+{
+  "key": {
+    "id": "vky_01m8arzhtge00b57zyt66n6xm0",
+    "name": "QA004 CP98 Responses stream final",
+    "state": "REVOKED",
+    "version": 2,
+    "allowed_routes": [
+      "/v1/responses"
+    ],
+    "project_id": "prj_01m895k8pee008b440xk2ef12p",
+    "env_id": "env_01m895k8pee008b5ah423mhysr"
+  },
+  "traces": [
+    {
+      "request_id": "trc_01m8arzhxve0099stc0bhsv9ky",
+      "route_slug": "qa004-mock",
+      "status_code": 200,
+      "error_code": null,
+      "usage_accuracy": "EXACT",
+      "total_cost_micros": 0,
+      "duration_ms": 251
+    }
+  ],
+  "chargeback": [
+    {
+      "group_key": "QA004 CP98 Responses stream final",
+      "exact_micro_usd": 1,
+      "estimated_micro_usd": 0,
+      "exact_request_count": 1,
+      "estimated_request_count": 0,
+      "unmetered_request_count": 0
+    }
+  ]
+}

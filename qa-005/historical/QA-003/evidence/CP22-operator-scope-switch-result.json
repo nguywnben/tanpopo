@@ -1,0 +1,10 @@
+{
+  "switched": true,
+  "scopeSwitcherCount": 0,
+  "switchRefreshBehavior": "After in-app Operator switch to the new org, a full page reload returned to the authenticated session org (Default Organization). No persistence contract promises active org across reload; recorded as observation, not defect.",
+  "memberListStatus": 200,
+  "membersText": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\nMembers & Roles\nOrganization members\n0\nNo members found",
+  "afterReloadStillScoped": false,
+  "afterSwitchExcerpt": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa003-owner@example.invalid\nOperator, Org Owner\nQA003 Operator CP22\n/\nNo project\n/\nNo env\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOperations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n2\nWebhooks\nTenant organizations\n2\nOrganization\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA003 Operator CP22\nActive\nqa003-operator-cp22 · org_01m87t5syhe00bhdsq6tq09",
+  "afterReloadExcerpt": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa003-owner@example.invalid\nOperator, Org Owner\nDefault Organization\n/\ndefault\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nAccess & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nAdd member\nVirtual Keys\n2\nMembers & Roles\n16\nOrganization members\n16\nPrincipal\tKind\tAssigned roles\tActions\n\ncp21-finopsviewer-export@example.invalid\nPassword set\n\tHUMAN\t\nFinOps Viewer\n\t\n\n\ncp20-finopsviewer-02@example.invalid\nPassword set\n\tHUMAN\t\nFinOps Viewer\n\t\n\n\ncp20-finop"
+}

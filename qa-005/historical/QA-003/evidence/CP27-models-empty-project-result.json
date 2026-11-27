@@ -1,0 +1,74 @@
+{
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=50"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments?limit=100"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments?limit=100"
+    }
+  ],
+  "newProjectForm": "Overview\n\nUpdated 11:29:19 PM · 0 unmetered requests\n\n1h\n24h\n7d\n30d\nRefresh\nRequests\n0\nWindow: 24h\nError rate\n0.00%\nInternal & upstream\np95 proxy overhead\n0 ms\nGateway added latency\nSettled spend\n$0.000000\nActive holds: $0.000000\nActive alerts\n0\nAll systems nominal\nNo active operational alerts or pending remediation items.",
+  "textboxCount": 2,
+  "createdScope": "Default Organization / QA003 Empty Project DEF035 / No env",
+  "emptyProjectScreen": "Models & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\n1\nLogical Models\n1\nData region\nAll regions\nHealth state\nAll states\nAll environment deployments\n1\nUpstream model\tEnvironment\tConnection\tRegion\tHealth\tIn / Out (nano-USD)\tActions\n\nqa003-synthetic-unauthorized\nlmd_01m87f6xp5e00928y9d7g8kdth\n\tenv_01m87axgx7e008ejsny065s8qz\tQA003 RC5 Ollama 401\tON_PREM\tProvisioned\t0 / 0\t",
+  "actionButtonCount": 1,
+  "actions": [
+    "Disable deployment",
+    "Delete deployment"
+  ],
+  "inventory": {
+    "projectsStatus": 200,
+    "projects": [
+      {
+        "id": "prj_01m87y8xb6e00btm7gj98bjcc3",
+        "name": "QA003 Empty Project DEF035",
+        "slug": "qa003-empty-def035"
+      },
+      {
+        "id": "prj_01m87axgx7e008ehq1d016vqwt",
+        "name": "default",
+        "slug": "default"
+      }
+    ],
+    "deploymentStatus": 200,
+    "deployments": [
+      {
+        "id": "dpl_01m87fckaye00axyrh360js4t4",
+        "env_id": "env_01m87axgx7e008ejsny065s8qz",
+        "upstream_model_name": "qa003-synthetic-unauthorized",
+        "state": "PROVISIONED"
+      }
+    ],
+    "environmentMap": [
+      {
+        "project": {
+          "id": "prj_01m87y8xb6e00btm7gj98bjcc3",
+          "name": "QA003 Empty Project DEF035",
+          "slug": "qa003-empty-def035"
+        },
+        "status": 200,
+        "environments": []
+      },
+      {
+        "project": {
+          "id": "prj_01m87axgx7e008ehq1d016vqwt",
+          "name": "default",
+          "slug": "default"
+        },
+        "status": 200,
+        "environments": [
+          {
+            "id": "env_01m87axgx7e008ejsny065s8qz",
+            "name": "dev"
+          }
+        ]
+      }
+    ]
+  }
+}

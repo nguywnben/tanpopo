@@ -1,0 +1,62 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "redirect_cases": [
+    {
+      "case": "same-CIDR redirect control",
+      "origin": "127.0.0.1:19119",
+      "target": "127.0.0.1:19120",
+      "target_direct_control_status": 200,
+      "target_direct_control_methods": [
+        "initialize",
+        "notifications/initialized",
+        "tools/list"
+      ],
+      "redirect_sync_status": 502,
+      "origin_requests": 1,
+      "redirect_target_requests": 0,
+      "persisted_tool_count": 0
+    },
+    {
+      "case": "cross-CIDR IPv4-to-IPv6 redirect",
+      "origin": "127.0.0.1:19116",
+      "target": "[::1]:19118",
+      "configured_cidr": [
+        "127.0.0.1/32"
+      ],
+      "sync_status": 502,
+      "origin_requests": 1,
+      "redirect_target_requests": 0,
+      "persisted_tool_count": 0
+    }
+  ],
+  "persisted_servers": [
+    {
+      "server_slug": "qa002-cp41-redirect-allow",
+      "endpoint_url": "http://127.0.0.1:19119/mcp",
+      "status": "ACTIVE",
+      "tool_count": 0,
+      "allowed_cidrs": [
+        "127.0.0.1/32"
+      ]
+    },
+    {
+      "server_slug": "qa002-cp41-direct-target",
+      "endpoint_url": "http://127.0.0.1:19120/mcp",
+      "status": "ACTIVE",
+      "tool_count": 1,
+      "allowed_cidrs": [
+        "127.0.0.1/32"
+      ]
+    },
+    {
+      "server_slug": "qa002-cp41-redirect-deny",
+      "endpoint_url": "http://127.0.0.1:19116/mcp",
+      "status": "ACTIVE",
+      "tool_count": 0,
+      "allowed_cidrs": [
+        "127.0.0.1/32"
+      ]
+    }
+  ],
+  "interpretation": "The MCP client did not follow either 307 redirect. The direct target fixture worked when configured directly. This is scoped fail-closed SSRF evidence; it does not prove that redirect targets are checked individually because no redirect was followed. Redirect support contract remains unverified."
+}

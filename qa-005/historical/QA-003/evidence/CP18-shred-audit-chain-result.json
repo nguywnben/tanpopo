@@ -1,0 +1,10 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "tenantIdSuffix": "r484979d",
+  "csrfAvailable": true,
+  "verify": {
+    "httpStatus": 200,
+    "intact": true,
+    "checkedEvents": 1
+  }
+}

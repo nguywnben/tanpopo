@@ -1,0 +1,84 @@
+{
+  "permission_diff": {
+    "status": 200,
+    "etag": "\"v3\"",
+    "keys": [
+      "installation_id",
+      "package_id",
+      "active_version",
+      "candidate_version",
+      "origin_trust_tier",
+      "signature_verified",
+      "enterprise_signed",
+      "signing_key_fingerprint",
+      "execution_tier",
+      "active_execution_tier",
+      "active_allowed_hosts",
+      "candidate_allowed_hosts",
+      "added_allowed_hosts",
+      "removed_allowed_hosts",
+      "secret_slots",
+      "active_secret_slots",
+      "added_secret_slots",
+      "quota_escalated",
+      "active_quotas",
+      "quotas",
+      "active_permissions",
+      "candidate_permissions",
+      "permission_delta",
+      "has_escalation"
+    ]
+  },
+  "unquarantine": {
+    "status": 404,
+    "headers": {
+      "etag": null
+    },
+    "body": {
+      "error": {
+        "code": "resource_not_found",
+        "type": "not_found_error",
+        "message": "resource not found",
+        "request_id": "req_01m89r7mw8e009av891tz5efdw",
+        "retryable": false
+      }
+    }
+  },
+  "approveFromQuarantine": {
+    "status": 409,
+    "headers": {
+      "etag": null
+    },
+    "body": {
+      "error": {
+        "code": "invalid_state_transition",
+        "type": "conflict_error",
+        "message": "installation in state QUARANTINED cannot be approved",
+        "request_id": "req_01m89r7mwye009xvbgm99db5b9",
+        "retryable": false
+      }
+    }
+  },
+  "uninstallWithDependentConnection": {
+    "status": 409,
+    "headers": {
+      "etag": null
+    },
+    "body": {
+      "error": {
+        "code": "extension_referenced_by_active_connections",
+        "type": "conflict_error",
+        "message": "storage: resource is referenced and cannot be removed: 2 active provider_connections depend on installation \"ins_01m895ph2ge00a3evn7jxp86st\"",
+        "request_id": "req_01m89r7mxbe009e6ceq3e94cep",
+        "retryable": false
+      }
+    }
+  },
+  "final_state": {
+    "id": "ins_01m895ph2ge00a3evn7jxp86st",
+    "state": "QUARANTINED",
+    "version": 3,
+    "active_version": "0.1.0",
+    "canonical_name": "@tanpopo/ollama"
+  }
+}

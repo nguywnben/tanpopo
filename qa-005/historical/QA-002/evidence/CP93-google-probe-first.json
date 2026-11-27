@@ -1,0 +1,20 @@
+{
+  "duplicateRows": 2,
+  "targetRowIndex": 0,
+  "requestPath": "/admin/v1/connections/con_01m8530p3we00828f2x8mp6vs2/test",
+  "result": {
+    "httpStatus": 200,
+    "valid": false,
+    "failure_code": "upstream_unreachable",
+    "sanitized_message": "upstream connection could not be reached",
+    "latency_ms": 2088,
+    "keys": [
+      "valid",
+      "latency_ms",
+      "detected_model_ids",
+      "failure_code",
+      "sanitized_message"
+    ]
+  },
+  "visibleText": "Providers\n\nUpstream provider connections, write-only vault credentials, and protocol adapters.\n\nSeal secret\nNew connection\nConnections\n5\nVault Secrets\n1\nAdapters\n2\nQA002 Google Gemini: upstream connection could not be reached\nConfigured connections\n5\nConnection\tAdapter\tRegion / Billing\tState\tVault fingerprints\tActions\n\nQA002 CP73 Failing Ollama\nhttp://127.0.0.1:19187\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Google Gemini\nhttps://generativelanguage.googleapis.com\n\tadp_01m852w4yze009v8wf6e76wgty\tUS · Commercial\tUnverified\tapi_key: ...1d03\t\n\n\nQA002 Failing Ollama 401\nhttp://127.0.0.1:19107\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tUnverified\tNone bound\t\n\n\nQA002 Ollama Synthetic\nhttp://127.0.0.1:19106\n\tadp_01m8509e6pe00bkhe4fhsqsmnt\tON_PREM · Self-hosted\tActive\tNone bound\t"
+}

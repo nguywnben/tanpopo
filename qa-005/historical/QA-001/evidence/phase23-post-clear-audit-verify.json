@@ -1,0 +1,111 @@
+{
+  "url": "https://127.0.0.1:8444/security/audit-log",
+  "loginDetected": false,
+  "auditVisible": true,
+  "verificationText": [
+    "qa-owner@example.invalid",
+    "Verify hash chain",
+    "Hash chain verified",
+    "Cryptographic RFC 8785 JCS chain intact across 189 events.",
+    "Immutable audit events",
+    "Load older audit events"
+  ],
+  "responses": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/audit-events/verify",
+      "status": 200,
+      "method": "POST"
+    }
+  ],
+  "screenshot": "/workspace/tanpopo/qa/evidence/phase23-post-clear-audit-verify.png"
+}

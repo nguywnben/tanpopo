@@ -1,0 +1,108 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "environment": {
+    "project_id": "prj_01m8a2xtnqe00bf5n0b09xqcf9",
+    "environment_id": "env_01m8a4bc89e00ajtchmvfmqr7a",
+    "create_status": 201,
+    "create_response": {
+      "name": "QA004 CP59 MCP Test",
+      "slug": "qa004-cp59-mcp-test"
+    },
+    "subsequent_list_readback": {
+      "status": 200,
+      "name": "qa004-cp59-mcp-test",
+      "slug": "qa004-cp59-mcp-test"
+    },
+    "classification": "DEF-055 independently reproduced; create response preserves human label but list readback and scope selector show slug"
+  },
+  "mcp_server": {
+    "id": "mcp_01m8a4051pe00anyhd8fd7ctmp",
+    "slug": "qa004-cp59-loopback-echo",
+    "endpoint": "http://127.0.0.1:19444/mcp",
+    "private_endpoint_opt_in": true,
+    "allowed_cidrs": ["127.0.0.1/32"],
+    "sync_status": 200,
+    "synced_tool_count": 1,
+    "drifted_count": 0,
+    "tool_id": "mcp_01m8a426cqe009mj0xsxcyj5gr",
+    "tool_name": "qa004-cp59-loopback-echo__echo",
+    "schema_hash": "d56e138a634486dea1045c412f7e698313612804e5b696af9e61ca3e33761785",
+    "schema_approval_status": 200,
+    "schema_approval_risk": "read_only",
+    "side_effect_class": "read_only"
+  },
+  "virtual_key": {
+    "id": "vky_01m8a4jxhje00bx6f6fyg3aze1",
+    "name": "QA004 CP59 MCP-only Echo",
+    "environment_id": "env_01m8a4bc89e00ajtchmvfmqr7a",
+    "created_state": "CREATED_ACTIVE",
+    "allowed_planes": ["MCP"],
+    "allowed_mcp_tools": ["qa004-cp59-loopback-echo__echo"],
+    "allowed_models": ["*"],
+    "grant_id": "mcp_01m8a4msfze009frbve55k0mhy",
+    "grant_create_status": 201,
+    "revocation_status": 200,
+    "final_state": "REVOKED",
+    "final_version": 2,
+    "post_revocation_replay_status": 401,
+    "plaintext_or_credential_material_in_evidence": false
+  },
+  "data_plane": {
+    "transport": "MCP Streamable HTTP",
+    "protocol_version": "2025-03-26",
+    "unauthenticated_initialize": {
+      "status": 401,
+      "error_code": "invalid_virtual_key"
+    },
+    "authorized_initialize": {
+      "status": 200,
+      "session_id_header_present": true,
+      "server_name": "tanpopo-mcp-hub",
+      "server_version": "0.2"
+    },
+    "initialized_notification_status": 202,
+    "tools_list_status": 200,
+    "tools_list": ["qa004-cp59-loopback-echo__echo"],
+    "authorized_tool_call": {
+      "status": 200,
+      "is_error": false,
+      "text": "QA004 echo: QA004 CP59 authorized loopback round trip"
+    },
+    "provider_plane_negative": {
+      "request": "GET /v1/models",
+      "status": 403,
+      "error_code": "scope_or_plane_denied",
+      "message": "Virtual Key is not authorized for the PROVIDER plane."
+    },
+    "ungranted_tool_negative": {
+      "status": 200,
+      "jsonrpc_error_code": -32003,
+      "message": "tool_access_denied"
+    },
+    "fixture_observed_methods": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list",
+      "tools/call"
+    ]
+  },
+  "persistence_and_audit": {
+    "grant_get_status_after_reload": 200,
+    "persisted_grant_count": 1,
+    "persisted_grant_matches_tool_key_and_environment": true,
+    "audit_events": [
+      {"seq_no": 127, "event_type": "mcp.tool_discovered", "target_id": "mcp_01m8a426cqe009mj0xsxcyj5gr"},
+      {"seq_no": 135, "event_type": "mcp.tool_schema_approved", "target_id": "mcp_01m8a426cqe009mj0xsxcyj5gr"},
+      {"seq_no": 161, "event_type": "mcp.tool_granted", "target_id": "mcp_01m8a426cqe009mj0xsxcyj5gr"}
+    ]
+  },
+  "scope_and_limitations": {
+    "browser": "Chromium",
+    "role": "ORG_OWNER",
+    "runtime": "isolated local RC6 runtime at 127.0.0.1:18132",
+    "upstream_fixture": "authorized local synthetic echo endpoint at 127.0.0.1:19444",
+    "ssrf_policy": "explicit private/loopback opt-in and only 127.0.0.1/32",
+    "initial_sync_attempt": "one 502 occurred before fixture restart; after fixture was restarted the same sync returned 200 and remained successful; the first attempt was not sufficiently instrumented to attribute to product code",
+    "not_covered": ["non-owner RBAC", "cross-project and cross-tenant MCP isolation", "schema drift and reapproval lifecycle", "remote HTTPS endpoint behavior", "multi-node session behavior", "A2A lifecycle"]
+  }
+}

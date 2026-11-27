@@ -1,0 +1,112 @@
+{
+  "text": "Operations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n1\nWebhooks\nTenant organizations\n1\nOrganization\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nQA002 Fresh Google TestActive\nqa002-fresh-google-test · org_01m853e561e00byvg158ab8tbz\n\tAny Approved\tDisabled\tNov 23, 2026, 9:01:51 PM\t\nSwitch\nCrypto-shred",
+  "organizations": {
+    "status": 200,
+    "body": {
+      "data": [
+        {
+          "id": "org_01m853e561e00byvg158ab8tbz",
+          "slug": "qa002-fresh-google-test",
+          "name": "QA002 Fresh Google Test",
+          "min_plugin_trust": "ANY_APPROVED",
+          "four_eyes_enabled": false,
+          "version": 1,
+          "created_at": "2026-11-23T21:01:51.414Z"
+        }
+      ],
+      "has_more": false
+    }
+  },
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/ops/cluster-status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/extensions/lockfile",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/audit-events",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/webhooks",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/secrets",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    }
+  ]
+}

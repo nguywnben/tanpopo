@@ -1,0 +1,11 @@
+{
+  "status": 200,
+  "error": null,
+  "model": "qa004-mock",
+  "response_content": "Hello from synthetic Ollama.",
+  "usage": {
+    "completion_tokens": 4,
+    "prompt_tokens": 7,
+    "total_tokens": 11
+  }
+}

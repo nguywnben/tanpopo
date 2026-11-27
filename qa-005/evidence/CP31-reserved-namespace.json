@@ -1,0 +1,41 @@
+{
+  "checkpoint": "CP31",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "fresh exact-source SQLite clone at 127.0.0.1:18149",
+  "archive_root": "QA-only TANPOPO_MARKETPLACE_ARCHIVE_ROOT outside repository",
+  "browser": "Chromium with Playwright, 1440x1000",
+  "package_fixture": {
+    "package_id": "@tanpopo-qa005-spoof/canary",
+    "kind": "DeclarativeProviderAdapter",
+    "payload": "manifest.yaml only; no executable payload",
+    "signature": "none",
+    "source_uri": "tanpopo-local://cp31-reserved-namespace.tpkg",
+    "archive_sha256": "e18fb887b628548450ca30591499bbfb83505b4757b67fe219a475017d767862",
+    "source_cli_validation": {"status": "VALID", "requires_root_signature": true},
+    "source_cli_pack_status": "PACKED"
+  },
+  "stage_attempt": {
+    "entry_point": "Extensions Console > Stage package",
+    "response_status": 403,
+    "error_code": "reserved_namespace_spoofing",
+    "expected": "reject unsigned external package using reserved @tanpopo- namespace; no candidate or approval entry",
+    "actual": "rejected; installed inventory remained one preexisting package; spoof candidate absent"
+  },
+  "audit": {
+    "rejection_event": "extension.provenance_rejected",
+    "target_type": "extension_package",
+    "target_id": "@tanpopo-qa005-spoof/canary",
+    "chain_valid": true,
+    "events_verified": 224,
+    "orphans_reconciled": 0
+  },
+  "classification": "PASS scoped for exact-source local archive path; prior QA-004 DEF-071 FAIL remains in history and alternate paths remain unverified.",
+  "screenshots": [
+    "screenshots/CP31-extension-inventory-before.png",
+    "screenshots/CP31-reserved-package-stage-form.png",
+    "screenshots/CP31-reserved-package-stage-result.png",
+    "screenshots/CP31-extension-inventory-after-rejection.png"
+  ],
+  "limitations": ["Local archive path only", "No authentic signing root or production signature used", "No candidate approval or activation", "OCI and alternate publisher/signature combinations remain unverified"]
+}

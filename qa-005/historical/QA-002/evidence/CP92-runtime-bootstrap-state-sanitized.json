@@ -1,0 +1,26 @@
+[
+  {
+    "port": 18083,
+    "bootstrap_status": 200,
+    "initialized": true
+  },
+  {
+    "port": 18084,
+    "bootstrap_status": 200,
+    "initialized": true
+  },
+  {
+    "port": 18085,
+    "bootstrap_status": 200,
+    "initialized": true
+  },
+  {
+    "port": 18086,
+    "bootstrap_status": 200,
+    "initialized": true
+  },
+  {
+    "port": 18087,
+    "disposable_runtime_removed": true
+  }
+]

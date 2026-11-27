@@ -1,0 +1,137 @@
+{
+  "project_budget": {
+    "id": "bgt_project_prj_01m853e561e00byw750arfmw8y_monthly",
+    "scope_type": "PROJECT",
+    "scope_id": "prj_01m853e561e00byw750arfmw8y",
+    "period_kind": "MONTHLY",
+    "period_start_ms": 1793491200000,
+    "period_end_ms": 1796083200000,
+    "hard_limit_micros": 2,
+    "reserved_hold_micros": 0,
+    "settled_exact_micros": 2,
+    "settled_estimated_micros": 0,
+    "version": 7
+  },
+  "recent_project_traces": [
+    {
+      "request_id": "trc_01m859dm5re008ds48brk5dse8",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "route_slug": "qa002-cp22-route-repro",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "virtual_key_id": "vky_01m859dm5de0081t83m73q15vx",
+      "failover_attempts": 1
+    },
+    {
+      "request_id": "trc_01m859cd26e00brpfkp212d2qa",
+      "http_status": 429,
+      "canonical_error_code": "project_budget_exceeded",
+      "route_slug": "qa002-cp22-route-repro",
+      "selected_deployment_id": null,
+      "virtual_key_id": "vky_01m859cd1we009z2y80rrxm9zj",
+      "failover_attempts": 0
+    },
+    {
+      "request_id": "trc_01m8593ew4e00arqm2vrq3f6gx",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "route_slug": "qa002-cp22-route-repro",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "virtual_key_id": "vky_01m8593evve008h9qe95cjxmmv",
+      "failover_attempts": 1
+    },
+    {
+      "request_id": "trc_01m856b4yze00960j2ygdcaha2",
+      "http_status": 200,
+      "canonical_error_code": null,
+      "route_slug": "qa002-cp22-streamroute",
+      "selected_deployment_id": "dpl_01m8562ktme0087wb258b43c11",
+      "virtual_key_id": "vky_01m856b4ype0091h727havv8c7",
+      "failover_attempts": 1
+    }
+  ],
+  "project_settlements": [
+    {
+      "id": "set_01m856a0rpe00bsgh7psa7jb5y",
+      "request_id": "trc_01m856a0rje00b386h4a6f4vqb",
+      "virtual_key_id": "vky_01m856a0rbe00bxmqy8nacn4nf",
+      "total_cost_micros": 1,
+      "usage_accuracy": "EXACT",
+      "logical_model_slug": "qa002-cp22-streaming"
+    },
+    {
+      "id": "set_01m856b4z4e00ac064xq0fnt7f",
+      "request_id": "trc_01m856b4yze00961hse6j1qfpx",
+      "virtual_key_id": "vky_01m856b4ype0091h727havv8c7",
+      "total_cost_micros": 1,
+      "usage_accuracy": "EXACT",
+      "logical_model_slug": "qa002-cp22-streaming"
+    },
+    {
+      "id": "set_01m8593ewce0080fzre8w2zhrk",
+      "request_id": "trc_01m8593ew5e00attb504mdf30v",
+      "virtual_key_id": "vky_01m8593evve008h9qe95cjxmmv",
+      "total_cost_micros": 1,
+      "usage_accuracy": "EXACT",
+      "logical_model_slug": "qa002-cp22-streaming"
+    },
+    {
+      "id": "set_01m859dm60e0099ahk309mtmtz",
+      "request_id": "trc_01m859dm5re008dtmhx4zfg3fd",
+      "virtual_key_id": "vky_01m859dm5de0081t83m73q15vx",
+      "total_cost_micros": 1,
+      "usage_accuracy": "EXACT",
+      "logical_model_slug": "qa002-cp22-streaming"
+    }
+  ],
+  "recent_project_reservations": [
+    {
+      "id": "rsv_01m859dm5se008zr5x8k6gtds4",
+      "request_id": "trc_01m859dm5re008dtmhx4zfg3fd",
+      "virtual_key_id": "vky_01m859dm5de0081t83m73q15vx",
+      "state": "SETTLED_EXACT",
+      "hold_micros": 1
+    },
+    {
+      "id": "rsv_01m8593ew5e00atvz1ze73g5ha",
+      "request_id": "trc_01m8593ew5e00attb504mdf30v",
+      "virtual_key_id": "vky_01m8593evve008h9qe95cjxmmv",
+      "state": "SETTLED_EXACT",
+      "hold_micros": 1
+    },
+    {
+      "id": "rsv_01m856b4z0e008jkfa5vfbaj25",
+      "request_id": "trc_01m856b4yze00961hse6j1qfpx",
+      "virtual_key_id": "vky_01m856b4ype0091h727havv8c7",
+      "state": "SETTLED_EXACT",
+      "hold_micros": 1
+    },
+    {
+      "id": "rsv_01m856a0rje00b39yg437mmmgd",
+      "request_id": "trc_01m856a0rje00b386h4a6f4vqb",
+      "virtual_key_id": "vky_01m856a0rbe00bxmqy8nacn4nf",
+      "state": "SETTLED_EXACT",
+      "hold_micros": 1
+    },
+    {
+      "id": "rsv_01m856843me008253xvj3pwk6r",
+      "request_id": "trc_01m856843ke009qcagppjy1wzg",
+      "virtual_key_id": "vky_01m856843ce00a3bd2sz1sps9r",
+      "state": "RELEASED_UNUSED",
+      "hold_micros": 1
+    }
+  ],
+  "provider_fixture": {
+    "requests": [
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      },
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      }
+    ]
+  },
+  "secret_material_included": false
+}

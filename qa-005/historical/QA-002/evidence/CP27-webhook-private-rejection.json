@@ -1,0 +1,18 @@
+{
+  "api": [
+    {
+      "method": "GET",
+      "path": "/admin/v1/webhooks",
+      "status": 200,
+      "body": null
+    },
+    {
+      "method": "POST",
+      "path": "/admin/v1/webhooks",
+      "status": 400,
+      "body": "{\"error\":{\"code\":\"ssrf_blocked_private_ip\",\"type\":\"invalid_request_error\",\"message\":\"endpoint_url violates egress SSRF policy\",\"request_id\":\"req_01m859zzcce00a2p5bve6pbg8j\",\"retryable\":false}}\n"
+    }
+  ],
+  "body": "ce\nAccess & Keys\nSecurity\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nendpoint_url violates egress SSRF policy\nHMAC-signed webhook subscriptions\n0\nAdd webhook\nNo webhook subscriptions\nRegister a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.\nRegister webhook subscription\nFull receiver URLs are sealed in the vault; only the origin is stored in metadata.\nHTTPS receiver URL\n∙ Required\nSigning credential (WEBHOOK_HMAC_SECRET)\nQA002 CP27 webhook signing secret (...88d2)\nEvents\nkill_switch.triggered, mcp.approval.pending\nCancel\nRegister webhook\nNo webhook subscriptions Register a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.",
+  "secret_material_included": false
+}

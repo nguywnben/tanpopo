@@ -1,0 +1,6 @@
+{
+  "status": 401,
+  "error": "invalid_virtual_key",
+  "message": "Virtual Key is suspended by emergency kill switch.",
+  "model": null
+}

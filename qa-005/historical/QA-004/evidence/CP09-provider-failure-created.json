@@ -1,0 +1,27 @@
+{
+  "status": 200,
+  "items": [
+    {
+      "id": "con_01m897rgv1e00b2n9vf3w7j125",
+      "name": "QA004 synthetic Ollama 401",
+      "endpoint_url": "http://127.0.0.1:18126",
+      "adapter_id": "adp_01m8960jy4e008j1wpkkzr227t",
+      "state": "CREATED_UNVERIFIED",
+      "billing_mode": "SELF_HOSTED_INFRA",
+      "data_region": "ON_PREM",
+      "allow_private_ip": true,
+      "version": 1
+    },
+    {
+      "id": "con_01m896465xe008d8daqh65qzth",
+      "name": "QA004 synthetic Ollama",
+      "endpoint_url": "http://127.0.0.1:18125",
+      "adapter_id": "adp_01m8960jy4e008j1wpkkzr227t",
+      "state": "ACTIVE",
+      "billing_mode": "SELF_HOSTED_INFRA",
+      "data_region": "ON_PREM",
+      "allow_private_ip": true,
+      "version": 3
+    }
+  ]
+}

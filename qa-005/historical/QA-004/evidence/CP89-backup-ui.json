@@ -1,0 +1,20 @@
+{
+  "before": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nEncrypted backups (.tpop.enc)\n0\nCreate encrypted backup\nNo backup receipts recorded\nBackup receipts are recorded as immutable SYSTEM audit events.",
+  "after": "Air-gapped offline mode\nOutbound extension fetches are disabled. Only local bundled or imported air-gap artifacts are served.\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\n1\nUpgrades\nOrganizations\nWebhooks\nEncrypted backup created: tanpopo-backup-38f9c5c57cc187d26e09283ce6dabbca.tpop.enc (SHA-256 007d2635d2a5219c4180614e2bbe27293a3890291dc6539f449a71d1967102e2).\nEncrypted backups (.tpop.enc)\n1\nCreate encrypted backup\nCreated\tTriggered by\tBackup ID\tReceipt metadata\nNov 26, 2026, 12:30:38 AM\tprc_01m89x03qve00b5fzb2yx9fwgz\t38f9c5c57cc187d26e09283ce6dabbca\t{\"archive_filename\":\"tanpopo-backup-38f9c5c57cc187d26e09283ce6dabbca.tpop.enc\",\"sha256_hex\":\"007d2635d2a5219c4180614e2bbe27293a3890291dc6539f449a71d1967102e2\",\"size_bytes\":28647}",
+  "response": {
+    "url": "/admin/v1/ops/backups",
+    "status": 201
+  },
+  "audit": [
+    {
+      "seq_no": 2,
+      "action": "ops.backup_created",
+      "target_id": "38f9c5c57cc187d26e09283ce6dabbca",
+      "metadata": {
+        "archive_filename": "tanpopo-backup-38f9c5c57cc187d26e09283ce6dabbca.tpop.enc",
+        "sha256_hex": "007d2635d2a5219c4180614e2bbe27293a3890291dc6539f449a71d1967102e2",
+        "size_bytes": 28647
+      }
+    }
+  ]
+}

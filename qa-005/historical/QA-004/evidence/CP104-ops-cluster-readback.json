@@ -1,0 +1,27 @@
+{
+  "runtime_port": 18128,
+  "scope": "QA004 Test Root Org / default / dev",
+  "cluster": {
+    "status": 200,
+    "body": {
+      "backup_supported": true,
+      "backup_unavailable_reason": "",
+      "current_epoch": 221,
+      "nodes": [
+        {
+          "config_epoch": 221,
+          "health": "ok",
+          "id": "standalone",
+          "wal_bytes": 4157112
+        }
+      ],
+      "storage_engine": "sqlite_wal"
+    }
+  },
+  "ready": {
+    "status": 200,
+    "body": {
+      "status": "ready"
+    }
+  }
+}

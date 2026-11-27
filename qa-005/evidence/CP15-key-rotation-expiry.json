@@ -1,0 +1,45 @@
+{
+  "campaign": "QA-005",
+  "checkpoint": "CP15",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": "local exact-source build 62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9; SQLite WAL; 127.0.0.1:18145",
+  "classification": "PARTIAL",
+  "defect_id": "DEF-075",
+  "reproduction_steps": [
+    "Sign in as the isolated synthetic Org Owner in Chromium and open Access & Keys.",
+    "Use the row action to rotate the named QA Virtual Key.",
+    "A Playwright request interceptor sets the API's documented 60-second minimum grace window; product files remain untouched.",
+    "Verify the rotate API returns HTTP 200 and read back the key lifecycle state and expiry.",
+    "After the expiry timestamp, independently query the read-only SQLite database for lifecycle fields and the finalization audit event."
+  ],
+  "before_expiry": {
+    "rotate_http_status": 200,
+    "state": "ROTATING_DUAL_VALID",
+    "version": 2,
+    "grace_seconds": 60
+  },
+  "after_expiry": {
+    "state": "CREATED_ACTIVE",
+    "version": 3,
+    "previous_key_hash_present": false,
+    "grace_expires_at_ms": null,
+    "rotation_finalized_event_count": 1,
+    "finalized_event_at_ms": 1795721673771,
+    "configured_grace_expiry_at_ms": 1795721673768,
+    "finalized_ms_after_expiry": 3
+  },
+  "screenshots": [
+    "screenshots/CP15-rotation-dialog.png",
+    "screenshots/CP15-rotation-started.png",
+    "screenshots/CP15-access-owner-key-inventory.png"
+  ],
+  "excluded_attempt": "An attempted data-plane request used a locally saved harness token that did not match the rotated key (confirmed by no match against the stored digest/last-four metadata). Its 401 is not evidence for expiry and is excluded.",
+  "remaining_acceptance": [
+    "Retain and securely correlate the exact old and new show-once credentials.",
+    "Prove both are accepted during grace, old is rejected after expiry, and current remains accepted.",
+    "Verify user-facing inventory refresh and cross-node/restart convergence."
+  ],
+  "product_code_modified": false,
+  "paid_provider_calls": 0,
+  "gate_rel_07": "BLOCKED"
+}

@@ -1,0 +1,51 @@
+{
+  "checkpoint": "CP127",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "target_runtime": "isolated exact RC6 at 127.0.0.1:18128",
+  "browser_test": {
+    "browser": "Firefox",
+    "playwright_version": "1.62.0",
+    "browser_bundle": "/tmp/qa004-browsers/firefox-1538",
+    "workflow_intended": "Owner Console FinOps Budgets & Holds at 390x844, with real interaction and screenshot capture",
+    "result": "BLOCKED before page creation; no product behavior observed and no Firefox screenshot exists"
+  },
+  "attempts": [
+    {
+      "mode": "Playwright launch using shared /tmp browser bundle",
+      "timeout_ms": 10000,
+      "result": "browserType.launch timed out before returning a browser",
+      "diagnostics": [
+        "Sandbox: writing /proc/self/uid_map: EROFS",
+        "RenderCompositorSWGL failed mapping default framebuffer"
+      ]
+    },
+    {
+      "mode": "Playwright launch with XDG_CACHE_HOME=/tmp/qa004-firefox-xdg, MOZ_WEBRENDER=0, and --disable-gpu",
+      "timeout_ms": 10000,
+      "result": "same launch timeout; no page created",
+      "diagnostics": [
+        "Sandbox: writing /proc/self/uid_map: EROFS",
+        "RenderCompositorSWGL failed mapping default framebuffer"
+      ]
+    },
+    {
+      "mode": "direct Firefox headless CLI screenshot of local RC6 Overview",
+      "timeout_ms": 15000,
+      "exit_code": 124,
+      "result": "timed out; no screenshot file created",
+      "diagnostics": ["Sandbox: writing /proc/self/uid_map: EROFS"]
+    }
+  ],
+  "cloud_desktop_fallback": {
+    "environment_id": "ccarenv_b64_Y2NhcmVudl80YTAzYTdkM2EyMWM4MTkxOTcwZDI5ZjY3OTg0NzQxMQ",
+    "environment_state": "running; network unrestricted/enforced",
+    "remote_desktop_capability": {"enabled": true, "state": "unknown"},
+    "desktop_browser_control_tool_exposed_in_this_chat": false,
+    "fallback_result": "Unavailable in the active tool set; no desktop click/type attempt could be made."
+  },
+  "product_changes": false,
+  "new_defect": false,
+  "browser_coverage_status": "Firefox remains BLOCKED; prior Chromium/WebKit slices remain separately recorded and are not inherited as Firefox passes.",
+  "qa_status": "ONGOING",
+  "release_gate": "BLOCKED"
+}

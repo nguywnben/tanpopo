@@ -1,0 +1,127 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "exact RC6 SQLite on 127.0.0.1:18128",
+  "mutations": false,
+  "external_provider_requests": 0,
+  "organization_rollup": {
+    "actors": ["ORG_OWNER", "FINOPS_VIEWER"],
+    "active_scopes_compared": [
+      "QA-004 Isolated Canary / qa004-scope-canary-env",
+      "default / dev"
+    ],
+    "summary_request_scope_headers": ["X-Tanpopo-Org-ID"],
+    "project_group": {
+      "http_status": 200,
+      "rows": 1,
+      "group_key": "default",
+      "exact_micro_usd": 2038,
+      "estimated_micro_usd": 15,
+      "exact_requests": 44,
+      "estimated_requests": 21,
+      "csv_export": {
+        "http_status": 200,
+        "rows": 1,
+        "bytes": 138,
+        "sha256": "88bc84d0505b63f1e20ef45e512852361c92b57ceca7cf3b674306315595c989"
+      },
+      "json_export": {
+        "http_status": 200,
+        "rows": 1,
+        "bytes": 198,
+        "sha256": "e0cb553b4b41b57c2e6eb36721fe506aefe36779e2e0f7be3cc0a21092266af6"
+      }
+    },
+    "environment_group": {
+      "http_status": 200,
+      "rows": 1,
+      "group_key": "dev",
+      "exact_micro_usd": 2038,
+      "estimated_micro_usd": 15,
+      "exact_requests": 44,
+      "estimated_requests": 21,
+      "csv_export": {
+        "http_status": 200,
+        "rows": 1,
+        "bytes": 134,
+        "sha256": "ba0d83c838a00d9f84c14fc2727528d8cc670e605b7f367731038d1aabc8b38d"
+      },
+      "json_export": {
+        "http_status": 200,
+        "rows": 1,
+        "bytes": 194,
+        "sha256": "8dae2822b652ca518e19820d1950afeea1e89d01c2f7e6c5dc517c4f5bf2f0d8"
+      }
+    },
+    "virtual_key_group": {
+      "http_status": 200,
+      "rows": 42,
+      "exact_micro_usd": 2038,
+      "estimated_micro_usd": 15,
+      "exact_requests": 44,
+      "estimated_requests": 21,
+      "csv_export": {
+        "http_status": 200,
+        "rows": 42,
+        "bytes": 1821,
+        "sha256": "4fe35f00f4a3510950c9eae9aa1029a08358766881251a2f171d3cb389e8d734"
+      },
+      "json_export": {
+        "http_status": 200,
+        "rows": 42,
+        "bytes": 8933,
+        "sha256": "e37c57a9ec2b41856cf758eb97b6aaa4206e40e85d8254fb07e120b6d0e6c8e3"
+      },
+      "ambiguous_duplicate_name": {
+        "name": "Playground session",
+        "distinct_virtual_key_ids_in_catalog": 13,
+        "separate_chargeback_rows": 11,
+        "rows_each": {
+          "exact_micro_usd": 1,
+          "estimated_micro_usd": 0,
+          "exact_requests": 1,
+          "estimated_requests": 0
+        },
+        "response_fields": [
+          "group_key",
+          "exact_micro_usd",
+          "estimated_micro_usd",
+          "exact_request_count",
+          "estimated_request_count",
+          "unmetered_request_count"
+        ],
+        "export_has_key_id": false
+      }
+    },
+    "interpretation": "Owner and FinOps Viewer summaries are organization aggregates under the RC6 contract. The active workspace scope selects the budget list but does not filter these organization-wide reports. No defect is inferred from that known contract behavior."
+  },
+  "developer_scope": {
+    "role": "DEVELOPER",
+    "active_scope": "QA-004 Isolated Canary / qa004-scope-canary-env",
+    "authorized_project_list": {
+      "http_status": 200,
+      "projects": ["qa004-isolation-canary"]
+    },
+    "natural_usage_summary": {
+      "project": {"http_status": 200, "rows": 0},
+      "environment": {"http_status": 200, "rows": 0},
+      "key": {"http_status": 200, "rows": 0},
+      "model": {"http_status": 200, "rows": 0}
+    },
+    "forged_sibling_scope_checks": {
+      "summary_with_sibling_project_and_environment_query": {
+        "http_status": 200,
+        "rows": 0
+      },
+      "json_export_with_sibling_project_and_environment_query": {
+        "http_status": 200,
+        "rows": 0
+      },
+      "sibling_project_budget_list": {
+        "http_status": 403,
+        "error": "insufficient_role_permission"
+      }
+    },
+    "result": "scoped authorization PASS for this empty canary Developer; broader Developer role acceptance remains open"
+  },
+  "new_finding": "DEF-077 Moderate FAIL: distinct Virtual Key chargeback rows are indistinguishable when display names repeat"
+}

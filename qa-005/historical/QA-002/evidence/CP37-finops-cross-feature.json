@@ -1,0 +1,79 @@
+{
+  "tabs": [
+    "Budgets & HoldsBudgets & Holds15",
+    "ChargebackChargeback"
+  ],
+  "text": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n15\nChargeback\nExact settled\n$0.000010\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n1\nGroup by\nProject\nProject\tExact\tEstimated\tExact / Est. reqs\tUnmetered\ngoogle-default-test\t\nExact\n$0.000010\n\t\nEstimated\n$0.000000\n\t10 / 0\t\n0",
+  "api": [
+    {
+      "method": "POST",
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/organizations",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/kill-switches",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/approvals",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/projects/prj_01m853e561e00byw750arfmw8y/environments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/overview/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/alerts/active",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/deployments",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/usage/summary",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/budgets",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "path": "/admin/v1/virtual-keys",
+      "status": 200
+    }
+  ]
+}

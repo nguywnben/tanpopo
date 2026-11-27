@@ -1,0 +1,57 @@
+{
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "isolated SQLite 127.0.0.1:18162",
+  "browser": "Chromium 156",
+  "scope": "QA005 Org\n/\nQA005 No Budget Project\n/\nQA005 Budgetless Dev\n(Active workspace scope)",
+  "route_slug": "qa005-playground-low",
+  "normalized": {
+    "label": "default normalized",
+    "http": 200,
+    "request": {
+      "env_id": "env_01m8d6f78xe00a9w53vt41rnqg",
+      "target_model": "qa005-playground-low",
+      "data_region": "ON_PREM",
+      "required_capabilities": [],
+      "estimated_input_tokens": 512,
+      "max_output_tokens": 1024
+    },
+    "dry_run": true,
+    "candidate_count": 1,
+    "candidates": [
+      {
+        "deployment_id": "dpl_01m8d7p2t3e00b7sh8ny9trtct",
+        "rank": 1,
+        "reason": "MATCHED_PRIMARY_HEALTHY_PRIORITY_FAILOVER",
+        "priority_order": 1
+      }
+    ],
+    "rejections": []
+  },
+  "ollama": {
+    "label": "explicit ollama",
+    "http": 200,
+    "request": {
+      "env_id": "env_01m8d6f78xe00a9w53vt41rnqg",
+      "target_model": "qa005-playground-low",
+      "data_region": "ON_PREM",
+      "required_capabilities": [],
+      "estimated_input_tokens": 512,
+      "max_output_tokens": 1024,
+      "dialect": "ollama"
+    },
+    "dry_run": true,
+    "candidate_count": 1,
+    "candidates": [
+      {
+        "deployment_id": "dpl_01m8d7p2t3e00b7sh8ny9trtct",
+        "rank": 1,
+        "reason": "MATCHED_PRIMARY_HEALTHY_PRIORITY_FAILOVER",
+        "priority_order": 1
+      }
+    ],
+    "rejections": []
+  },
+  "upstream_requests": 0,
+  "budget_holds_created": 0
+}

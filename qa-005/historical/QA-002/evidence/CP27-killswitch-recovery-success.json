@@ -1,0 +1,38 @@
+{
+  "status": 200,
+  "reply": {
+    "status": 200,
+    "body": "data: {\"choices\":[{\"delta\":{\"content\":\"Synthetic inference completed.\"},\"finish_reason\":null,\"index\":0}],\"id\":\"chatcmpl-qa002-cp26\",\"model\":\"qa002:latest\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"id\":\"chatcmpl-qa002-cp26\",\"model\":\"qa002:latest\",\"object\":\"chat.completion.chunk\"}\n\ndata: [DONE]\n\n"
+  },
+  "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nPlayground\nGovernance\nAccess & Keys\nSecurity\nOperations\nqa002-cp17-owner@example.invalid\nOperator, Org Owner\nQA002 Fresh Google Test\n/\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nPlayground\n\nEphemeral session key with a hard micro-USD budget cap. Prompts stay in this browser tab only.\n\nCap $0.500000 · expires 11:17:55 PM\nEnd session\nLive Playground\nSDK Snippets\nModel or route slug\nqa002-cp22-route-repro\nComparison model (optional)\nYou\nKill switch recovery check after raising the test budget\nqa002-cp22-route-repro\nSynthetic inference completed.\nPrompt\nSend\nExecution traces\nPrimary · req_01m85abtehe0080qw5rnc76hpe\nTrace metadata pending…\nAll systems nominal No active operational alerts or pending remediation items.",
+  "fixture": {
+    "requests": [
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      },
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      },
+      {
+        "path": "/v1/chat/completions",
+        "stream": true
+      }
+    ]
+  },
+  "state": {
+    "switches": {
+      "data": []
+    },
+    "audit": {
+      "error": {
+        "code": "method_not_allowed",
+        "type": "invalid_request_error",
+        "message": "method not allowed",
+        "request_id": "req_01m85abvfge0096kxx9872zgex",
+        "retryable": false
+      }
+    }
+  }
+}

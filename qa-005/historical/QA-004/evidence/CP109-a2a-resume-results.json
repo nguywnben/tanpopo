@@ -1,0 +1,34 @@
+{
+  "resume_endpoint": "/admin/v1/a2a/tasks/tsk_01m8axnh12e008rawg2j6demgz/resume",
+  "resume_http": 200,
+  "response": {
+    "state": "completed",
+    "task_id": "tsk_01m8axnh12e008rawg2j6demgz",
+    "error": null,
+    "artifact_count": 1
+  },
+  "task_list_readback": {
+    "task_id": "tsk_01m8axnh12e008rawg2j6demgz",
+    "state": "completed",
+    "version": 5,
+    "completed_at": "2026-11-26T03:17:48.365Z",
+    "artifact_count": 1
+  },
+  "rowText": "tsk_01m8axnh12e008rawg2j6demgz\nqa004-cp108-cancel-agent\n\tCompleted\t1 / 5\tUS\t$0.000000\t$0.000000\t—",
+  "fixture_requests": [
+    {
+      "path": "/tasks",
+      "state_returned": "input-required",
+      "input_parts_count": 1,
+      "has_auth": false,
+      "hop_header": "1"
+    },
+    {
+      "path": "/tasks",
+      "state_returned": "completed",
+      "input_parts_count": 1,
+      "has_auth": false,
+      "hop_header": "1"
+    }
+  ]
+}

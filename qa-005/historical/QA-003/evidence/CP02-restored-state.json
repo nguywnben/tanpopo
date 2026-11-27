@@ -1,0 +1,27 @@
+{
+  "orgListStatus": 200,
+  "organizationNames": [
+    "Default Organization"
+  ],
+  "deletedSlugAbsent": true,
+  "overviewHeading": "Overview",
+  "auditVerifyStatus": 200,
+  "auditIntact": true,
+  "auditCheckedEvents": 24,
+  "secretListStatus": 200,
+  "syntheticCredentialListed": true,
+  "secretListCount": 1,
+  "secretResponseFields": [
+    "credential_id",
+    "project_id",
+    "name",
+    "secret_kind",
+    "trailing_fingerprint",
+    "version",
+    "created_at"
+  ],
+  "screenshots": [
+    "CP02-restored-overview.png",
+    "CP02-restored-audit.png"
+  ]
+}

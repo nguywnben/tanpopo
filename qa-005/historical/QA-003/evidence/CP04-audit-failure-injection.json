@@ -1,0 +1,27 @@
+{
+  "attempted": true,
+  "syntheticOrg": {
+    "name": "QA-003 Audit Atomicity Injected",
+    "slug": "qa003-audit-atomicity-injected"
+  },
+  "responses": [
+    {
+      "url": "/admin/v1/auth/login",
+      "status": 200,
+      "errorCode": null,
+      "errorMessage": null
+    },
+    {
+      "url": "/admin/v1/organizations",
+      "status": 500,
+      "errorCode": "internal_error",
+      "errorMessage": "failed creating organization"
+    }
+  ],
+  "pageText": "Operations\n\nProvision isolated tenant organizations and execute irreversible cryptographic erasure.\n\nRefresh\nCreate organization\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\n1\nWebhooks\nfailed creating organization\nTenant organizations\n1\nOrganization\tMin extension trust\tFour-eyes approval\tCreated\tActions\n\nDefault Organization\nActive\ndefault-organization · org_01m87axgx7e008eg6c8zvy7h5b\n\tAny Approved\tDisabled\tNov 24, 2026, 5:51:04 PM\t\nSwitch\nCrypto-shred\nCreate organization\nProvisions a dedicated Organization DEK wrapped under the active Master KEK.\nOrganization name\n∙ Required\nOrganization slug\n∙ Required\nCancel\nCreate organization",
+  "adminReadback": {
+    "status": 200,
+    "listed": false,
+    "organizationCount": 1
+  }
+}

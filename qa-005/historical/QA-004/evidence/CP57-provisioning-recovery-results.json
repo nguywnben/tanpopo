@@ -1,0 +1,31 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated RC6 artifact 45581179274 at 127.0.0.1:18132",
+  "actor": "synthetic Org Owner",
+  "environment": {
+    "sameFormFirstSubmissionStatus": 409,
+    "correctedSubmissionStatus": 201,
+    "submittedName": "QA004 CP57 Environment Recovery",
+    "correctedSlug": "qa004-cp57-env-recovery",
+    "createResponseId": "env_01m8a2xrtve00bc5d11vn9yw06",
+    "persistedRow": {"name": "qa004-cp57-env-recovery", "slug": "qa004-cp57-env-recovery"},
+    "pickerAfterCreate": "Selects the recovered environment and displays its slug (DEF-055)"
+  },
+  "project": {
+    "sameFormFirstSubmissionStatus": 409,
+    "correctedSubmissionStatus": 201,
+    "submittedName": "QA004 CP57 Project Recovery",
+    "correctedSlug": "qa004-cp57-project-recovery",
+    "createResponseId": "prj_01m8a2xtnqe00bf5n0b09xqcf9",
+    "persistedRow": {"name": "QA004 CP57 Project Recovery", "slug": "qa004-cp57-project-recovery"},
+    "pickerAfterCreate": "Selects and displays the recovered project name"
+  },
+  "audit": {
+    "failedDuplicateCreatesAddedNoCreateEvent": true,
+    "recoveredEnvironmentEvent": {"sequence": 108, "action": "environment.created", "targetId": "env_01m8a2xrtve00bc5d11vn9yw06"},
+    "recoveredProjectEvent": {"sequence": 109, "action": "project.created", "targetId": "prj_01m8a2xtnqe00bf5n0b09xqcf9"},
+    "chain": "Cryptographic RFC 8785 JCS chain intact across 110 events"
+  },
+  "screenshotsVisuallyInspected": true,
+  "sensitiveData": "No credentials, session tokens, provider secrets, or production data included."
+}

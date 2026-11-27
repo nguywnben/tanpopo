@@ -1,0 +1,62 @@
+{
+  "checkpoint": "CP35",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime": {
+    "artifact_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "storage": "isolated SQLite",
+    "base_url": "http://127.0.0.1:18145",
+    "browser": "Chromium 1440x1000"
+  },
+  "scope": {
+    "organization_name": "QA005 Secondary Org",
+    "organization_id": "org_01m8crmjtje009gbep9v278fpe",
+    "project_name": "QA005 Audit Project",
+    "project_id": "prj_01m8ct3xs7e00bv1hwq3qz2est",
+    "environment_name": "QA005 Audit Sandbox",
+    "environment_id": "env_01m8ct3z58e009ra7k22qmsea5"
+  },
+  "def003_first_budget": {
+    "initial_list_http_status": 200,
+    "initial_project_budget_rows": 0,
+    "create_http_status": 200,
+    "budget_id": "bgt_project_prj_01m8ct3xs7e00bv1hwq3qz2est_monthly",
+    "scope_tier": "PROJECT",
+    "period": "MONTHLY",
+    "period_start": "2026-11-01T00:00:00Z",
+    "period_end": "2026-12-01T00:00:00Z",
+    "hard_limit_micros": 100,
+    "version": 1,
+    "persisted_after_hard_refresh_and_scope_reselection": true,
+    "classification": "PASS (scoped)"
+  },
+  "def024_parent_budget_visibility": {
+    "organization_budget_create_http_status": 200,
+    "organization_budget_id": "bgt_organization_org_01m8crmjtje009gbep9v278fpe_monthly",
+    "organization_hard_limit_micros": 1000,
+    "project_scope_request": "GET /admin/v1/budgets?project_id=prj_01m8ct3xs7e00bv1hwq3qz2est&include_ancestors=true&limit=100",
+    "project_scope_request_http_status": 200,
+    "visible_rows": [
+      {"scope_tier": "ORGANIZATION", "scope_id": "org_01m8crmjtje009gbep9v278fpe", "hard_limit_micros": 1000},
+      {"scope_tier": "PROJECT", "scope_id": "prj_01m8ct3xs7e00bv1hwq3qz2est", "hard_limit_micros": 100}
+    ],
+    "classification": "PASS (scoped)"
+  },
+  "observations": [
+    "The project had no budget rows before creation.",
+    "Hard refresh reset the selected organization to the original/session org; this is PG-005 and its product contract remains undefined.",
+    "After switching back to the synthetic org, both created ceilings persisted and the organization ceiling was visible in project scope."
+  ],
+  "screenshots": [
+    "screenshots/CP35-first-budget-empty.png",
+    "screenshots/CP35-first-budget-form-filled.png",
+    "screenshots/CP35-first-budget-created.png",
+    "screenshots/CP35-first-budget-after-refresh-reselected.png",
+    "screenshots/CP35-org-budget-created.png",
+    "screenshots/CP35-org-budget-visible-in-project-clean.png"
+  ],
+  "limitations": [
+    "No provider request or paid usage.",
+    "No concurrent budget write, other periods, environment/virtual-key budget, enforcement, precedence or PostgreSQL test.",
+    "Organization selection after hard refresh was not expected to persist absent an accepted contract; see PG-005."
+  ]
+}

@@ -1,0 +1,137 @@
+[
+  {
+    "scope": "org",
+    "scopeText": "QA-002 A2A Org / / / No project / / / No env / (Active workspace scope)",
+    "page": "installed",
+    "url": "/extensions/installed",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nInstalled packages\n2\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\next_01m852r1p3e008acn3fzbd80bw\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tsandboxed_wasm\t\n\n\next_01m8504abme008azgwpd4xh459\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tdeclarative\t",
+    "responses": []
+  },
+  {
+    "scope": "org",
+    "scopeText": "QA-002 A2A Org / / / No project / / / No env / (Active workspace scope)",
+    "page": "marketplace",
+    "url": "/extensions/marketplace",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nSearch catalog\nOrigin trust\nAll origins\nCapability\nAll capabilities\nPublisher signature\nAll publishers\nPackage\tOrigin\tSignature\tTier\tCapabilities\tActions\n\nAnthropic Official Adapter\n@tanpopo/anthropic · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Anthropic Messages API (/v1/messages, system extraction, tool_use/tool_result, image/PDF blob_ref splicing, stateful SSE normalization, and /native/anthropic/*).\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAWS Bedrock Official Adapter\n@tanpopo/aws-bedrock · v0.1.0\nTier-2 WebAssembly adapter translating OpenAI chat requests to Amazon Bedrock Converse with host-only AWS SigV4 signing.\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAzure OpenAI Official Adapter\n@tanpopo/azure-openai · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for Azure OpenAI chat completions with deployment routing, api-version pinning, blind api-key injection, OpenAI-compatible SSE, and scoped native passthrough.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nCohere Rerank Official Adapter\n@tanpopo/cohere-rerank · v0.1.0\nOfficial Tier-1 Cohere v2 rerank adapter with blind API-key injection, exact search-unit reporting, and strict response normalization.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nGoogle Gemini Official Adapter\n@tanpopo/gemini · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Google Gemini API (contents, systemInstruction, functionDeclarations/functionCall, streamGenerateContent?alt=sse, blind x-goog-api-key header injection without ?key= query params, ",
+    "responses": []
+  },
+  {
+    "scope": "org",
+    "scopeText": "QA-002 A2A Org / / / No project / / / No env / (Active workspace scope)",
+    "page": "lockfile",
+    "url": "/extensions/lockfile",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\ntanpopo.lock\nRefresh lockfile\ntanpopo.lock\n{\n  \"lockfileVersion\": 1,\n  \"generatedAt\": \"2026-11-23T20:52:01Z\",\n  \"extensions\": {\n    \"@tanpopo/gemini\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://gemini.tpkg\",\n      \"artifactSha256\": \"bd2c4bd3b11b166fb92eae37a3078bb7174a7688bcae9c8b3061794094f0a7a8\",\n      \"contractVersion\": \"0.1\",\n      \"trustTier\": \"official\",\n      \"signingKeyFingerprint\": \"9cc763db705cecbd5d68eaf0fb0a633dd1413ed4d1d54f02cda65cf10a4f8acb\",\n      \"executionTier\": \"WASM_SANDBOX_T2\",\n      \"approvedPermissions\": {\n        \"approvedBy\": \"prc_01m84xhbtwe00939kr14qg3khv\",\n        \"approvedAt\": \"2026-11-23T20:52:01Z\",\n        \"allowedHosts\": [\n          \"generativelanguage.googleapis.com\"\n        ],\n        \"requireTls\": true,\n        \"executionTier\": \"WASM_SANDBOX_T2\",\n        \"secretSlots\": [\n          \"api_key\"\n        ],\n        \"secretBindingModes\": {\n          \"api_key\": \"host_blind_inject\"\n        },\n        \"hooks\": [\n          \"guardrail:evaluate_guardrail\",\n          \"provider:build_validation_probe\",\n          \"provider:extract_usage\",\n          \"provider:inspect_native_request\",\n          \"provider:normalize_error\",\n          \"provider:transform_request\",\n          \"provider:transform_response\",\n          \"provider:transform_stream_chunk\",\n          \"provider:verify_validation_result\"\n        ],\n        \"maxMemoryMib\": 16,\n        \"inspectRequestBody\": true,\n        \"inspectResponseBody\": true\n      }\n    },\n    \"@tanpopo/ollama\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://ollama.tpkg\",\n      \"artifactSha256\": \"06b3685d23df37d51ff92e6d07b296a1803e",
+    "responses": [
+      {
+        "path": "/admin/v1/extensions/lockfile",
+        "status": 200
+      }
+    ]
+  },
+  {
+    "scope": "org",
+    "scopeText": "QA-002 A2A Org / / / No project / / / No env / (Active workspace scope)",
+    "page": "models",
+    "url": "/models",
+    "main": "Models & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\n3\nLogical Models\n1\nData region\nAll regions\nHealth state\nAll states\nEnvironment deployments\n3\nUpstream model\tConnection\tRegion\tHealth\tIn / Out (nano-USD)\tActions\n\nqa002-cp73-failed-401\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m866netce00a8wcj86nft2xq\tON_PREM\tProvisioned\t0 / 0\t\n\n\nqa002:latest\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m850y4xre00ahbtgj1y47zyp\tON_PREM\tProvisioned\t1,000 / 1,000\t\n\n\nqa002:latest\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m850bf7je00b98hwrs3dq10r\tON_PREM\tHealthy\t1,000 / 1,000\t",
+    "responses": []
+  },
+  {
+    "scope": "org",
+    "scopeText": "QA-002 A2A Org / / / No project / / / No env / (Active workspace scope)",
+    "page": "policies",
+    "url": "/policies",
+    "main": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.",
+    "responses": []
+  },
+  {
+    "scope": "proj",
+    "scopeText": "QA-002 A2A Org / / / QA002 CP78 Fresh Budget / / / No env / (Active workspace scope)",
+    "page": "installed",
+    "url": "/extensions/installed",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nInstalled packages\n2\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\next_01m852r1p3e008acn3fzbd80bw\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tsandboxed_wasm\t\n\n\next_01m8504abme008azgwpd4xh459\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tdeclarative\t",
+    "responses": []
+  },
+  {
+    "scope": "proj",
+    "scopeText": "QA-002 A2A Org / / / QA002 CP78 Fresh Budget / / / No env / (Active workspace scope)",
+    "page": "marketplace",
+    "url": "/extensions/marketplace",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nSearch catalog\nOrigin trust\nAll origins\nCapability\nAll capabilities\nPublisher signature\nAll publishers\nPackage\tOrigin\tSignature\tTier\tCapabilities\tActions\n\nAnthropic Official Adapter\n@tanpopo/anthropic · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Anthropic Messages API (/v1/messages, system extraction, tool_use/tool_result, image/PDF blob_ref splicing, stateful SSE normalization, and /native/anthropic/*).\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAWS Bedrock Official Adapter\n@tanpopo/aws-bedrock · v0.1.0\nTier-2 WebAssembly adapter translating OpenAI chat requests to Amazon Bedrock Converse with host-only AWS SigV4 signing.\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAzure OpenAI Official Adapter\n@tanpopo/azure-openai · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for Azure OpenAI chat completions with deployment routing, api-version pinning, blind api-key injection, OpenAI-compatible SSE, and scoped native passthrough.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nCohere Rerank Official Adapter\n@tanpopo/cohere-rerank · v0.1.0\nOfficial Tier-1 Cohere v2 rerank adapter with blind API-key injection, exact search-unit reporting, and strict response normalization.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nGoogle Gemini Official Adapter\n@tanpopo/gemini · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Google Gemini API (contents, systemInstruction, functionDeclarations/functionCall, streamGenerateContent?alt=sse, blind x-goog-api-key header injection without ?key= query params, ",
+    "responses": []
+  },
+  {
+    "scope": "proj",
+    "scopeText": "QA-002 A2A Org / / / QA002 CP78 Fresh Budget / / / No env / (Active workspace scope)",
+    "page": "lockfile",
+    "url": "/extensions/lockfile",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\ntanpopo.lock\nRefresh lockfile\ntanpopo.lock\n{\n  \"lockfileVersion\": 1,\n  \"generatedAt\": \"2026-11-23T20:52:01Z\",\n  \"extensions\": {\n    \"@tanpopo/gemini\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://gemini.tpkg\",\n      \"artifactSha256\": \"bd2c4bd3b11b166fb92eae37a3078bb7174a7688bcae9c8b3061794094f0a7a8\",\n      \"contractVersion\": \"0.1\",\n      \"trustTier\": \"official\",\n      \"signingKeyFingerprint\": \"9cc763db705cecbd5d68eaf0fb0a633dd1413ed4d1d54f02cda65cf10a4f8acb\",\n      \"executionTier\": \"WASM_SANDBOX_T2\",\n      \"approvedPermissions\": {\n        \"approvedBy\": \"prc_01m84xhbtwe00939kr14qg3khv\",\n        \"approvedAt\": \"2026-11-23T20:52:01Z\",\n        \"allowedHosts\": [\n          \"generativelanguage.googleapis.com\"\n        ],\n        \"requireTls\": true,\n        \"executionTier\": \"WASM_SANDBOX_T2\",\n        \"secretSlots\": [\n          \"api_key\"\n        ],\n        \"secretBindingModes\": {\n          \"api_key\": \"host_blind_inject\"\n        },\n        \"hooks\": [\n          \"guardrail:evaluate_guardrail\",\n          \"provider:build_validation_probe\",\n          \"provider:extract_usage\",\n          \"provider:inspect_native_request\",\n          \"provider:normalize_error\",\n          \"provider:transform_request\",\n          \"provider:transform_response\",\n          \"provider:transform_stream_chunk\",\n          \"provider:verify_validation_result\"\n        ],\n        \"maxMemoryMib\": 16,\n        \"inspectRequestBody\": true,\n        \"inspectResponseBody\": true\n      }\n    },\n    \"@tanpopo/ollama\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://ollama.tpkg\",\n      \"artifactSha256\": \"06b3685d23df37d51ff92e6d07b296a1803e",
+    "responses": [
+      {
+        "path": "/admin/v1/extensions/lockfile",
+        "status": 200
+      }
+    ]
+  },
+  {
+    "scope": "proj",
+    "scopeText": "QA-002 A2A Org / / / QA002 CP78 Fresh Budget / / / No env / (Active workspace scope)",
+    "page": "models",
+    "url": "/models",
+    "main": "Models & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\n3\nLogical Models\n1\nData region\nAll regions\nHealth state\nAll states\nEnvironment deployments\n3\nUpstream model\tConnection\tRegion\tHealth\tIn / Out (nano-USD)\tActions\n\nqa002-cp73-failed-401\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m866netce00a8wcj86nft2xq\tON_PREM\tProvisioned\t0 / 0\t\n\n\nqa002:latest\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m850y4xre00ahbtgj1y47zyp\tON_PREM\tProvisioned\t1,000 / 1,000\t\n\n\nqa002:latest\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m850bf7je00b98hwrs3dq10r\tON_PREM\tHealthy\t1,000 / 1,000\t",
+    "responses": []
+  },
+  {
+    "scope": "proj",
+    "scopeText": "QA-002 A2A Org / / / QA002 CP78 Fresh Budget / / / No env / (Active workspace scope)",
+    "page": "policies",
+    "url": "/policies",
+    "main": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.",
+    "responses": []
+  },
+  {
+    "scope": "env",
+    "scopeText": "QA-002 A2A Org / / / QA002 Audit mwto47wa / / / stage / (Active workspace scope)",
+    "page": "installed",
+    "url": "/extensions/installed",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nInstalled packages\n2\nPackage\tLifecycle\tOrigin\tPublisher\tExecution tier\tActions\n\next_01m852r1p3e008acn3fzbd80bw\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tsandboxed_wasm\t\n\n\next_01m8504abme008azgwpd4xh459\nActive: 0.1.0\n\tActive\tOfficial\tUnsigned\tdeclarative\t",
+    "responses": []
+  },
+  {
+    "scope": "env",
+    "scopeText": "QA-002 A2A Org / / / QA002 Audit mwto47wa / / / stage / (Active workspace scope)",
+    "page": "marketplace",
+    "url": "/extensions/marketplace",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\nSearch catalog\nOrigin trust\nAll origins\nCapability\nAll capabilities\nPublisher signature\nAll publishers\nPackage\tOrigin\tSignature\tTier\tCapabilities\tActions\n\nAnthropic Official Adapter\n@tanpopo/anthropic · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Anthropic Messages API (/v1/messages, system extraction, tool_use/tool_result, image/PDF blob_ref splicing, stateful SSE normalization, and /native/anthropic/*).\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAWS Bedrock Official Adapter\n@tanpopo/aws-bedrock · v0.1.0\nTier-2 WebAssembly adapter translating OpenAI chat requests to Amazon Bedrock Converse with host-only AWS SigV4 signing.\n\tOfficial\tNone\tsandboxed_wasm\tprovider_adapter\t\nStage for review\n\n\nAzure OpenAI Official Adapter\n@tanpopo/azure-openai · v0.1.0\nOfficial Tanpopo Tier-1 declarative adapter for Azure OpenAI chat completions with deployment routing, api-version pinning, blind api-key injection, OpenAI-compatible SSE, and scoped native passthrough.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nCohere Rerank Official Adapter\n@tanpopo/cohere-rerank · v0.1.0\nOfficial Tier-1 Cohere v2 rerank adapter with blind API-key injection, exact search-unit reporting, and strict response normalization.\n\tOfficial\tNone\tdeclarative\tprovider_adapter\t\nStage for review\n\n\nGoogle Gemini Official Adapter\n@tanpopo/gemini · v0.1.0\nOfficial Tanpopo Tier-2 sandboxed WebAssembly 1.0 adapter for Google Gemini API (contents, systemInstruction, functionDeclarations/functionCall, streamGenerateContent?alt=sse, blind x-goog-api-key header injection without ?key= query params, ",
+    "responses": []
+  },
+  {
+    "scope": "env",
+    "scopeText": "QA-002 A2A Org / / / QA002 Audit mwto47wa / / / stage / (Active workspace scope)",
+    "page": "lockfile",
+    "url": "/extensions/lockfile",
+    "main": "Extensions\n\nSeparate origin, publisher signature, and execution-tier verification with staged permission consent.\n\nStage package\nInstalled\n2\nMarketplace\n8\nLockfile\ntanpopo.lock\nRefresh lockfile\ntanpopo.lock\n{\n  \"lockfileVersion\": 1,\n  \"generatedAt\": \"2026-11-23T20:52:01Z\",\n  \"extensions\": {\n    \"@tanpopo/gemini\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://gemini.tpkg\",\n      \"artifactSha256\": \"bd2c4bd3b11b166fb92eae37a3078bb7174a7688bcae9c8b3061794094f0a7a8\",\n      \"contractVersion\": \"0.1\",\n      \"trustTier\": \"official\",\n      \"signingKeyFingerprint\": \"9cc763db705cecbd5d68eaf0fb0a633dd1413ed4d1d54f02cda65cf10a4f8acb\",\n      \"executionTier\": \"WASM_SANDBOX_T2\",\n      \"approvedPermissions\": {\n        \"approvedBy\": \"prc_01m84xhbtwe00939kr14qg3khv\",\n        \"approvedAt\": \"2026-11-23T20:52:01Z\",\n        \"allowedHosts\": [\n          \"generativelanguage.googleapis.com\"\n        ],\n        \"requireTls\": true,\n        \"executionTier\": \"WASM_SANDBOX_T2\",\n        \"secretSlots\": [\n          \"api_key\"\n        ],\n        \"secretBindingModes\": {\n          \"api_key\": \"host_blind_inject\"\n        },\n        \"hooks\": [\n          \"guardrail:evaluate_guardrail\",\n          \"provider:build_validation_probe\",\n          \"provider:extract_usage\",\n          \"provider:inspect_native_request\",\n          \"provider:normalize_error\",\n          \"provider:transform_request\",\n          \"provider:transform_response\",\n          \"provider:transform_stream_chunk\",\n          \"provider:verify_validation_result\"\n        ],\n        \"maxMemoryMib\": 16,\n        \"inspectRequestBody\": true,\n        \"inspectResponseBody\": true\n      }\n    },\n    \"@tanpopo/ollama\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://ollama.tpkg\",\n      \"artifactSha256\": \"06b3685d23df37d51ff92e6d07b296a1803e",
+    "responses": [
+      {
+        "path": "/admin/v1/extensions/lockfile",
+        "status": 200
+      }
+    ]
+  },
+  {
+    "scope": "env",
+    "scopeText": "QA-002 A2A Org / / / QA002 Audit mwto47wa / / / stage / (Active workspace scope)",
+    "page": "models",
+    "url": "/models",
+    "main": "Models & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\n3\nLogical Models\n1\nData region\nAll regions\nHealth state\nAll states\nEnvironment deployments\n3\nUpstream model\tConnection\tRegion\tHealth\tIn / Out (nano-USD)\tActions\n\nqa002-cp73-failed-401\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m866netce00a8wcj86nft2xq\tON_PREM\tProvisioned\t0 / 0\t\n\n\nqa002:latest\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m850y4xre00ahbtgj1y47zyp\tON_PREM\tProvisioned\t1,000 / 1,000\t\n\n\nqa002:latest\nlmd_01m850m2fqe0098hxskdjr46bm\n\tcon_01m850bf7je00b98hwrs3dq10r\tON_PREM\tHealthy\t1,000 / 1,000\t",
+    "responses": []
+  },
+  {
+    "scope": "env",
+    "scopeText": "QA-002 A2A Org / / / QA002 Audit mwto47wa / / / stage / (Active workspace scope)",
+    "page": "policies",
+    "url": "/policies",
+    "main": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nRoutes\n2\nRoute Explain\nPolicies\nEffective resolved policy\nConstraint\tEffective value\tProvenance\nAllowed data regions\tEU, US, APAC, ON_PREM\tOrganization floor\nAllowed models\t*\tEnvironment policy\nMinimum plugin trust\tAny approved\tOrganization floor\nMinimum capability assurance\tDeclared\tOrganization floor\nRPM ceiling\tUnspecified\tEnvironment policy\nTPM ceiling\tUnspecified\tEnvironment policy\nConcurrent streams ceiling\tUnspecified\tEnvironment policy\nGuardrail hooks\tNone attached\tEnvironment policy\nEdit policy scope\nScope to edit\nScope to edit\nEnvironment\nAllowed data regions\nEU\nUS\nAPAC\nOn-prem\nAllowed model slugs (comma-separated, * for all)\nMinimum plugin trust\nAny approved\nMinimum capability assurance\nDeclared\nRPM ceiling\nTPM ceiling\nConcurrent streams ceiling\nGuardrail extensions\n\nNo guardrail extensions attached at this scope.\n\nGuardrail extension ID\nFailure posture\nFail closed\nAttach guardrail\nDiscard changes\nSave policy",
+    "responses": []
+  }
+]

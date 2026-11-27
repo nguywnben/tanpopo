@@ -1,0 +1,46 @@
+{
+  "checkpoint": "CP70",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "Linux/amd64 exact-source binary; QA SQLite clone 127.0.0.1:18162; restored service 127.0.0.1:18163",
+  "runtime_clone": "Created by SQLite online backup from the isolated QA runtime; test-only Master KEK copied with mode 0400; no production data or key",
+  "browser": "Chromium 156.0.8078.79",
+  "actor": "Synthetic Org Owner",
+  "target": {
+    "slug": "qa005-cp70-def038-20261127",
+    "organization_id": "org_01m8df96w3e009cx5707qjtgpx",
+    "crypto_shred_http": 200,
+    "destroyed_dek_id": "org_01m8df96w3e009cx5707qjtgpx:v1:g1",
+    "revoked_virtual_keys": 0,
+    "target_absent_from_operations_list": true
+  },
+  "archive": {
+    "backup_id": "7e7adfde82971b09f0352d4e244e0c4d",
+    "size_bytes": 122758,
+    "sha256": "8c54a2dcd284757e7ad93b29c97d48d44f5e5e087aa5433aba8736fef71b8de7",
+    "verify": {"success": true, "files": 8},
+    "restore": {"success": true, "verify_secrets_decrypt": true}
+  },
+  "restored_database": {
+    "integrity_check": "ok",
+    "target_organization_rows": 0,
+    "target_project_rows": 0,
+    "retained_crypto_shred_audit_rows": 1,
+    "retained_event": "organization.crypto_shredded"
+  },
+  "restored_service": {
+    "healthz_http": 200,
+    "readyz_http": 200,
+    "owner_login": "PASS",
+    "audit_verify": {"http": 200, "intact": true, "checked_events_count": 2},
+    "organization_list_http": 200,
+    "target_present_after_restore": false,
+    "visual_capture": "evidence/screenshots/CP70-restored-service-overview.png; inspected after a five-second render wait"
+  },
+  "limitations": [
+    "Target tenant had no projects, secrets, connections or Virtual Keys.",
+    "No pre-shred archive restore, populated-target backup, PostgreSQL/Valkey, multi-node, alternate role or platform coverage.",
+    "The source database clone contains other synthetic QA data; the synthetic test org was removed only from the disposable clone."
+  ],
+  "classification": "PASS (scoped QA-005 DEF-038 retest)"
+}

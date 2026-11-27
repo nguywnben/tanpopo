@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "eventCount": 1,
+  "events": [
+    {
+      "seq_no": 2,
+      "action": "organization.crypto_shredded",
+      "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+      "target_id": "org_01m86b839me00bb5zw6w29exhv",
+      "chain_partition": "org_01m86b839me00bb5zw6w29exhv",
+      "metadata": {
+        "confirm_slug": "qa002-cp85-shred-probe-20261124",
+        "reason": "QA-002 CP85 empty tenant crypto-shred verification",
+        "revoked_keys": 0
+      },
+      "event_hash": "042fa0980c225c752f57de8e1158eafc75f5aa52961aec7c2b62dcd0ea35f62a"
+    }
+  ]
+}

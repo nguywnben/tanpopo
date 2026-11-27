@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "requestAccept": "application/x-ndjson",
+  "responseContentType": "text/event-stream; charset=utf-8",
+  "lineCount": 4,
+  "allLinesAreJson": true,
+  "sseDataPrefix": false,
+  "body": "{\"model\":\"qa004-loopback\",\"message\":{\"role\":\"assistant\",\"content\":\"Checking \"},\"done\":false}\n{\"model\":\"qa004-loopback\",\"message\":{\"role\":\"assistant\",\"content\":\"synthetic order.\"},\"done\":false}\n{\"model\":\"qa004-loopback\",\"message\":{\"role\":\"assistant\",\"tool_calls\":[{\"function\":{\"name\":\"lookup_order\",\"arguments\":{\"order_id\":\"QA-106\"}}}]},\"done\":false}\n{\"model\":\"qa004-loopback\",\"done\":true,\"prompt_eval_count\":17,\"eval_count\":4}\n"
+}

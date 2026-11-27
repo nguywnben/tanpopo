@@ -1,0 +1,15 @@
+{
+  "status": 201,
+  "id": "vky_01m87j30b0e0097agwb6fvehyd",
+  "name": "QA003 A2A UI provisioned",
+  "allowed_planes": [
+    "PROVIDER",
+    "A2A"
+  ],
+  "allowed_routes": [
+    "/a2a/*"
+  ],
+  "state": "CREATED_ACTIVE",
+  "oneTimeLength": 42,
+  "visibleInputLengths": []
+}

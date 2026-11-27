@@ -1,0 +1,29 @@
+{
+  "api": [
+    {
+      "method": "GET",
+      "status": 200,
+      "body": null
+    },
+    {
+      "method": "POST",
+      "status": 201,
+      "body": "{\"project_id\":\"prj_01m84ymb7we009px5hb5pfwsns\",\"agent_slug\":\"qa002-cp68-private-agent\",\"name\":\"QA002 CP68 Private A2A Agent\",\"endpoint_url\":\"http://127.0.0.1:19186\",\"data_region\":\"US\",\"max_delegation_hops\":5,\"allow_private_ip\":true,\"allowed_cidrs\":[\"127.0.0.1/32\"]}"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "body": null
+    }
+  ],
+  "status": 201,
+  "agent": {
+    "id": "agt_01m8641yq4e00a440gccs7v6x0",
+    "slug": "qa002-cp68-private-agent",
+    "project_id": "prj_01m84ymb7we009px5hb5pfwsns",
+    "endpoint_url": "http://127.0.0.1:19186",
+    "status": "ACTIVE"
+  },
+  "row_visible": true,
+  "main": "4\tUS\t5\tActive\n\nQA002 Drain Agent\nqa002-drain-agent\n\thttp://127.0.0.1:19108\tUS\t5\tActive\n\nQA002 Local Approval Agent\nqa002-local-agent\n\thttp://127.0.0.1:19105\tUS\t5\tActive\nActive & recent A2A tasks\n7\nTask\tState\tHops\tRegion\tSub-budget hold\tSettled cost\tActions\n\ntsk_01m8613gahe00bw74zwmppeq2m\nqa002-cp59-refresh-agent-r3\n\tCompleted\t1 / 5\tUS\t$0.010000\t$0.003000\t—\n\ntsk_01m85262pte00ah355z6avmm3d\nqa002-drain-agent\n\tFailed\t1 / 5\tUS\t$0.005000\t$0.000000\t—\n\ntsk_01m85225v5e00bnkna1xh7bnzv\nqa002-drain-agent\n\tFailed\t1 / 5\tUS\t$0.005000\t$0.000000\t—\n\ntsk_01m851zv0we009m3vrn0wd7t5c\nqa002-drain-agent\n\tFailed\t1 / 5\tUS\t$0.005000\t$0.000000\t—\n\ntsk_01m84zevvte00bjjwaznfxc2nd\nqa002-local-agent\n\tCompleted\t1 / 5\tUS\t$0.012000\t$0.003000\t—\n\ntsk_01m84ze0nne009x63agbdxx9xd\nqa002-local-agent\n\tCanceled\t1 / 5\tUS\t$0.010000\t$0.000000\t—\n\ntsk_01m84ze0n3e00b47xbhs0f25v4\nqa002-local-agent\n\tCompleted\t1 / 5\tUS\t$0.025000\t$0.003000\t—"
+}

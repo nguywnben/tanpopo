@@ -1,0 +1,53 @@
+{
+  "checkpoint": "CP75",
+  "finding": "DEF-033",
+  "qa005_status": "PASS (scoped)",
+  "historical_failures_preserved": true,
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary": {
+    "path": "/tmp/qa005-bin/tanpopo",
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "platform": "linux/amd64",
+    "reported_version": "0.1.0-dev (commit=none built=unknown)"
+  },
+  "environment": {
+    "kind": "disposable isolated SQLite runtime clone",
+    "base_url": "http://127.0.0.1:18162",
+    "browser": "Chromium 156",
+    "identity": "synthetic Org Owner",
+    "organization": "QA005 Org",
+    "project": "QA005 No Budget Project",
+    "period": "MONTHLY",
+    "provider_calls": 0
+  },
+  "steps": [
+    "Opened FinOps on the project scope; the inspected initial page showed five existing Virtual Key ceilings and no project ceiling.",
+    "Created a monthly project budget ceiling of 2500000 micro-USD through the real Console.",
+    "Opened Create budget again for the same project/month and entered 3000000 micro-USD.",
+    "Submitted the duplicate Create action and read the matching budget through the authenticated Admin API."
+  ],
+  "duplicate_create": {
+    "ui_error": "A budget already exists for this scope and period. Update the existing limit instead of creating a duplicate.",
+    "explicit_update_action_offered": true,
+    "explicit_update_action_clicked": false,
+    "non_auth_write_requests_from_duplicate_submit": [],
+    "post_submit_api_read_http": 200,
+    "budget_id": "bgt_project_prj_01m8d6dbtxe008w7fphkgp2e24_monthly",
+    "hard_limit_micros_before_and_after_observed": 2500000,
+    "version_before_and_after_observed": 1,
+    "soft_warning_percents": [50, 80, 95]
+  },
+  "screenshots": [
+    "../evidence/screenshots/CP75-def033-empty-before.png",
+    "../evidence/screenshots/CP75-def033-duplicate-form.png",
+    "../evidence/screenshots/CP75-def033-duplicate-create.png",
+    "../evidence/screenshots/CP75-def033-persisted-row.png"
+  ],
+  "limitations": [
+    "Only Owner, monthly Project scope, Chromium and SQLite were retested.",
+    "The separate explicit Update existing budget action, stale-revision/concurrent editor behavior, other periods/scopes/roles, and alternate databases remain unverified.",
+    "Prior QA-002 reproduction of silent 2.5M-to-3M overwrite followed by stale v1/409 remains preserved as historical evidence."
+  ],
+  "production_signing": "not tested; blocked and deferred",
+  "gate_rel_07": "BLOCKED"
+}

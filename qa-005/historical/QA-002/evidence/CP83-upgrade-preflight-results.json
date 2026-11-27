@@ -1,0 +1,68 @@
+{
+  "visible": "Operations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\n1\nUpgrades\nOrganizations\nWebhooks\nUpgrade compatibility preflight\n\nValidate installed extension ABI compatibility before upgrading Tanpopo Core.\n\nTarget Core version\nRun preflight\nCompatible\nState: READY_TO_UPGRADE\nCurrent tanpopo.lock pins\n{\n  \"lockfileVersion\": 1,\n  \"generatedAt\": \"2026-11-23T20:52:01Z\",\n  \"extensions\": {\n    \"@tanpopo/gemini\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://gemini.tpkg\",\n      \"artifactSha256\": \"bd2c4bd3b11b166fb92eae37a3078bb7174a7688bcae9c8b3061794094f0a7a8\",\n      \"contractVersion\": \"0.1\",\n      \"trustTier\": \"official\",\n      \"signingKeyFingerprint\": \"9cc763db705cecbd5d68eaf0fb0a633dd1413ed4d1d54f02cda65cf10a4f8acb\",\n      \"executionTier\": \"WASM_SANDBOX_T2\",\n      \"approvedPermissions\": {\n        \"approvedBy\": \"prc_01m84xhbtwe00939kr14qg3khv\",\n        \"approvedAt\": \"2026-11-23T20:52:01Z\",\n        \"allowedHosts\": [\n          \"generativelanguage.googleapis.com\"\n        ],\n        \"requireTls\": true,\n        \"executionTier\": \"WASM_SANDBOX_T2\",\n        \"secretSlots\": [\n          \"api_key\"\n        ],\n        \"secretBindingModes\": {\n          \"api_key\": \"host_blind_inject\"\n        },\n        \"hooks\": [\n          \"guardrail:evaluate_guardrail\",\n          \"provider:build_validation_probe\",\n          \"provider:extract_usage\",\n          \"provider:inspect_native_request\",\n          \"provider:normalize_error\",\n          \"provider:transform_request\",\n          \"provider:transform_response\",\n          \"provider:transform_stream_chunk\",\n          \"provider:verify_validation_result\"\n        ],\n        \"maxMemoryMib\": 16,\n        \"inspectRequestBody\": true,\n        \"inspectResponseBody\": true\n      }\n    },\n    \"@tanpopo/ollama\": {\n      \"version\": \"0.1.0\",\n      \"origin\": \"tanpopo-builtin://ollama.tpkg\",\n      \"artifactSha256\": \"06b3685d23df37d51ff92e6d07b296a1803e40dab4800a0176eff39edb27ab63\",\n      \"contractVersion\": \"0.1\",\n      \"trustTier\": \"official\",\n      \"signingKeyFingerprint\": \"9cc763db705cecbd5d68eaf0fb0a633dd1413ed4d1d54f02cda65cf10a4f8acb\",\n      \"executionTier\": \"DECLARATIVE_T1\",\n      \"approvedPermissions\": {\n        \"approvedBy\": \"prc_01m84xhbtwe00939kr14qg3khv\",\n        \"approvedAt\": \"2026-11-23T20:06:51Z\",\n        \"allowedHosts\": [\n          \"127.0.0.1\",\n          \"localhost\",\n          \"ollama.internal\"\n        ],\n        \"allowPrivateIp\": true,\n        \"executionTier\": \"DECLARATIVE_T1\",\n        \"secretSlots\": [\n          \"api_key\"\n        ],\n        \"secretBindingModes\": {\n          \"api_key\": \"host_blind_inject\"\n        },\n        \"hooks\": [\n          \"provider:build_validation_probe\",\n          \"provider:extract_usage\",\n          \"provider:inspect_native_request\",\n          \"provider:normalize_error\",\n          \"provider:transform_request\",\n          \"provider:transform_response\",\n          \"provider:transform_stream_chunk\",\n          \"provider:verify_validation_result\"\n        ]\n      }\n    }\n  }\n}",
+  "calls": [
+    {
+      "method": "GET",
+      "url": "/admin/v1/audit-events?action=ops.backup_created&chain_partition=SYSTEM&limit=100",
+      "status": 200,
+      "body": {
+        "data": [
+          {
+            "id": "aud_01m85183qte00874g6z4kfx54c",
+            "org_id": null,
+            "chain_partition": "SYSTEM",
+            "seq_no": 3,
+            "actor_id": "prc_01m84xhbtwe00939kr14qg3khv",
+            "action": "ops.backup_created",
+            "target_type": "instance_ops",
+            "target_id": "1ba5d9a7c78c7622e9dd41f200467e1a",
+            "metadata": {
+              "archive_filename": "tanpopo-backup-1ba5d9a7c78c7622e9dd41f200467e1a.tpop.enc",
+              "sha256_hex": "f28b1ab85278c8eb49b10578096c22c0f956659d3de7102b40aa765bc4d5e357",
+              "size_bytes": 43830
+            },
+            "prev_hash": "1873655af4e6408c573793369fafb8dab73820eba289aa60fbd670020c5c9b67",
+            "event_hash": "32819d69a52601bc4b99d2c0f58fbe50037788647e89274b76e578451dc83e4d",
+            "created_at": "2026-11-23T20:23:36.442Z"
+          }
+        ],
+        "has_more": false
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/admin/v1/ops/upgrades/preflight",
+      "status": 200,
+      "body": {
+        "compatible": true,
+        "state": "READY_TO_UPGRADE",
+        "blocking_extensions": []
+      }
+    },
+    {
+      "method": "GET",
+      "url": "/admin/v1/audit-events?action=ops.upgrade_preflight_ran&limit=100",
+      "status": 200,
+      "body": {
+        "data": [],
+        "has_more": false
+      }
+    }
+  ],
+  "audit": {
+    "status": 200,
+    "events": []
+  },
+  "verify": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "csrf_validation_failed",
+        "type": "permission_error",
+        "message": "CSRF token or origin validation failed",
+        "request_id": "req_01m86av43ce009hhwdap42r4nt",
+        "retryable": false
+      }
+    }
+  }
+}

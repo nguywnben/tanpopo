@@ -1,0 +1,30 @@
+{
+  "phase": 15,
+  "date": "2026-11-23",
+  "principal": {
+    "email": "qa-boundary-probe@example.invalid",
+    "roles": ["DEVELOPER", "TEAM_ADMIN"],
+    "operator": false
+  },
+  "journey": [
+    "Open Access & Keys → Members & Roles",
+    "Use visible Add member action",
+    "Enter QA-only email qa-team-admin-member@example.invalid",
+    "Leave default Developer role selected",
+    "Submit"
+  ],
+  "result": {
+    "request": "POST /admin/v1/members",
+    "status": 403,
+    "error_code": "role_escalation_denied",
+    "message": "project-scoped admin must specify project_ids and cannot grant organization-scoped bindings",
+    "member_created": false,
+    "member_count_before": 4,
+    "member_count_after": 4,
+    "visible_form_fields": ["Member email", "Assign roles"],
+    "project_scope_field_present": false
+  },
+  "visual_evidence": ["phase15-team-admin-add-member-form.png", "phase15-team-admin-add-member-rejected.png"],
+  "classification": "DEF-006, Moderate",
+  "limitations": "Only the add-member form was submitted. Role editing against project-bound and organization-bound principals was not tested from Team Admin."
+}

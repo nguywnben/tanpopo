@@ -1,0 +1,54 @@
+{
+  "scope": "Default Organization\n/\nNo project\n/\nNo env\n(Active workspace scope)",
+  "main": "Access & Keys\n\nEnvironment-scoped Virtual Keys and 6-role RBAC principal assignments.\n\nIssue key\nVirtual Keys\nMembers & Roles\n6\nSelect a project and environment in the top bar to manage Virtual Keys.\nEnvironment Virtual Keys\n0\nNo Virtual Keys in this environment\nIssue an environment-bound Virtual Key to authenticate Data Plane /v1/* and /mcp traffic.",
+  "responses": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/organizations?limit=100",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/projects?limit=200",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/approvals?status=PENDING&limit=100",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/kill-switches?active_only=true",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m87axgx7e008ehq1d016vqwt/environments",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/deployments?status=CIRCUIT_OPEN_UNHEALTHY&limit=50",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/alerts/active?limit=50",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/overview/summary?window=24h",
+      "status": 200
+    },
+    {
+      "path": "/admin/v1/members?limit=100",
+      "status": 200
+    }
+  ]
+}

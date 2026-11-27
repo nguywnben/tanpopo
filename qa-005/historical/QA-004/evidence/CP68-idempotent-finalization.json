@@ -1,0 +1,41 @@
+{
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact-RC6 SQLite runtime at 127.0.0.1:18128",
+  "browser": "Chromium; authenticated Operator Console; same-origin requests with session CSRF protection",
+  "target": {
+    "synthetic_org_id": "org_01m8a833jxe00ahft1pharg45y",
+    "created_and_first_shredded_in": "CP67",
+    "already_shredded_before_this_checkpoint": true
+  },
+  "repeat_finalize_requests": [
+    {
+      "attempt": 1,
+      "http_status": 200,
+      "target_type": "ORGANIZATION",
+      "target_id": "org_01m8a833jxe00ahft1pharg45y",
+      "destroyed_dek_id": "org_01m8a833jxe00ahft1pharg45y:shredded",
+      "revoked_virtual_keys_count": 0
+    },
+    {
+      "attempt": 2,
+      "http_status": 200,
+      "target_type": "ORGANIZATION",
+      "target_id": "org_01m8a833jxe00ahft1pharg45y",
+      "destroyed_dek_id": "org_01m8a833jxe00ahft1pharg45y:shredded",
+      "revoked_virtual_keys_count": 0
+    }
+  ],
+  "audit_readback_after_retries": {
+    "http_status": 200,
+    "matching_crypto_shred_events": 1,
+    "event_sequence": 5,
+    "target_id": "org_01m8a833jxe00ahft1pharg45y"
+  },
+  "original_delete_receipt_from_cp67": {
+    "destroyed_dek_id": "org_01m8a833jxe00ahft1pharg45y:v1:g1",
+    "revoked_virtual_keys_count": 0
+  },
+  "observed_receipt_difference": "Both retry responses use the stable :shredded sentinel. CP67's original successful delete response and audit metadata identify the actual v1:g1 DEK. The API schema requires a destroyed_dek_id but the reviewed contracts do not state whether repeated finalization must reproduce the original identifier/count.",
+  "classification": "PASS (scoped) for repeat-finalization HTTP success and no duplicate crypto-shred audit event; UNVERIFIED for byte-for-byte/original-field receipt replay and counts when the initial deletion revoked active keys. No new defect assigned.",
+  "product_source_modified": false
+}

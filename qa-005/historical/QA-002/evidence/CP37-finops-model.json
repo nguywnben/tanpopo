@@ -1,0 +1,7 @@
+{
+  "text": "FinOps\n\nInteger micro-USD ledger with separate exact, estimated, active-hold, and unmetered accounting.\n\nExport CSV\nExport JSON\nCreate budget\nBudgets & Holds\n15\nChargeback\nExact settled\n$0.000010\nProvider-reported usage\nEstimated settled\n$0.000000\nFallback token estimation\nActive holds\n$0.000000\nIn-flight pre-egress leases\nUnmetered requests\n0\nFlagged for audit review\nChargeback accuracy breakdown\n1\nGroup by\nModel\nModel\tExact\tEstimated\tExact / Est. reqs\tUnmetered\nqa002-cp22-streaming\t\nExact\n$0.000010\n\t\nEstimated\n$0.000000\n\t10 / 0\t\n0",
+  "rows": [
+    "Model\tExact\tEstimated\tExact / Est. reqs\tUnmetered",
+    "qa002-cp22-streaming\t\nExact\n$0.000010\n\t\nEstimated\n$0.000000\n\t10 / 0\t\n0"
+  ]
+}

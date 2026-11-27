@@ -1,0 +1,17 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "binary": "/tmp/tanpopo-qa003",
+  "binary_version": {
+    "built": "2026-11-25T00:10:06+07:00",
+    "commit": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+    "version": "0.1.0-dev"
+  },
+  "routes": {
+    "status": 200,
+    "body": {
+      "data": [],
+      "has_more": false
+    }
+  },
+  "screen": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\nRoute Explain\nPolicies\n\nInherited data residency ceiling: EU, US, APAC, ON_PREM\n\nConfigured routes\n0\nNo routes in this environment\nCreate a route to map model slugs to ordered or weighted deployments.\nCreate route"
+}

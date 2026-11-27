@@ -1,0 +1,64 @@
+{
+  "baseline": "3423d4f523ef0ac77469a1201b8b753d1d31c902",
+  "setup": {
+    "main": "Models & Deployments\n\nLogical model capability declarations, assurance tiers, and environment deployments.\n\nRegister model\nAdd deployment\nDeployments\n2\nLogical Models\n1\nDeployment registered in provisioned state.\nData region\nAll regions\nHealth state\nAll states\nEnvironment deployments\n2\nUpstream model\tConnection\tRegion\tHealth\tIn / Out (nano-USD)\tActions\n\nqa003-synthetic-unauthorized\nlmd_01m87f6xp5e00928y9d7g8kdth\n\tQA003 SSRF redirect boundary\tON_PREM\tProvisioned\t0 / 0\t\n\n\nqa003-synthetic-unauthorized\nlmd_01m87f6xp5e00928y9d7g8kdth\n\tQA003 RC5 Ollama 401\tON_PREM\tProvisioned\t0 / 0\t"
+  },
+  "verification": {
+    "deployments": {
+      "status": 200,
+      "data": [
+        {
+          "id": "dpl_01m884vnnte00ahr4rpqrj9pcy",
+          "model": "qa003-synthetic-unauthorized",
+          "state": "PROVISIONED",
+          "env_id": "env_01m87axgx7e008ejsny065s8qz",
+          "logical_model_id": "lmd_01m87f6xp5e00928y9d7g8kdth"
+        },
+        {
+          "id": "dpl_01m87fckaye00axyrh360js4t4",
+          "model": "qa003-synthetic-unauthorized",
+          "state": "PROVISIONED",
+          "env_id": "env_01m87axgx7e008ejsny065s8qz",
+          "logical_model_id": "lmd_01m87f6xp5e00928y9d7g8kdth"
+        }
+      ]
+    },
+    "targetOptions": [
+      "Select deployment",
+      "QA003 SSRF redirect boundary / qa003-synthetic-unauthorized · rj9pcy (ON_PREM · Provisioned)",
+      "QA003 RC5 Ollama 401 / qa003-synthetic-unauthorized · 0js4t4 (ON_PREM · Provisioned)"
+    ],
+    "options": [
+      "QA003 Operator CP22",
+      "Default Organization",
+      "QA003 Empty Project DEF035",
+      "default",
+      "No project",
+      "dev",
+      "No env",
+      "中文(简体)",
+      "中文(繁體)",
+      "Deutsch",
+      "English",
+      "Español",
+      "Français",
+      "Indonesia",
+      "Italiano",
+      "日本語",
+      "한국어",
+      "Português",
+      "Русский",
+      "ภาษาไทย",
+      "Türkçe",
+      "Tiếng Việt",
+      "Priority failover",
+      "Weighted",
+      "Weighted round robin",
+      "Lowest cost",
+      "Lowest latency (EWMA)",
+      "Select deployment",
+      "QA003 SSRF redirect boundary / qa003-synthetic-unauthorized · rj9pcy (ON_PREM · Provisioned)",
+      "QA003 RC5 Ollama 401 / qa003-synthetic-unauthorized · 0js4t4 (ON_PREM · Provisioned)"
+    ]
+  }
+}

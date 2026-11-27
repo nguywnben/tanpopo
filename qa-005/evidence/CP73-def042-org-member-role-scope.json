@@ -1,0 +1,32 @@
+{
+  "checkpoint": "CP73",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "Linux/amd64 exact-source binary; disposable SQLite clone 127.0.0.1:18162",
+  "browser": "Chromium 156.0.8078.79",
+  "actor": "Synthetic Org Owner",
+  "scope": "QA005 Org / No project / No env",
+  "role_picker": {
+    "organization_options": ["DEVELOPER", "ORG_OWNER", "TEAM_ADMIN", "SECURITY_REVIEWER", "FINOPS_VIEWER"],
+    "OPERATOR_visible": false,
+    "visual_evidence": "evidence/screenshots/CP73-org-role-picker.png; visually inspected"
+  },
+  "defense_in_depth": {
+    "request": "POST /admin/v1/members",
+    "organization_scope_header": "X-Tanpopo-Org-ID",
+    "attempted_role": "OPERATOR",
+    "synthetic_email": "qa005-def042-operator@example.invalid",
+    "http": 403,
+    "error_code": "role_escalation_denied",
+    "message": "rbac: insufficient_role_permission: OPERATOR role cannot be bound inside an organization member"
+  },
+  "persistence_check": {
+    "before_list": {"http": 200, "member_count": 4},
+    "after_list": {"http": 200, "member_count": 4, "canary_present": false}
+  },
+  "limitations": [
+    "One Org Owner and one organization-only scope on SQLite.",
+    "Other role lists, role edits, Team Admin/project scope, cross-tenant ID probes and other backends/browsers remain unverified."
+  ],
+  "classification": "PASS (scoped QA-005 regression)"
+}

@@ -1,0 +1,58 @@
+{
+  "run_id": "45581179274",
+  "baseline_commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "workflow_status": "success",
+  "metadata": {
+    "project_name": "tanpopo",
+    "tag": "v0.0.0",
+    "previous_tag": "",
+    "version": "0.0.1-snapshot",
+    "commit": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+    "date": "2026-11-25T09:09:37.118552769Z",
+    "runtime": {
+      "goos": "linux",
+      "goarch": "amd64"
+    }
+  },
+  "checksums_verified": 5,
+  "archive_members": {
+    "tanpopo_0.0.1-snapshot_linux_arm64.tar.gz": [
+      "LICENSE",
+      "README.md",
+      "tanpopo"
+    ],
+    "tanpopo_0.0.1-snapshot_linux_amd64.tar.gz": [
+      "LICENSE",
+      "README.md",
+      "tanpopo"
+    ],
+    "tanpopo_0.0.1-snapshot_darwin_arm64.tar.gz": [
+      "LICENSE",
+      "README.md",
+      "tanpopo"
+    ],
+    "tanpopo_0.0.1-snapshot_darwin_amd64.tar.gz": [
+      "LICENSE",
+      "README.md",
+      "tanpopo"
+    ],
+    "tanpopo_0.0.1-snapshot_windows_amd64.zip": [
+      "LICENSE",
+      "README.md",
+      "tanpopo.exe"
+    ]
+  },
+  "unsafe_archive_paths": [],
+  "go_sbom": {
+    "format": "CycloneDX",
+    "specVersion": "1.6",
+    "components": 48
+  },
+  "web_sbom": {
+    "format": "CycloneDX",
+    "specVersion": "1.6",
+    "components": 342
+  },
+  "artifact_records": 12,
+  "executable_validation": "Linux amd64 binary only; other target formats inspected, not run"
+}

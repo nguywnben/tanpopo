@@ -1,0 +1,12 @@
+{
+  "body": "em\nExtensions\nMCP Hub\nGovernance\nAccess & Keys\nSecurity\nqa002-cp28-reviewer@example.invalid\nSecurity Reviewer\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\nKill Switches\nAudit Log\nPending MCP approvals\n0\nApproval queue clear\nDestructive MCP tool invocations requiring human-in-the-loop sign-off appear here.\nApproval queue clear Destructive MCP tool invocations requiring human-in-the-loop sign-off appear here.",
+  "state": {
+    "pending": {
+      "data": [],
+      "has_more": false
+    },
+    "switches": {
+      "data": []
+    }
+  }
+}

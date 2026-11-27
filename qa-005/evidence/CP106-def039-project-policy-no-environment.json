@@ -1,0 +1,80 @@
+{
+  "checkpoint": "CP106",
+  "defect": "DEF-039",
+  "status": "PASS (scoped)",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "exact-source RC7 isolated SQLite on 18145 through the real Console TLS proxy on 19444",
+  "browser": "Chromium 156 via Playwright, 1440x1000",
+  "principal": "isolated QA Org Owner",
+  "scope": "QA005 Org / QA005 No Budget Project / No env",
+  "steps": [
+    "Use the real workspace picker to select QA005 No Budget Project / No env.",
+    "Open Routes & Policies > Policies; verify the Project editor and enabled save flow are available without an active environment.",
+    "Uncheck EU, US and APAC while retaining ON_PREM; save through the actual Console.",
+    "Read the effective policy API and Console: HTTP 200, only ON_PREM, project policy version 1, Saved Project policy feedback.",
+    "Restore EU, US, APAC and ON_PREM and save: HTTP 200, effective project policy version 2 with all four regions.",
+    "Hard reload, explicitly reselect No env, and verify the Project editor and all-region effective policy persist; route view at No env remains the scoped zero-route empty state."
+  ],
+  "policy_state": {
+    "before_effective_regions": [
+      "EU",
+      "US",
+      "APAC",
+      "ON_PREM"
+    ],
+    "narrowed_effective_regions": [
+      "ON_PREM"
+    ],
+    "narrowed_put_status": 200,
+    "narrowed_policy_version": 1,
+    "restored_effective_regions": [
+      "EU",
+      "US",
+      "APAC",
+      "ON_PREM"
+    ],
+    "restore_put_status": 200,
+    "restored_policy_version": 2,
+    "fresh_reload_get_status": 200,
+    "fresh_reload_etag": "\"v2\"",
+    "fresh_reload_regions": [
+      "APAC",
+      "EU",
+      "ON_PREM",
+      "US"
+    ],
+    "test_artifact": "The test created an explicit project policy at v1 and restored the prior effective all-region value at v2; this policy row remains in the isolated QA database.",
+    "routes_or_deployments_changed": false,
+    "inference_or_provider_calls": 0,
+    "paid_usage": 0
+  },
+  "historical_conflicts": [
+    "QA-002 RC4/RC5 failure",
+    "QA-003 RC5 partial",
+    "QA-004 RC6 scoped pass CP81"
+  ],
+  "limitations": [
+    "Owner only; SQLite only; Chromium only.",
+    "Team Admin authorization, concurrent stale writers, attempted parent relaxation, guardrail lifecycle and other browsers remain unverified."
+  ],
+  "screenshots_visually_inspected": true,
+  "screenshot_sha256": {
+    "evidence/screenshots/CP106-policy-no-environment.png": "735c9d70cee5a42e5a7bf7ac504e2b80874cd60fbbc2e14bae7d405f0b9e12df",
+    "evidence/screenshots/CP106-def039-project-policy-narrowed-draft.png": "dc447591beb4507a76bf853ff34f44a65753961d9e9e13679e3557c1d5a5c8d2",
+    "evidence/screenshots/CP106-def039-project-policy-narrowed-saved.png": "d0d5230c48a64d777466b3b31fd1b6ac2e9631ce5edf2c74e8bf08d3caa670c2",
+    "evidence/screenshots/CP106-def039-project-policy-restored.png": "7401f0fb8186c685d385cfa57fe40df0e31846a0be74c037e2ef8eb0b4dcdcb8",
+    "evidence/screenshots/CP106-def039-project-policy-fresh-reload.png": "235dbc4ad83583779f25a354ecc534555fa14fb8bfa697892f0ed2c8022affee",
+    "evidence/screenshots/CP106-policy-audit-log.png": "4be3fdf58976705e72147589848ac639e990fdd8b0e584d260cc10955977c279",
+    "evidence/screenshots/CP106-policy-audit-chain-verified.png": "b22d1cfa4b88ebe5697ccb50441b7a7d73beded0277ae7ed753a91a1121eb6fb"
+  },
+  "audit": {
+    "policy_created_sequence": 567,
+    "policy_updated_sequence": 568,
+    "target_same_policy_id": true,
+    "real_console_chain_verification_http_status": 200,
+    "intact": true,
+    "checked_events_count": 574,
+    "first_broken_sequence": null
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "baseline": "40bba5b55c2da6fc00b107b315c9b3167fb20169",
+  "runtime": "18084",
+  "browser": "Chromium mobile emulation, 375x844",
+  "principal": "QA Org Owner + Operator",
+  "exception_checked": true,
+  "submitted_cidr": "127.0.0.1/33",
+  "endpoint_class": "synthetic loopback; no sync/discovery/network call attempted",
+  "api_responses": [
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/a2a/agents"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "path": "/admin/v1/a2a/agents"
+    }
+  ],
+  "collection_after": {
+    "status": 200,
+    "count": 6,
+    "persisted": false
+  },
+  "error_message_visible_in_body": false,
+  "ui_error_excerpt": "Allowed CIDRs",
+  "visible_inputs": [
+    [
+      4,
+      "e.g. billing-analyst",
+      true
+    ],
+    [
+      5,
+      "e.g. Billing Analyst",
+      true
+    ],
+    [
+      6,
+      "https://agent.example.com",
+      true
+    ],
+    [
+      7,
+      null,
+      true
+    ],
+    [
+      8,
+      "127.0.0.1/32, 10.20.0.0/24",
+      true
+    ]
+  ]
+}

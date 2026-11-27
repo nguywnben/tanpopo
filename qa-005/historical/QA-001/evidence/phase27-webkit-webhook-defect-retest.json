@@ -1,0 +1,195 @@
+{
+  "browser": "WebKit 26.5 / Playwright 1.62.0",
+  "before": "Skip to main content\nTanpopo\nDefault Organization / QA Isolation 2026-11-23 / qa-sandbox (Active workspace scope)\nJump\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nHMAC-signed webhook subscriptions\n0\nAdd webhook\nNo webhook subscriptions\nRegister a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.\nNo webhook subscriptions Register a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.",
+  "body": "Skip to main content\nTanpopo\nDefault Organization / QA Isolation 2026-11-23 / qa-sandbox (Active workspace scope)\nJump\nKill Switch\nOperations\n\nReadiness probes, cluster snapshot epochs, encrypted backups, upgrades, and signed webhooks.\n\nRefresh\nHealth & Cluster\nBackups\nUpgrades\nOrganizations\nWebhooks\nHMAC-signed webhook subscriptions\n0\nAdd webhook\nNo webhook subscriptions\nRegister a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.\nRegister webhook subscription\nFull receiver URLs are sealed in the vault; only the origin is stored in metadata.\nHTTPS receiver URL\n∙ Required\nSigning credential (WEBHOOK_HMAC_SECRET)\nSeal a WEBHOOK_HMAC_SECRET credential in Providers → Vault Secrets first.\nSelect signing secret\nEvents\nkill_switch.triggered, mcp.approval.pending\nCancel\nRegister webhook\nNo webhook subscriptions Register a public HTTPS receiver signed with a write-only WEBHOOK_HMAC_SECRET credential.",
+  "timeline": [
+    {
+      "elapsedWaitMs": 0,
+      "headingRect": {
+        "x": 73,
+        "y": 10,
+        "width": 250,
+        "height": 19.59375
+      },
+      "metrics": {
+        "width": 375,
+        "documentWidth": 375,
+        "height": 844
+      }
+    },
+    {
+      "elapsedWaitMs": 100,
+      "headingRect": {
+        "x": 73,
+        "y": 10,
+        "width": 250,
+        "height": 19.59375
+      },
+      "metrics": {
+        "width": 375,
+        "documentWidth": 375,
+        "height": 844
+      }
+    },
+    {
+      "elapsedWaitMs": 250,
+      "headingRect": {
+        "x": 73,
+        "y": 10,
+        "width": 250,
+        "height": 19.59375
+      },
+      "metrics": {
+        "width": 375,
+        "documentWidth": 375,
+        "height": 844
+      }
+    },
+    {
+      "elapsedWaitMs": 500,
+      "headingRect": {
+        "x": 73,
+        "y": 10,
+        "width": 250,
+        "height": 19.59375
+      },
+      "metrics": {
+        "width": 375,
+        "documentWidth": 375,
+        "height": 844
+      }
+    },
+    {
+      "elapsedWaitMs": 1000,
+      "headingRect": {
+        "x": 73,
+        "y": 10,
+        "width": 250,
+        "height": 19.59375
+      },
+      "metrics": {
+        "width": 375,
+        "documentWidth": 375,
+        "height": 844
+      }
+    }
+  ],
+  "responses": [
+    {
+      "path": "/admin/v1/auth/login",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/auth/session",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/organizations",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/bootstrap/status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/approvals",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/kill-switches",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/projects/prj_01m83whxkde0091cx3w8pk6s7d/environments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/overview/summary",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/deployments",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/alerts/active",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/ops/cluster-status",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/secrets",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/extensions/lockfile",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/audit-events",
+      "status": 200,
+      "method": "GET"
+    },
+    {
+      "path": "/admin/v1/webhooks",
+      "status": 200,
+      "method": "GET"
+    }
+  ],
+  "screenshot": "/workspace/tanpopo/qa/evidence/phase27-webkit-webhook-375-retest.png"
+}

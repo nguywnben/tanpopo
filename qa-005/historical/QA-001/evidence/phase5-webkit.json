@@ -1,0 +1,203 @@
+{
+  "webkit": {
+    "routes": 27,
+    "axeViolations": 0,
+    "overflow": [],
+    "badH1": [],
+    "externalRequests": 0,
+    "consoleErrors": 0,
+    "pageErrors": 0,
+    "blocking": []
+  },
+  "audits": [
+    {
+      "route": "/overview",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/observability/traces",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/finops/budgets",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/finops/chargeback",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/providers/connections",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/providers/adapters",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/models",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/routes",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/routes/explain",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/policies",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/extensions/installed",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/extensions/marketplace",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/extensions/lockfile",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/mcp/servers",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/a2a/agents",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/devtools/playground",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/devtools/sdk-snippets",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/access/virtual-keys",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/access/members",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/security/approvals",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/security/kill-switches",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/security/audit-log",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/ops/health",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/ops/backups",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/ops/upgrades",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/ops/organizations",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    },
+    {
+      "route": "/settings/residency-retention",
+      "violations": [],
+      "sw": 1440,
+      "cw": 1440,
+      "h1": 1
+    }
+  ]
+}

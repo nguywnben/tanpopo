@@ -1,0 +1,96 @@
+{
+  "locales": [
+    "中文(简体)",
+    "中文(繁體)",
+    "Deutsch",
+    "English",
+    "Español",
+    "Français",
+    "Indonesia",
+    "Italiano",
+    "日本語",
+    "한국어",
+    "Português",
+    "Русский",
+    "ภาษาไทย",
+    "Türkçe",
+    "Tiếng Việt"
+  ],
+  "screens": {
+    "overview-1440": {
+      "viewport": 1440,
+      "documentWidth": 1440,
+      "bodyWidth": 1440,
+      "mainWidth": 1212,
+      "mainClientWidth": 1212,
+      "heading": "Tổng quan",
+      "bodyScroll": false
+    },
+    "overview-1024": {
+      "viewport": 1024,
+      "documentWidth": 1024,
+      "bodyWidth": 1024,
+      "mainWidth": 796,
+      "mainClientWidth": 796,
+      "heading": "Tổng quan",
+      "bodyScroll": false
+    },
+    "overview-768": {
+      "viewport": 768,
+      "documentWidth": 768,
+      "bodyWidth": 768,
+      "mainWidth": 768,
+      "mainClientWidth": 768,
+      "heading": "Tổng quan",
+      "bodyScroll": false
+    },
+    "overview-375": {
+      "viewport": 375,
+      "documentWidth": 375,
+      "bodyWidth": 375,
+      "mainWidth": 375,
+      "mainClientWidth": 375,
+      "heading": "Tổng quan",
+      "bodyScroll": false
+    },
+    "overview-320": {
+      "viewport": 320,
+      "documentWidth": 320,
+      "bodyWidth": 320,
+      "mainWidth": 320,
+      "mainClientWidth": 320,
+      "heading": "Tổng quan",
+      "bodyScroll": false
+    },
+    "providers-375": {
+      "viewport": 375,
+      "documentWidth": 375,
+      "bodyWidth": 375,
+      "mainWidth": 375,
+      "mainClientWidth": 375,
+      "bodyScroll": false
+    },
+    "providers-320": {
+      "viewport": 320,
+      "documentWidth": 320,
+      "bodyWidth": 320,
+      "mainWidth": 320,
+      "mainClientWidth": 320,
+      "bodyScroll": false
+    }
+  },
+  "selectedLocale": "Tiếng Việt",
+  "overview": {
+    "heading": [
+      "Tổng quan"
+    ],
+    "text": "Tổng quan\n\nCập nhật 23:13:42 · 0 yêu cầu chưa đo lường\n\n1h\n24h\n7d\n30d\nLàm mới\nYêu cầu\n0\nKhung: 24h\nTỷ lệ lỗi\n0,00%\nNội bộ & upstream\nĐộ trễ proxy p95\n0 ms\nĐộ trễ do cổng thêm vào\nChi phí đã chốt\n$0,000000\nTạm giữ hiện tại: $0,000000\nCảnh báo hiện tại\n0\nMọi hệ thống đều ổn định\nKhông có cảnh báo vận hành nào đang mở hoặc mục cần khắc phục."
+  },
+  "provider": {
+    "heading": [
+      "Nhà cung cấp"
+    ],
+    "text": "Nhà cung cấp\n\nKết nối nhà cung cấp upstream, kho bí mật chỉ ghi và bộ chuyển đổi giao thức.\n\nNiêm phong bí mật\nTạo kết nối\nKết nối\n3\nKho bí mật\n1\nBộ chuyển đổi\n1\nKết nối đã cấu hình\n3\nKết nối\tBộ chuyển đổi\tVùng / Thanh toán\tTrạng thái\tDấu vân tay kho bí mật\tThao tác\n\nQA003 SSRF redirect boundary (8k78zaaf)\nhttp://127.0.0.1:19189\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Tự vận hành\tChưa xác minh\tChưa liên kết\t\n\n\nQA003 RC5 Ollama 401 (0g0485nk)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Tự vận hành\tĐã tắt\tChưa liên kết\t\n\n\nQA003 RC5 Ollama 401 (4hst80xy)\nhttp://127.0.0.1:19187\n\tadp_01m87en7q2e008z362mgp36ra8\tON_PREM · Tự vận hành\tChưa xác minh\tChưa liên kết\t"
+  },
+  "localeReset": "New Playwright context per run; browser context closed after capture."
+}

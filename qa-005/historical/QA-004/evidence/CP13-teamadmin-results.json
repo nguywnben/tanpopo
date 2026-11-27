@@ -1,0 +1,21 @@
+{
+  "teamAdmin": {
+    "role": "TEAM_ADMIN",
+    "sessionStatus": 200,
+    "ownerInviteForm": "Add organization member\nMember email\n\u2219 Required\nAssign roles\nTeam Admin\nOrg Owner\nTeam Admin\nSecurity Reviewer\nFinOps Viewer\nDeveloper\nScoped projects\ndefault (default)\nCancel\nAdd member\n1 of 5 selected"
+  },
+  "teamAdminMemberGrant": {
+    "projectScopeVisible": true,
+    "roleChoices": [
+      "Team Admin",
+      "Developer"
+    ],
+    "selectedRole": "Developer",
+    "rolesSubmittedByUi": "Add organization member\nMember email\n\u2219 Required\nAssign roles\nDeveloper\nTeam Admin\nDeveloper\nScoped projects\ndefault (default)\nCancel\nAdd member\n1 of 2 selected",
+    "outcome": "Developer invitation created through Console and activated; Owner readback is in CP13-teamadmin-persistence.json."
+  },
+  "forbiddenEscalation": {
+    "status": 403,
+    "error": "role_escalation_denied"
+  }
+}

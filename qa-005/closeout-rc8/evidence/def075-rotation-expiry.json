@@ -1,0 +1,45 @@
+{
+  "scope": "PostgreSQL RC8 runtime, exact release artifact, Chromium UI/API; synthetic A2A-only test key",
+  "create_status": 201,
+  "rotate_status": 200,
+  "rotate_version": {
+    "before": 1,
+    "after": 2
+  },
+  "pre_expiry_auth": {
+    "old": {
+      "status": 200,
+      "code": "{\"data\":[{\"agent_id\":\"agt_01m8e3qwzhe008np2pzwy7dwqd\",\"agent_slug\":\"qa005-cp115-delayed-input-requir"
+    },
+    "current": {
+      "status": 200,
+      "code": "{\"data\":[{\"agent_id\":\"agt_01m8e3qwzhe008np2pzwy7dwqd\",\"agent_slug\":\"qa005-cp115-delayed-input-requir"
+    }
+  },
+  "wait_ms": 65000,
+  "post_wait": {
+    "key": {
+      "state": "CREATED_ACTIVE",
+      "version": 3,
+      "previous_expires_at": null
+    },
+    "old": {
+      "status": 401,
+      "body": "{\"error\":{\"code\":\"invalid_virtual_key\",\"message\":\"Invalid or inactive Virtual Key.\",\"request_id\":\"tr"
+    },
+    "new": {
+      "status": 200,
+      "body": "{\"data\":[{\"agent_id\":\"agt_01m8e3qwzhe008np2pzwy7dwqd\",\"agent_slug\":\"qa005-cp115-delayed-input-requir"
+    },
+    "audit": [
+      "virtual_key.rotation_finalized",
+      "virtual_key.rotated",
+      "virtual_key.created"
+    ]
+  },
+  "checks": {
+    "old_secret_rejected_after_wait": true,
+    "new_secret_accepted_after_wait": true,
+    "finalized_audit": true
+  }
+}

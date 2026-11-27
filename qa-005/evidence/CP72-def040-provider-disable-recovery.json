@@ -1,0 +1,56 @@
+{
+  "checkpoint": "CP72",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "runtime": "Linux/amd64 exact-source binary; disposable SQLite clone 127.0.0.1:18162",
+  "browser": "Chromium 156.0.8078.79",
+  "provider_fixture": "local deterministic HTTP fixture at 127.0.0.1:19097; no credentials, public calls or paid usage",
+  "connection": {
+    "id": "con_01m8dfy4wze00bh1e9zy9gd7dz",
+    "name": "QA005 DEF040 unverified recovery canary",
+    "creation_http": 201,
+    "creation_state": "CREATED_UNVERIFIED v1",
+    "endpoint": "http://127.0.0.1:19097",
+    "loopback_cidr_consent": "127.0.0.1/32",
+    "disable_http": 200,
+    "disabled_state": "DISABLED",
+    "ui_disable_guidance": "Disabled connections cannot serve traffic. Edit settings or choose Test & reactivate connection to recover a connection.",
+    "recovery_action": "Test & reactivate connection",
+    "probe": {"http": 200, "valid": true, "latency_ms": 1, "detected_model_count": 1},
+    "final_state": "ACTIVE",
+    "final_version": 11
+  },
+  "linked_deployment": {
+    "id": "dpl_01m8dgb160e0084bbt8rncw84h",
+    "create_http": 201,
+    "created_state": "ACTIVE_HEALTHY",
+    "nano_usd_input_output_rates": [1, 1],
+    "while_connection_disabled": {
+      "connection_patch_http": 200,
+      "api_state": "ACTIVE_HEALTHY",
+      "api_connection_state": "DISABLED",
+      "console_health_cell": "Disabled"
+    },
+    "after_successful_connection_recovery": {
+      "connection_state": "ACTIVE",
+      "console_health_cell": "Healthy"
+    }
+  },
+  "audit": {
+    "connection_events_include": [
+      "provider_connection.created",
+      "provider_connection.updated",
+      "provider_connection.state_transition",
+      "provider_connection.tested"
+    ],
+    "last_successful_test_event": "provider_connection.tested; valid=true",
+    "deployment_creation_event": "model_deployment.created"
+  },
+  "test_harness_note": "One initial fixture attempt used a /v1 base URL that made the adapter request /v1/v1/models; the fixture returned a non-success response, so probe correctly failed. After correcting the fixture base URL, a successful probe restored Active. This is not a Tanpopo defect.",
+  "limitations": [
+    "One synthetic Org Owner, SQLite clone, OpenAI-compatible adapter and linked deployment.",
+    "No route dispatch or inference was attempted while disabled; no failover, roles, other adapters, PostgreSQL/Valkey or restart coverage.",
+    "During disable, API deployment state read ACTIVE_HEALTHY while connection_state was DISABLED; Console correctly showed Disabled. Intended API semantics remain unverified."
+  ],
+  "classification": "PASS (scoped QA-005 regression)"
+}

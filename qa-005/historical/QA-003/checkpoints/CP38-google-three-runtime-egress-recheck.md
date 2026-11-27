@@ -1,0 +1,19 @@
+# CP38 — Google Gemini probe across all three isolated runtimes
+
+**Baseline:** frozen RC5 `3423d4f523ef0ac77469a1201b8b753d1d31c902`<br>
+**Runtimes:** isolated SQLite services `18114`, `18115`, `18116`; real Chromium; configured Google QA credential held only in memory/write-only vault<br>
+**Disposition:** all three app-level Google probes returned `valid=false`, `failure_code=upstream_unreachable`; current evidence supports Cloud direct-egress limitation, not a product defect. `probe_runtime_unavailable` was not reproduced. Provider inference remains BLOCKED/UNVERIFIED. `GATE-REL-07` remains **BLOCKED**.
+
+## 18114 and 18115 real Console runs
+
+For each runtime, signed in as its synthetic Org Owner, staged/reviewed the official Gemini adapter, gave the documented consent, sealed the configured API key in write-only Vault Secrets, created a `COMMERCIAL_API` Google connection at `https://generativelanguage.googleapis.com`, and used the actual **Probe connection** action. No inference, streaming, or generation route was invoked.
+
+- On **18114**, the adapter activation completed with HTTP 200 and the Installed screen showed Active. The secret and connection were created, then the probe wrapper returned HTTP 200 with `valid: false`, `failure_code: upstream_unreachable`, sanitized `upstream connection could not be reached`, and 2,078 ms latency. The UI kept the row Unverified and displayed the error. The synthetic connection and secret were subsequently deleted (HTTP 204 each).
+- On **18115**, adapter staging returned 202 and explicit-consent activation returned 200. Secret creation returned 201; connection creation returned 201 and `CREATED_UNVERIFIED`. The probe returned HTTP 200 with `valid: false`, `failure_code: upstream_unreachable`, the same sanitized message, and 2,058 ms latency. The UI kept it Unverified. Connection and secret were deleted (HTTP 204 each).
+- Screenshots visually inspected: [18114 Installed adapter](../evidence/CP38-google-18114-installed.png), [18114 probe](../evidence/CP38-google-18114-probe.png), [18114 credential metadata](../evidence/CP38-google-18114-secret-metadata.png), [18114 cleanup](../evidence/CP38-google-18114-cleanup.png), [18115 adapter marketplace](../evidence/CP38-google-18115-marketplace-active.png), [18115 probe](../evidence/CP38-google-18115-probe.png), [18115 credential metadata](../evidence/CP38-google-18115-secret-metadata.png), and [18115 cleanup](../evidence/CP38-google-18115-cleanup.png). Sanitized details: [18114 result](../evidence/CP38-google-18114-result.json), [18115 result](../evidence/CP38-google-18115-result.json). The official extension remains installed in these isolated QA databases; temporary credentials/connections were removed. Evidence contains no plaintext key.
+
+## Cross-runtime classification
+
+CP24 independently exercised 18116 and the configured proxy control. It recorded HTTP 200 for Google's non-generative model-list endpoint through the Cloud proxy, while direct Node transport failed before HTTP and Tanpopo's guarded app probe returned `upstream_unreachable`. CP38 reproduced the same Tanpopo failure through newly configured connections on 18114 and 18115. This repeatable cross-runtime pattern, alongside the proxy/direct differential, supports a Cloud network-path limitation. It does not establish an invalid credential, adapter transform defect, or product networking defect. No SSRF allowlist or guarded network policy was weakened.
+
+`probe_runtime_unavailable` remains **UNVERIFIED** for its historical runtime/configuration; it did not appear in these RC5 runs. A supported QA network where Tanpopo's guarded direct dial is authorized is still needed to exercise successful validation and actual provider inference/streaming. The direct-egress limitation also keeps webhook public-recipient behavior blocked. QA-003 remains incomplete.

@@ -1,0 +1,53 @@
+{
+  "checkpoint": "CP78",
+  "finding": "DEF-046",
+  "qa005_status": "PASS (scoped)",
+  "historical_failure_preserved": true,
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary": {
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "platform": "linux/amd64",
+    "reported_version": "0.1.0-dev (commit=none built=unknown)"
+  },
+  "environment": {
+    "kind": "disposable isolated SQLite clone",
+    "base_url": "http://127.0.0.1:18162",
+    "browser": "Chromium 156",
+    "identity": "synthetic Org Owner"
+  },
+  "source_scope": "QA005 Org / Initial Project / dev",
+  "target_scope": "QA005 Org / QA005 No Budget Project / QA005 Budgetless Dev",
+  "synthetic_request": {
+    "route_slug": "qa005-no-such-route-cp78",
+    "http_status": 503,
+    "error_code": "no_compliant_deployment_available",
+    "trace_id": "trc_01m8dk1zm0e00bf8vxr674ga3w",
+    "provider_call": false
+  },
+  "before_switch": {
+    "error_visible": true,
+    "prompt_visible": true,
+    "selected_route_visible": true,
+    "trace_card_visible": true
+  },
+  "after_project_switch": {
+    "scope_changed": true,
+    "old_error_visible": false,
+    "old_prompt_visible": false,
+    "old_route_visible": false,
+    "old_trace_card_visible": false,
+    "empty_conversation_visible": true,
+    "default_route_selected": true
+  },
+  "screenshots": [
+    "../evidence/screenshots/CP78-def046-source-scope.png",
+    "../evidence/screenshots/CP78-def046-target-scope.png"
+  ],
+  "limitations": [
+    "Only one populated project-to-project transition was retested.",
+    "Organization/environment switches, refresh, return-to-source, rapid/in-flight updates, other roles and browsers remain unverified.",
+    "The route failure was pre-dispatch; no provider interaction or successful inference was part of this test."
+  ],
+  "production_signing": "not tested; blocked and deferred",
+  "gate_rel_07": "BLOCKED"
+}

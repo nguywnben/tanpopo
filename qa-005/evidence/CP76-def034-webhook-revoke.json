@@ -1,0 +1,70 @@
+{
+  "checkpoint": "CP76",
+  "finding": "DEF-034",
+  "qa005_status": "PASS (scoped)",
+  "historical_failure_and_later_pass_preserved": true,
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary": {
+    "sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+    "platform": "linux/amd64",
+    "reported_version": "0.1.0-dev (commit=none built=unknown)"
+  },
+  "environment": {
+    "kind": "disposable isolated SQLite clone",
+    "base_url": "http://127.0.0.1:18162",
+    "browser": "Chromium 156",
+    "role": "synthetic Org Owner",
+    "organization": "QA005 Org"
+  },
+  "destination": {
+    "registered_origin": "https://example.com",
+    "receiver_url_secretized": true,
+    "secret_kind": "WEBHOOK_HMAC_SECRET",
+    "selected_events": ["kill_switch.triggered", "mcp.approval.pending"],
+    "matching_event_emitted": false,
+    "outbound_delivery_attempted": false
+  },
+  "ssrf_boundary": {
+    "attempted_host_class": "reserved .invalid name",
+    "registration_http_status": 400,
+    "error": "endpoint_url violates egress SSRF policy",
+    "policy_weakened": false,
+    "subscription_created": false
+  },
+  "lifecycle": {
+    "registration_http_status": 201,
+    "initial_enabled": true,
+    "delete_confirmation_names_events_and_origin": true,
+    "delete_http_status": 200,
+    "post_delete_console_count": 0,
+    "post_delete_api_list_http_status": 200,
+    "post_delete_api_count": 0,
+    "registered_audit_action": "webhook.registered",
+    "deleted_audit_action": "webhook.deleted",
+    "same_subscription_target": true,
+    "audit_verify_http_status": 200,
+    "audit_chain_intact": true,
+    "audit_events_checked": 618
+  },
+  "secret_cleanup": {
+    "console_delete_http_status": 204,
+    "target_secret_present_after": false,
+    "remaining_vault_secret_count": 0
+  },
+  "screenshots": [
+    "../evidence/screenshots/CP76-webhook-registered.png",
+    "../evidence/screenshots/CP76-webhook-actions.png",
+    "../evidence/screenshots/CP76-webhook-delete-confirm.png",
+    "../evidence/screenshots/CP76-webhook-deleted.png",
+    "../evidence/screenshots/CP76-webhook-audit.png",
+    "../evidence/screenshots/CP76-webhook-secret-cleaned.png"
+  ],
+  "limitations": [
+    "Only synthetic Org Owner organization-scope deletion was retested.",
+    "Disable/re-enable, queued-delivery cancellation, disabled-event suppression, project scope, other roles and concurrency remain unverified.",
+    "No actual receiver delivery or HMAC signature verification is claimed; external egress/receiver behavior remains unverified.",
+    "The older QA-002 failure and later QA-004 pass are retained as conflicting historical baseline outcomes."
+  ],
+  "production_signing": "not tested; blocked and deferred",
+  "gate_rel_07": "BLOCKED"
+}

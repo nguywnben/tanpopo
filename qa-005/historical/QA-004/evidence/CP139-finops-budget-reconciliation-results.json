@@ -1,0 +1,60 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "runtime": "isolated exact RC6 SQLite at 127.0.0.1:18128",
+  "actor": "synthetic Org Owner",
+  "scope": "QA004 Test Root Org / default / dev",
+  "observed_at": "2026-11-26",
+  "budget_read": {
+    "http_status": 200,
+    "scope_tier": "PROJECT",
+    "period": "MONTHLY",
+    "hard_limit_micros": 100,
+    "settled_exact_micros": 2043,
+    "settled_estimated_micros": 14,
+    "reserved_hold_micros": 0
+  },
+  "usage_summary_reads": [
+    {
+      "query": "group_by=project",
+      "http_status": 200,
+      "row": {
+        "group_key": "default",
+        "exact_micro_usd": 2044,
+        "estimated_micro_usd": 15
+      }
+    },
+    {
+      "query": "group_by=project&from=2026-11-01T00:00:00Z",
+      "http_status": 200,
+      "row": {
+        "group_key": "default",
+        "exact_micro_usd": 2044,
+        "estimated_micro_usd": 15
+      }
+    },
+    {
+      "query": "group_by=project&from=2026-11-26T00:00:00Z",
+      "http_status": 200,
+      "row": {
+        "group_key": "default",
+        "exact_micro_usd": 2015,
+        "estimated_micro_usd": 8
+      }
+    }
+  ],
+  "variance_micros": {
+    "summary_minus_monthly_budget_exact": 1,
+    "summary_minus_monthly_budget_estimated": 1
+  },
+  "historical_cross_checkpoint_evidence": {
+    "CP136_project_summary_exact_estimated": [2038, 15],
+    "CP137_initial_project_budget_exact_estimated_before_request": [2037, 14]
+  },
+  "visually_inspected_screenshots": [
+    "CP139-control-chargeback.png",
+    "CP139-budget-vs-usage.png"
+  ],
+  "source_edits": false,
+  "provider_spend_usd": 0,
+  "root_cause": "unknown"
+}

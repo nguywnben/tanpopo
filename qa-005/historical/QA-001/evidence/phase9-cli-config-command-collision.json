@@ -1,0 +1,31 @@
+{
+  "phase": 9,
+  "date": "2026-11-23",
+  "scope": "Read-only CLI configuration inspection reachability",
+  "binary": "/tmp/qa-tools/tanpopo",
+  "observations": [
+    {
+      "command": ["tanpopo", "--help"],
+      "exit_code": 0,
+      "result": "Root help lists two top-level entries named config: local declarative reconciliation and server configuration inspection."
+    },
+    {
+      "command": ["tanpopo", "config", "show", "--output", "json"],
+      "exit_code": 0,
+      "result": "Printed local config group help with reconcile as the sole subcommand; no JSON or server configuration summary was returned."
+    },
+    {
+      "command": ["tanpopo", "config", "reconcile", "--help"],
+      "exit_code": 0,
+      "result": "Reached the local reconciliation command and displayed its flags."
+    }
+  ],
+  "source_registration": {
+    "local_group": "internal/cli/ops/commands.go:66-109",
+    "remote_group": "internal/cli/remote/commands.go:54-57",
+    "root_registration": "cmd/tanpopo/main.go:173-187"
+  },
+  "data_mutation": false,
+  "classification": "DEF-004, Moderate",
+  "limitations": "This verifies command dispatch and output only. Other CLI commands and Admin API endpoints remain untested."
+}

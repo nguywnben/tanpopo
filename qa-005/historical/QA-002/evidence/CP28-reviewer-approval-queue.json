@@ -1,0 +1,20 @@
+{
+  "body": "Skip to main content\nTanpopo\nMonitor\nOverview\nTraces\nFinOps\nGateway\nProviders\nModels\nRoutes & Policies\nEcosystem\nExtensions\nMCP Hub\nGovernance\nAccess & Keys\nSecurity\n1\nqa002-cp28-reviewer@example.invalid\nSecurity Reviewer\ngoogle-default-test\n/\ndev\n(Active workspace scope)\nJump\nCtrl\nK\nLanguage\nEnglish\nKill Switch\nSecurity\n\nHuman-in-the-loop MCP approvals, 4-level emergency kill switches, and immutable JCS audit trail.\n\nTrigger kill switch\nApproval Queue\n1\nKill Switches\nAudit Log\nPending MCP approvals\n1\nMcp Destructive Tool\nprc_01m853e561e00byye5wtq3s746\nExpires Nov 23, 2026, 11:49:54 PM\nEscaped canonical argument preview\n{\"arguments\":{\"amount\":37,\"ticket_id\":\"qa002-cp28-ticket-001\"},\"server_slug\":\"qa002-cp28-approval-server\",\"tool_name\":\"record_synthetic_action\"}\nBinding hash: 3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9\nReject\nApprove",
+  "responses": [
+    {
+      "method": "GET",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"apr_01m85baxyae00ad2vxg9wr9xhe\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"action_kind\":\"MCP_DESTRUCTIVE_TOOL\",\"state\":\"PENDING\",\"approval_binding_hash\":\"3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9\",\"payload_preview_json\":\"{\\\"arguments\\\":{\\\"amount\\\":37,\\\"ticket_id\\\":\\\"qa002-cp28-ticket-001\\\"},\\\"server_slug\\\":\\\"qa002-cp28-approval-server\\\",\\\"tool_name\\\":\\\"record_synthetic_action\\\"}\",\"requested_by\":\"prc_01m853e561e00byye5wtq3s746\",\"decided_by\":null,\"created_at\":\"2026-11-23T23:19:54.57Z\",\"expires_at\":\"2026-11-23T23:49:54.57Z\",\"version\":1,\"schema_drift_locked\":false}],\"has_more\":false}\n"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"apr_01m85baxyae00ad2vxg9wr9xhe\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"action_kind\":\"MCP_DESTRUCTIVE_TOOL\",\"state\":\"PENDING\",\"approval_binding_hash\":\"3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9\",\"payload_preview_json\":\"{\\\"arguments\\\":{\\\"amount\\\":37,\\\"ticket_id\\\":\\\"qa002-cp28-ticket-001\\\"},\\\"server_slug\\\":\\\"qa002-cp28-approval-server\\\",\\\"tool_name\\\":\\\"record_synthetic_action\\\"}\",\"requested_by\":\"prc_01m853e561e00byye5wtq3s746\",\"decided_by\":null,\"created_at\":\"2026-11-23T23:19:54.57Z\",\"expires_at\":\"2026-11-23T23:49:54.57Z\",\"version\":1,\"schema_drift_locked\":false}],\"has_more\":false}\n"
+    },
+    {
+      "method": "GET",
+      "status": 200,
+      "body": "{\"data\":[{\"id\":\"apr_01m85baxyae00ad2vxg9wr9xhe\",\"org_id\":\"org_01m853e561e00byvg158ab8tbz\",\"project_id\":\"prj_01m853e561e00byw750arfmw8y\",\"action_kind\":\"MCP_DESTRUCTIVE_TOOL\",\"state\":\"PENDING\",\"approval_binding_hash\":\"3888838b1cb98db60e9377d3a4eaf950aa28c2ac1c635b04c869f045064692a9\",\"payload_preview_json\":\"{\\\"arguments\\\":{\\\"amount\\\":37,\\\"ticket_id\\\":\\\"qa002-cp28-ticket-001\\\"},\\\"server_slug\\\":\\\"qa002-cp28-approval-server\\\",\\\"tool_name\\\":\\\"record_synthetic_action\\\"}\",\"requested_by\":\"prc_01m853e561e00byye5wtq3s746\",\"decided_by\":null,\"created_at\":\"2026-11-23T23:19:54.57Z\",\"expires_at\":\"2026-11-23T23:49:54.57Z\",\"version\":1,\"schema_drift_locked\":false}],\"has_more\":false}\n"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "held_request": {
+    "path": "/admin/v1/routes",
+    "query": "?env_id=env_01m85ry445e009xg6sr14c5q1z&limit=100",
+    "status": 200,
+    "returned_route_count": 3,
+    "route_slugs": [
+      "qa002-cp52-failover-route",
+      "qa002-cp51-org-budget-stream-route",
+      "qa002-cp51-org-budget-route"
+    ],
+    "environment_ids": [
+      "env_01m85ry445e009xg6sr14c5q1z"
+    ]
+  },
+  "before_scope_ui": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.\nConfigured routes\n0\nNo routes in this environment\nCreate a route to map model slugs to ordered or weighted deployments.",
+  "after_scope_ui": "Routes & Policies\n\nDeterministic capability routing, dry-run simulation, and monotonic policy inheritance.\n\nCreate route\nRoutes\n3\nRoute Explain\nPolicies\nSelect a project and environment in the top bar to manage routes and policies.\n\nInherited data residency ceiling: APAC, EU, ON_PREM, US\n\nConfigured routes\n3\nRoute slug\tStrategy\tFallback chain\tTarget health\tActions\nqa002-cp52-failover-route\tPriority failover\tqa002:latest (100%) → qa002:latest (100%)\t\nHealthy\n·\nHealthy\n\t\n\nqa002-cp51-org-budget-stream-route\tPriority failover\tqa002:latest (100%)\t\nHealthy\n\t\n\nqa002-cp51-org-budget-route\tPriority failover\tqa002:latest (100%)\t\nHealthy\n\t",
+  "scope": "No project\n/\nNo env\n(Active workspace scope)",
+  "old_route_visible": true
+}

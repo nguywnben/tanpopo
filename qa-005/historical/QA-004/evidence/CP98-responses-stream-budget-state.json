@@ -1,0 +1,55 @@
+{
+  "all": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m895k8pee008b440xk2ef12p",
+        "period": "MONTHLY",
+        "hard_limit_micros": 100,
+        "soft_warning_percents": [
+          50,
+          80,
+          95
+        ],
+        "settled_exact_micros": 1,
+        "settled_estimated_micros": 1,
+        "reserved_hold_micros": 0,
+        "negative_carryover_micros": 0,
+        "unmetered_request_count": 0,
+        "version": 9
+      }
+    ]
+  },
+  "includeAncestors": {
+    "status": 200,
+    "rows": [
+      {
+        "id": "bgt_project_prj_01m895k8pee008b440xk2ef12p_monthly",
+        "scope_tier": "PROJECT",
+        "scope_id": "prj_01m895k8pee008b440xk2ef12p",
+        "period": "MONTHLY",
+        "hard_limit_micros": 100,
+        "soft_warning_percents": [
+          50,
+          80,
+          95
+        ],
+        "settled_exact_micros": 1,
+        "settled_estimated_micros": 1,
+        "reserved_hold_micros": 0,
+        "negative_carryover_micros": 0,
+        "unmetered_request_count": 0,
+        "version": 9
+      }
+    ]
+  },
+  "projects": [
+    {
+      "id": "prj_01m895k8pee008b440xk2ef12p",
+      "slug": "default",
+      "name": "default"
+    }
+  ]
+}

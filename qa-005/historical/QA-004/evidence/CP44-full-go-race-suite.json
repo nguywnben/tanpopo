@@ -1,0 +1,23 @@
+{
+  "baseline": "2eb7f6f6e5ba703d44fbd273f0245ba441de74e1",
+  "qa_documentation_head_at_run": "be49236",
+  "command": "go test -race -count=1 -p 1 ./...",
+  "status": "PASS",
+  "go_toolchain": "go1.26.11 linux/amd64",
+  "node_runtime_available_for_reference_sdk_integration": "Node.js v24.22.3",
+  "postgres_integration_required": true,
+  "valkey_cluster_integration_required": true,
+  "source_mount": "read-only at its original path with read-only Git metadata",
+  "tls_verification": "enabled with managed host CA bundle mounted read-only",
+  "package_results": "All package lines completed without FAIL; command exited successfully.",
+  "initial_run_setup_observation": "The first full attempt was not a product result: relocating the Git worktree under /src and omitting Node caused VCS-stamped binary builds and CT36 SDK integration to fail. Affected packages were then rerun successfully with correct path/Git metadata and Node, followed by this clean full run.",
+  "not_proven": [
+    "full release acceptance or product stability",
+    "browser UI quality, accessibility, all roles/locales/platforms, or screenshot coverage",
+    "external provider interoperability or production credentials",
+    "production-scale performance, multi-host partitions, and all crash/restart cases",
+    "authentic production release signing"
+  ],
+  "product_source_modified": false,
+  "gate_rel_07": "BLOCKED"
+}
