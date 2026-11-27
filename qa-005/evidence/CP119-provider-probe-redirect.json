@@ -1,0 +1,12 @@
+{
+  "checkpoint": "CP119",
+  "source_commit": "737079ddb847d97dbcf832f610ed0048556cb65b",
+  "runtime_binary_sha256": "62aba8761eae2733b1e8957b0b09cde45dee4fb2c29fa6eb36294ce29a600fe9",
+  "environment": {"runtime": "exact RC7 isolated SQLite at 127.0.0.1:18145", "role": "synthetic ORG_OWNER", "browser": "Chromium 156 / Playwright", "fixture": "HTTP server bound to 127.0.0.1:19100"},
+  "fixture": {"response": "302 Location: http://169.254.169.254/latest/meta-data/", "requests_observed": [{"method":"GET","path":"/v1/models","authorization_header_present":false},{"method":"GET","path":"/v1/models","authorization_header_present":false}], "follow_up_request_seen": false, "metadata_side_telemetry_available": false},
+  "provider_connection": {"created_through_real_console": true, "endpoint": "http://127.0.0.1:19100", "private_ip_opt_in": true, "allowed_cidrs": ["127.0.0.1/32"], "create_http_status": 201, "test_attempts": 2, "each_test_http_status": 200, "each_result": {"valid":false,"failure_code":"upstream_unreachable","sanitized_message":"upstream connection could not be reached","latency_ms":9,"detected_model_ids":[]}, "ui_after_failed_probe": "Unverified; no failure detail, toast, or role=alert/status message observed immediately after response", "delete_http_status": 204, "row_absent_after_delete": true},
+  "visual_evidence": ["screenshots/CP119-redirect-connection-created.png","screenshots/CP119-probe-result-unverified.png"],
+  "classification": {"ssrf_redirect_control": "PARTIAL; response consistent with redirect block, but no socket-level or metadata-side evidence independently proves destination rejection", "product_defects": [], "product_gap": "PG-013: failed probe outcome not visible from Providers row; accepted SCR-04 only specifies success feedback, so failure-state UX contract is unspecified"},
+  "limits": ["No external or paid provider contacted.","No secret was configured or sent.","Other redirect targets, schemes, DNS rebinding, IPv6, roles, backends and browsers remain unverified.","Audit-chain verification was outside this test slice."],
+  "cleanup": {"synthetic_connection_deleted":true,"fixture_stopped":true,"fixture_port_19100_closed":true,"production_code_or_spec_modified":false}
+}
