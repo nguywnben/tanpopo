@@ -1,0 +1,664 @@
+{
+  "architectural_enablers": [
+    {
+      "id": "ARCH-001",
+      "cap_ids": [
+        "CAP-035"
+      ],
+      "domain_id": "DOM-05",
+      "name": "Distributed Valkey Idempotency-Key Coordination Engine",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P2-Differentiator",
+      "rc9_status": "SQL-only idempotency_records in internal/ingress/idempotency/guard.go ([SOURCE_VERIFIED]); serializes under high-concurrency retries.",
+      "proposed_enabler_role": "Provides low-latency distributed atomic lock and SHA-256 payload-fingerprint coordination in Valkey (with automatic SQLite/PostgreSQL fallback in single-node Mode A) without changing external Idempotency-Key HTTP behavior.",
+      "teep_03_deferral": "Exact Valkey key TTL eviction, Project-DEK ciphertext envelope format, and failover fallback semantics deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-006"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-002"
+      ],
+      "invariants": "Strict (org_id, project_id, virtual_key_id) key isolation; response payloads sealed with Project DEK."
+    },
+    {
+      "id": "ARCH-002",
+      "cap_ids": [
+        "CAP-038"
+      ],
+      "domain_id": "DOM-06",
+      "name": "Sub-Millisecond Distributed Budget Admission & Lease Coordination",
+      "disposition": "ADD",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "Synchronous per-request SQL Reserve/Settle transactions serialize hot tenant ledgers (contributing to 109.48 req/s SQLite and 56.86 req/s 2-vCPU PG16 HA ceilings [RUNTIME_VERIFIED]).",
+      "proposed_enabler_role": "Decouples routine Data-Plane pre-request budget admission from per-request relational row locks when ample budget headroom exists, transitioning to strict centralized coordination near exhaustion.",
+      "teep_03_deferral": "DEC-CAND-22: Exact distributed budget algorithm (hierarchical escrow-backed pod leases vs Valkey Lua token-bucket sharding vs hybrid watermark cutover) deferred to TEEP-03 architecture evaluation.",
+      "enables_features": [
+        "FEAT-037",
+        "FEAT-038",
+        "FEAT-138"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-002",
+        "NFR-006"
+      ],
+      "invariants": "Aggregate pre-allocated holds plus settled spend must remain bounded by configured hard budget ceilings; crashed-pod holds reclaimed by bounded-TTL orphan reaper."
+    },
+    {
+      "id": "ARCH-003",
+      "cap_ids": [
+        "CAP-042"
+      ],
+      "domain_id": "DOM-06",
+      "name": "Incremental Watermarked FinOps Rollup Aggregator (usage_rollups_hourly)",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "internal/finops/rollup/aggregator.go has zero non-test callers in serve.go ([SOURCE_VERIFIED]); usage_rollups_hourly remains empty (DEF-078) and iterates all orgs sequentially.",
+      "proposed_enabler_role": "Maintains incremental hourly and daily pre-aggregated FinOps cubes keyed by org, org_unit, project, environment, virtual key, model, provider, cost-center, and usage-accuracy tier using O(k_active_orgs) watermark progression.",
+      "teep_03_deferral": "Exact watermark checkpoint schema, late-arriving stream settlement reconciliation, and rollup retention compaction deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-039",
+        "FEAT-041",
+        "FEAT-042"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-009"
+      ],
+      "invariants": "Exact integer reconciliation against raw usage_settlements plus live tail watermark; zero floating-point aggregation."
+    },
+    {
+      "id": "ARCH-004",
+      "cap_ids": [
+        "CAP-046"
+      ],
+      "domain_id": "DOM-07",
+      "name": "Epoch-Fenced SSRF-Safe Pooled Keep-Alive & HTTP/2 Upstream Transports",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "internal/security/broker/blind_broker.go:876 constructs a fresh http.Transport with DisableKeepAlives: true on every request ([SOURCE_VERIFIED]), forcing per-call TCP+TLS handshakes.",
+      "proposed_enabler_role": "Maintains isolated upstream HTTP/1.1 and HTTP/2 connection pools partitioned by (org_id, connection_id, policy_digest, origin) with immediate idle-socket eviction on config_epoch, CIDR, TLS, or kill-switch mutations.",
+      "teep_03_deferral": "Pool sizing bounds, idle eviction timers, and reused-socket SSRF IP-revalidation hook mechanics deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-001",
+        "FEAT-002",
+        "FEAT-003",
+        "FEAT-012",
+        "FEAT-075",
+        "FEAT-083"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-002"
+      ],
+      "invariants": "Zero cross-tenant or cross-connection socket reuse; immediate CloseIdleConnections() on revocation, secret rotation, or egress policy change."
+    },
+    {
+      "id": "ARCH-005",
+      "cap_ids": [
+        "CAP-047"
+      ],
+      "domain_id": "DOM-07",
+      "name": "Split SQLite Read/Write Pools & Group-Commit Settlement/Trace Batcher",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "sqlite/store.go:104 sets SetMaxOpenConns(1) ([SOURCE_VERIFIED]) and both SQLite and PostgreSQL execute per-request synchronous INSERT fsyncs on settlements and trace metadata.",
+      "proposed_enabler_role": "Separates concurrent WAL reader pools from a single serialized SQLite writer and batches high-frequency settlement and trace metadata writes into bounded micro-batches (e.g., 5-10 ms or N rows via pgx.CopyFrom / single WAL transaction).",
+      "teep_03_deferral": "Flush window bounds, backpressure queue sizing, and crash-recovery durability acknowledgments deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-037",
+        "FEAT-047",
+        "FEAT-048"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-002"
+      ],
+      "invariants": "Settlement persistence durability acknowledged before budget hold release; bounded in-memory batch queues with explicit shed telemetry."
+    },
+    {
+      "id": "ARCH-006",
+      "cap_ids": [
+        "CAP-048"
+      ],
+      "domain_id": "DOM-07",
+      "name": "Incremental ConfigSnapshot Epoch Delta Synchronization",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "internal/config/snapshot/manager.go:857 executes 2 + 7 * N_orgs full-table RLS queries per pod on every config_epoch bump ([SOURCE_VERIFIED], ARCH-OBS-01 Loop #5).",
+      "proposed_enabler_role": "Replaces full-estate snapshot reloads with incremental entity delta fetches driven by config_changelog epochs (plus optional pre-built signed snapshot bundles for cold pod startup and disconnected regional cells).",
+      "teep_03_deferral": "Delta compaction log retention, copy-on-write persistent map structure, and cold-boot snapshot artifact format deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-024",
+        "FEAT-058",
+        "FEAT-138",
+        "FEAT-151"
+      ],
+      "supports_nfrs": [
+        "NFR-008",
+        "NFR-009"
+      ],
+      "invariants": "Preserves Manager.CheckServingReady() fail-closed stale-snapshot circuit breaker (ADR-0006) and atomic per-org pointer swaps."
+    },
+    {
+      "id": "ARCH-007",
+      "cap_ids": [
+        "CAP-052"
+      ],
+      "domain_id": "DOM-07",
+      "name": "Low-Allocation Hot-Path Buffer & Slice Pooling",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P2-Differentiator",
+      "rc9_status": "Per-request JSON parsing, header cloning, and route candidate slices allocate on the Go heap during high-RPS streaming.",
+      "proposed_enabler_role": "Reduces Go garbage-collection pause pressure on Data-Plane nodes via zeroed sync.Pool byte buffers, pre-sized SSE framing buffers, and stack-friendly route candidate evaluation.",
+      "teep_03_deferral": "Buffer class sizes and memory zeroization benchmarks deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-001",
+        "FEAT-024"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-004"
+      ],
+      "invariants": "Mandatory clear(buf) zeroization before returning any buffer that carried request, response, or header bytes to a pool."
+    },
+    {
+      "id": "ARCH-008",
+      "cap_ids": [
+        "CAP-064"
+      ],
+      "domain_id": "DOM-09",
+      "name": "BlindHostCredentialBroker Edge Secret Injection & Stream Scrubber Kernel",
+      "disposition": "KEEP",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "Implemented and verified in internal/security/broker/blind_broker.go ([RUNTIME_VERIFIED] & [SOURCE_VERIFIED]): keeps raw provider credentials out of guest Wasm linear memory, enforces PolicyResolver, blocks outbound Cookie headers (DEC-004), and scrubs secret substrings from error/SSE chunks.",
+      "proposed_enabler_role": "Serves as the mandatory host-side credential injection, cryptographic request signing (SigV4, mTLS, OBO), and secret-redaction kernel for all Provider, MCP, A2A, and Extension outbound calls.",
+      "teep_03_deferral": "Extension of host injection modes for multi-header enterprise auth providers and streaming OBO token refresh deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-009",
+        "FEAT-012",
+        "FEAT-013",
+        "FEAT-079",
+        "FEAT-100"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-011",
+        "NFR-017"
+      ],
+      "invariants": "Explicit PolicyResolver required; raw credentials never serialized into Wasm guest memory, traces, logs, or audit payloads."
+    },
+    {
+      "id": "ARCH-009",
+      "cap_ids": [
+        "CAP-065"
+      ],
+      "domain_id": "DOM-09",
+      "name": "Connect-Time SSRFGuardDialer IP Pinning, IMDS Fence & Rejection Telemetry",
+      "disposition": "KEEP",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "Implemented in internal/security/egress/ssrf_guard.go ([RUNTIME_VERIFIED]): resolves DNS once at dial time, blocks link-local/IMDS 169.254.0.0/16 and private ranges unless allow_private_ip + CIDR allowlist match; lacks structured socket-rejection metrics (RR-022).",
+      "proposed_enabler_role": "Enforces DNS-rebinding-resistant socket pinning and CIDR egress policy across every outbound HTTP, OAuth/JWKS, OTLP, Webhook, Git, OCI, MCP, and A2A connection, emitting structured rejection diagnostics.",
+      "teep_03_deferral": "Socket-level rejection counter schema and pooled-connection IP re-verification cadence deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-012",
+        "FEAT-050",
+        "FEAT-086",
+        "FEAT-110",
+        "FEAT-114"
+      ],
+      "supports_nfrs": [
+        "NFR-012",
+        "NFR-016"
+      ],
+      "invariants": "Cloud metadata IPs (169.254.169.254, fd00:ec2::254) remain blocked even when allow_private_ip=true for local inference servers."
+    },
+    {
+      "id": "ARCH-010",
+      "cap_ids": [
+        "CAP-078"
+      ],
+      "domain_id": "DOM-11",
+      "name": "O(1) audit_chain_heads & audit_partition_seals Storage Indexing",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "internal/security/audit/logger.go:237 probes all monthly partitions while holding pg_advisory_xact_lock ([SOURCE_VERIFIED]), and verifier.go hardcodes expectedSeq := 1 (blocking partition archival).",
+      "proposed_enabler_role": "Maintains constant-time per-chain sequence/hash tip state in audit_chain_heads and stores signed terminal digests in audit_partition_seals before old partitions are detached or archived.",
+      "teep_03_deferral": "Exact advisory lock granularity vs row-level UPDATE locking on audit_chain_heads deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-070",
+        "FEAT-072",
+        "FEAT-135"
+      ],
+      "supports_nfrs": [
+        "NFR-007",
+        "NFR-009"
+      ],
+      "invariants": "Gapless RFC 8785 JCS SHA-256 chain continuity across active and sealed historical partitions."
+    },
+    {
+      "id": "ARCH-011",
+      "cap_ids": [
+        "CAP-106"
+      ],
+      "domain_id": "DOM-16",
+      "name": "ARCH-OBS-01 PostgreSQL Composite Index Pack & Scoped Cross-Org Lookup Views",
+      "disposition": "ADD",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "18 sequential O(N_orgs) SetOrgRLSTx loops and 7 missing PostgreSQL composite/partial indexes identified in frozen RC9 ([SOURCE_VERIFIED], ARCH-OBS-01).",
+      "proposed_enabler_role": "Adds the 7 missing PostgreSQL composite/partial indexes, blind HMAC login directory lookup, persisted staged_by_principal_id, and narrowly scoped cross-org operator metadata projections so multi-org lookups scale as O(1) or O(k_affected_orgs) without weakening tenant FORCE RLS.",
+      "teep_03_deferral": "DEC-CAND-12: Exact schema design for SYSTEM operator principal separation (org_id IS NULL vs membership table) and SECURITY DEFINER view boundaries deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-058",
+        "FEAT-060",
+        "FEAT-068",
+        "FEAT-070",
+        "FEAT-095"
+      ],
+      "supports_nfrs": [
+        "NFR-009"
+      ],
+      "invariants": "Tenant-scoped callers retain strict PostgreSQL FORCE ROW LEVEL SECURITY isolation with zero cross-org row visibility."
+    },
+    {
+      "id": "ARCH-012",
+      "cap_ids": [
+        "CAP-108"
+      ],
+      "domain_id": "DOM-16",
+      "name": "Dual-Engine (SQLite <-> PostgreSQL) Schema Parity & N-1 Rolling-Skew Migration Guard",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P1-Enterprise-Core",
+      "rc9_status": "DEF-086 exposed VARCHAR(64) truncation in PostgreSQL where SQLite TEXT succeeded; migrations lack automated AST/catalog parity and N-1 rolling-upgrade compatibility checks ([SOURCE_VERIFIED]).",
+      "proposed_enabler_role": "Enforces automated schema-type/constraint parity between db/migrations/sqlite and db/migrations/postgres plus expand-and-contract N-1 binary compatibility during rolling cluster upgrades.",
+      "teep_03_deferral": "Migration lock timeout budgets and online index creation orchestration deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-036",
+        "FEAT-096",
+        "FEAT-149"
+      ],
+      "supports_nfrs": [
+        "NFR-010",
+        "NFR-017"
+      ],
+      "invariants": "Zero destructive column drops or narrowing casts in minor/patch rolling upgrade paths."
+    },
+    {
+      "id": "ARCH-013",
+      "cap_ids": [
+        "CAP-110"
+      ],
+      "domain_id": "DOM-16",
+      "name": "Valkey Failover & valkey_hold_checkpoints Reconciliation Protocol",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P1-Enterprise-Core",
+      "rc9_status": "DR-02 checkpoint table exists, but automated Valkey replica promotion and live under-load hold reconciliation remain unverified (RR-010, COND-PO-03 [RUNTIME_VERIFIED]).",
+      "proposed_enabler_role": "Coordinates Valkey connection failover, periodic hold checkpointing, and deterministic ledger reconciliation so Valkey restarts or primary promotions do not leak permanently orphaned budget holds.",
+      "teep_03_deferral": "Exact reconciliation epoch fencing during split-brain Valkey Sentinel/Cluster failover deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-037",
+        "FEAT-095"
+      ],
+      "supports_nfrs": [
+        "NFR-006",
+        "NFR-008"
+      ],
+      "invariants": "Fail-closed or bounded-fallback policy per tenant configuration with explicit degraded-state alerting (PG-007)."
+    },
+    {
+      "id": "ARCH-014",
+      "cap_ids": [
+        "CAP-111"
+      ],
+      "domain_id": "DOM-17",
+      "name": "Zero-Ambient-Authority Tier-2 Wasm Sandbox Kernel",
+      "disposition": "KEEP",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "Verified in internal/extension/wasmrt (14.57 us/op [RUNTIME_VERIFIED], 16 MiB linear memory ceiling, 50 ms deadline, 0 WASI host sockets/filesystem, FaultGuard auto-quarantine).",
+      "proposed_enabler_role": "Executes untrusted and partner Tier-2 extension modules in pure Go (CGO_ENABLED=0) with deterministic memory/CPU bounds, per-tenant fair queuing, and automatic fault containment across all Wasm-capable extension categories.",
+      "teep_03_deferral": "DEC-CAND-11: wazero vs build-time WIT lowering and TypeScript QuickJS-ng Wasm snapshot mechanics deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-009",
+        "FEAT-028",
+        "FEAT-054",
+        "FEAT-100",
+        "FEAT-102"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-004",
+        "NFR-017"
+      ],
+      "invariants": "CGO_ENABLED=0 static binary preserved; zero ambient filesystem, clock, env, or raw socket imports exposed to guest modules."
+    },
+    {
+      "id": "ARCH-015",
+      "cap_ids": [
+        "CAP-117"
+      ],
+      "domain_id": "DOM-17",
+      "name": "Deterministic Cross-OS .tpkg Archive Builder & Reproducible Wasm Build Pipeline",
+      "disposition": "REPLACE",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "BLOCKED by RR-001 / DEF-043 ([RUNTIME_VERIFIED]): builtin.NewCatalog embeds 2-3 files vs plugin pack walking 10-15 files, CRLF vs LF line endings diverge on Windows, runtime gzip varies across Go versions, and build-wasm.sh omits aws-bedrock.",
+      "proposed_enabler_role": "Unifies built-in and CLI extension packaging onto one canonical file-inclusion ruleset, POSIX LF normalization, pinned containerized Wasm toolchain (including aws-bedrock), and cross-OS (Linux/macOS/Windows) bit-reproducible digest verification.",
+      "teep_03_deferral": "DEC-CAND-04: Final canonical signature target (Canonical File-Tree Merkle Manifest tanpopo:tpkg-tree:v1 vs deterministic uncompressed/pinned archive bytes) deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-103",
+        "FEAT-106",
+        "FEAT-108",
+        "FEAT-111"
+      ],
+      "supports_nfrs": [
+        "NFR-012",
+        "NFR-017"
+      ],
+      "invariants": "Production private signing keys remain strictly offline/owner-controlled; GATE-REL-07 remains enforced."
+    },
+    {
+      "id": "ARCH-016",
+      "cap_ids": [
+        "CAP-125"
+      ],
+      "domain_id": "DOM-19",
+      "name": "Asynchronous Transactional Webhook & Notification Outbox Dispatcher",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P0-Foundational",
+      "rc9_status": "webhook_event_outbox lacks a pending tenant index on PostgreSQL, runs O(N_orgs) polling, and is inserted twice on quarantine ([SOURCE_VERIFIED], ARCH-OBS-01 Loop #10).",
+      "proposed_enabler_role": "Writes domain notification events atomically inside the originating Control-Plane transaction and fans out deliveries asynchronously across In-App, Email, Telegram, ChatOps, SIEM, and Webhook channels with exponential backoff, jitter, circuit breaking, and dead-letter persistence.",
+      "teep_03_deferral": "Outbox partitioning, worker lease sharding, and deduplication window storage deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-112",
+        "FEAT-113",
+        "FEAT-114",
+        "FEAT-115",
+        "FEAT-150"
+      ],
+      "supports_nfrs": [
+        "NFR-009",
+        "NFR-012"
+      ],
+      "invariants": "Outbound network calls pass through SSRFGuardDialer + BlindHostCredentialBroker; slow notification sinks never block Control-Plane transactions."
+    },
+    {
+      "id": "ARCH-017",
+      "cap_ids": [
+        "CAP-142"
+      ],
+      "domain_id": "DOM-21",
+      "name": "Host blob.Store Zero-Copy Multimodal Splicing & Binary EventStream Framing",
+      "disposition": "IMPROVE",
+      "candidate_priority": "P1-Enterprise-Core",
+      "rc9_status": "blob.Store splices >64 KiB base64 attachments up to 32 MiB in Host RAM, but lacks streaming multipart upload forwarding and AWS binary application/vnd.amazon.eventstream framing ([SOURCE_VERIFIED]).",
+      "proposed_enabler_role": "Streams large multimodal documents, audio, images, and binary vendor event frames through bounded host buffers so Wasm adapters inspect compact metadata references without exceeding their 16 MiB linear memory cap.",
+      "teep_03_deferral": "Streaming chunk-splicing state machine and CRC32 binary frame verifier details deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-009",
+        "FEAT-126",
+        "FEAT-128",
+        "FEAT-129"
+      ],
+      "supports_nfrs": [
+        "NFR-001",
+        "NFR-017"
+      ],
+      "invariants": "Strict per-request memory ceiling and immediate temporary blob zeroization/release on request completion."
+    },
+    {
+      "id": "ARCH-018",
+      "cap_ids": [],
+      "domain_id": "DOM-17",
+      "name": "Host-Owned Declarative Extension UI Renderer & Sandbox Isolation Bridge",
+      "disposition": "ADD",
+      "candidate_priority": "P1-Enterprise-Core",
+      "rc9_status": "ABSENT_IN_RC9: Extensions have no mechanism to contribute settings forms, report views, widgets, or contextual actions in the Web Console.",
+      "proposed_enabler_role": "Parses schema-validated declarative UI descriptors declared in .tpkg manifests and renders them exclusively through host-owned @astryxdesign/core components (forms, tables, metric strips, banners, drawers, row actions) bound to RBAC- and CSRF-enforced host proxy endpoints.",
+      "teep_03_deferral": "DEC-CAND-17: Declarative UI descriptor grammar, data-binding pagination limits, and whether an optional sandboxed-iframe escape hatch is ever permitted are deferred to TEEP-03.",
+      "enables_features": [
+        "FEAT-104",
+        "FEAT-105"
+      ],
+      "supports_nfrs": [
+        "NFR-012",
+        "NFR-013",
+        "NFR-014",
+        "NFR-015"
+      ],
+      "invariants": "Zero arbitrary third-party JavaScript execution in the Admin Console origin; zero external CDN/network requests; preserves Astryx Neutral Light/Dark, WCAG 2.2 AA, and 15-locale fallback parity."
+    }
+  ],
+  "non_functional_requirements": [
+    {
+      "id": "NFR-001",
+      "qas_id": "QAS-ENT-01",
+      "category": "Performance & Throughput",
+      "title": "Clustered Data-Plane Sustained Throughput & Latency Overhead",
+      "rc9_baseline": "56.86 req/s on 2-vCPU Docker PG16 HA ([RUNTIME_VERIFIED], benchmark-evidence.md).",
+      "target_hypothesis": "Sustained >= 10,000 RPS (>= 2,500 RPS per 4-vCPU DP pod) mixed Tier-1/Tier-2 traffic against 20 ms mock upstream with gateway internal overhead p95 < 2.5 ms, p99 < 8.0 ms, and 0.00% internal 5xx ([HYPOTHESIS]).",
+      "linked_items": [
+        "ARCH-002",
+        "ARCH-004",
+        "ARCH-005",
+        "ARCH-007"
+      ]
+    },
+    {
+      "id": "NFR-002",
+      "qas_id": "QAS-ENT-02",
+      "category": "Performance & Throughput",
+      "title": "Single-Node SQLite Standalone Throughput",
+      "rc9_baseline": "109.48 req/s on single-node SQLite ([RUNTIME_VERIFIED], benchmark-evidence.md).",
+      "target_hypothesis": "Sustained >= 1,500 req/s short-context requests on a 2-vCPU / 2 GiB Mode A node with p95 < 15 ms internal queue wait ([HYPOTHESIS]).",
+      "linked_items": [
+        "ARCH-004",
+        "ARCH-005"
+      ]
+    },
+    {
+      "id": "NFR-003",
+      "qas_id": "QAS-ENT-03",
+      "category": "Security & Identity",
+      "title": "Workforce Offboarding & Emergency Revocation Propagation Latency",
+      "rc9_baseline": "SCIM absent; global extension quarantine omits direct Valkey publishChange ([SOURCE_VERIFIED]).",
+      "target_hypothesis": "100% of sessions, PATs, personal OAuth grants, Virtual Keys, and active SSE/MCP streams terminated cluster-wide in p99 < 5.0 s upon SCIM active=false or emergency kill-switch ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-058",
+        "FEAT-062"
+      ]
+    },
+    {
+      "id": "NFR-004",
+      "qas_id": "QAS-ENT-04",
+      "category": "Multi-Tenant Isolation",
+      "title": "Noisy-Neighbor Tail-Latency & Resource Containment",
+      "rc9_baseline": "Per-key rate limits only; no org-aggregate bulkhead or pod shuffle sharding ([SOURCE_VERIFIED]).",
+      "target_hypothesis": "Under a 20,000 RPS single-tenant burst on a 16-pod cluster, >= 99% of sibling organizations observe < 0.5 ms p99 gateway overhead delta and 0.00% dropped requests ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-034",
+        "ARCH-007",
+        "ARCH-014"
+      ]
+    },
+    {
+      "id": "NFR-005",
+      "qas_id": "QAS-ENT-05",
+      "category": "Availability & Identity",
+      "title": "Workload Identity Verification Resilience Under IdP Outage",
+      "rc9_baseline": "Inbound WIF absent in RC9 ([SOURCE_VERIFIED]).",
+      "target_hypothesis": "Stale-while-revalidate JWKS/SPIFFE trust bundle cache sustains 100% verification for known signing keys during a 10-minute upstream IdP 503 outage at p95 < 0.15 ms ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-064"
+      ]
+    },
+    {
+      "id": "NFR-006",
+      "qas_id": "QAS-ENT-06",
+      "category": "Financial Accounting Integrity",
+      "title": "Concurrent Budget Exhaustion Ceiling Enforcement",
+      "rc9_baseline": "Single-row SQL/Lua pre-holds enforce hard caps at low RPS ([RUNTIME_VERIFIED]).",
+      "target_hypothesis": "100 concurrent callers across 8 pods racing against USD 5.00 remaining hard budget produce 0 micro-USD unauthorized pre-hold ceiling overrun ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-037",
+        "ARCH-002",
+        "ARCH-013"
+      ]
+    },
+    {
+      "id": "NFR-007",
+      "qas_id": "QAS-ENT-07",
+      "category": "Privacy & Auditability",
+      "title": "Subject Erasure Completion Without Audit Hash-Chain Corruption",
+      "rc9_baseline": "Per-subject HMAC salt-shredding absent in RC9 ([SOURCE_VERIFIED]).",
+      "target_hypothesis": "Destroying subject_privacy_keys completes in < 15 s across 10,000 historical audit/settlement records while VerifyAuditChain passes 100% with 0 broken RFC 8785 JCS hashes ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-070",
+        "FEAT-135",
+        "ARCH-010"
+      ]
+    },
+    {
+      "id": "NFR-008",
+      "qas_id": "QAS-ENT-08",
+      "category": "Availability & Disaster Recovery",
+      "title": "Regional Data-Plane Survivability During Control-Plane WAN Partition",
+      "rc9_baseline": "Data-plane stale-snapshot fail-closed breaker trips after 10s without Control Plane connectivity (ADR-0006 [RUNTIME_VERIFIED]).",
+      "target_hypothesis": "Configured sovereign regional cells continue serving regional traffic against local PG/Valkey and regional budget envelopes during a 4-hour WAN partition from central Control Plane at >= 99.99% cell availability and 0 cross-region egress ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-138",
+        "ARCH-006",
+        "ARCH-013"
+      ]
+    },
+    {
+      "id": "NFR-009",
+      "qas_id": "QAS-ENT-09",
+      "category": "Multi-Tenant Scalability",
+      "title": "10,000-Organization Control-Plane & Snapshot Scalability (ARCH-OBS-01)",
+      "rc9_baseline": "18 sequential O(N_orgs) RLS loops cause linear query amplification (e.g., 2 + 7 * N_orgs per pod on snapshot refresh [SOURCE_VERIFIED]).",
+      "target_hypothesis": "Global quarantine commit + Valkey broadcast completes in p99 < 50 ms and incremental Snapshot.Refresh completes in p99 < 25 ms at 10,000 organizations ([HYPOTHESIS]).",
+      "linked_items": [
+        "ARCH-006",
+        "ARCH-010",
+        "ARCH-011",
+        "FND-002"
+      ]
+    },
+    {
+      "id": "NFR-010",
+      "qas_id": "QAS-ENT-10",
+      "category": "Operational Reliability",
+      "title": "Zero-Drop Rolling Cluster Upgrades Under Active SSE Streaming",
+      "rc9_baseline": "1 / 575 (0.17%) requests dropped at LB drain boundary during rolling restart ([RUNTIME_VERIFIED], benchmark-evidence.md).",
+      "target_hypothesis": "preStop readiness fencing + active SSE stream draining achieves 0 dropped requests across a 4-pod rolling upgrade under 2,000 RPS active streaming ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-036",
+        "ARCH-012"
+      ]
+    },
+    {
+      "id": "NFR-011",
+      "qas_id": "QAS-ENT-11",
+      "category": "Cryptographic Data Integrity",
+      "title": "PostgreSQL Multi-Node Vault KEK Rotation & Retirement Safety",
+      "rc9_baseline": "handleRetireMasterKEK has a [SOURCE_VERIFIED] suspected PG FORCE RLS 0-count visibility hazard (FND-001).",
+      "target_hypothesis": "Premature KEK retirement deterministically rejects with 409 org_deks_not_rewrapped whenever >= 1 tenant DEK uses that KEK under PG16 FORCE RLS; post-rewrap retirement scrubs retired KEK bytes across all pods in p99 < 5.0 s ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-059",
+        "FND-001"
+      ]
+    },
+    {
+      "id": "NFR-012",
+      "qas_id": "QAS-ENT-12",
+      "category": "Air-Gap & Sovereign Operation",
+      "title": "Zero-External-Egress Air-Gapped Operation",
+      "rc9_baseline": "Console fonts/assets offline-bundled ([RUNTIME_VERIFIED]); .tpbundle import SQLite-only ([SOURCE_VERIFIED]).",
+      "target_hypothesis": "100% of Console, CLI, extension bundle, offline model catalog, and offline advisory workflows execute with 0 outbound DNS/TCP/HTTPS packets when external feeds are disabled ([HYPOTHESIS]).",
+      "linked_items": [
+        "FEAT-018",
+        "FEAT-111",
+        "FEAT-149",
+        "FEAT-150",
+        "ARCH-009",
+        "ARCH-018"
+      ]
+    },
+    {
+      "id": "NFR-013",
+      "qas_id": "STANDING-UI-A11Y",
+      "category": "Accessibility & Design System",
+      "title": "WCAG 2.2 AA Accessibility & Astryx Neutral Visual Parity",
+      "rc9_baseline": "0 axe-core violations and Light/Dark Astryx Neutral tokens verified across 15 RC9 Console screens ([RUNTIME_VERIFIED]).",
+      "target_hypothesis": "Maintain 0 axe-core violations, full keyboard/screen-reader operability, Light/Dark parity, single <h1> per page, zero horizontal page overflow across 320-1920 px, and zero decorative badges across all new core and declarative extension UI views.",
+      "linked_items": [
+        "FEAT-104",
+        "FEAT-121",
+        "ARCH-018"
+      ]
+    },
+    {
+      "id": "NFR-014",
+      "qas_id": "STANDING-UI-I18N",
+      "category": "Internationalization",
+      "title": "15-Language Offline Localization & Zero Raw Enum Leaks",
+      "rc9_baseline": "15 locale bundles shipped, but PG-003 exposed untranslated raw enum strings on FinOps/MCP screens ([RUNTIME_VERIFIED]).",
+      "target_hypothesis": "100% key parity and localized enum/diagnostic rendering across all 15 offline-bundled locales (en, vi, ja, ko, zh-Hans, zh-Hant, de, fr, es, pt-BR, it, nl, pl, tr, id), enforced by AST lint and non-English E2E checks.",
+      "linked_items": [
+        "FEAT-104",
+        "FEAT-122"
+      ]
+    },
+    {
+      "id": "NFR-015",
+      "qas_id": "STANDING-UI-PERF",
+      "category": "Frontend Bundle Budget",
+      "title": "Initial Web Console JavaScript Payload Ceiling",
+      "rc9_baseline": "Initial Console JS bundle <= 250 KB gzip enforced by build gate ([RUNTIME_VERIFIED]).",
+      "target_hypothesis": "Keep initial route-critical JS payload <= 250 KB gzip via route-level code-splitting for heavy workspaces (Topology Graph, What-If Simulator, Playground, Marketplace) and zero external runtime scripts.",
+      "linked_items": [
+        "FEAT-121",
+        "FEAT-139",
+        "FEAT-140",
+        "ARCH-018"
+      ]
+    },
+    {
+      "id": "NFR-016",
+      "qas_id": "STANDING-ASSURANCE",
+      "category": "Continuous Security & Protocol Assurance",
+      "title": "Fuzzing, Dual-Backend Parity & Unsigned Build E2E Coverage",
+      "rc9_baseline": ">=4h fuzzing unexecuted (COND-PO-01); CI E2E injected test signer masking unsigned Day-0 403 ([SOURCE_VERIFIED]).",
+      "target_hypothesis": "Enforce scheduled >=4h Wasm/SSE/protocol fuzzing, bidirectional OpenAPI route parity, SQLite <-> PG16 E2E parity, and dedicated unsigned-binary Day-0 onboarding E2E in CI.",
+      "linked_items": [
+        "FND-006",
+        "FND-010",
+        "FND-020"
+      ]
+    },
+    {
+      "id": "NFR-017",
+      "qas_id": "STANDING-PORTABILITY",
+      "category": "Binary Portability & Supply Chain",
+      "title": "CGO_ENABLED=0 Static Single-Binary & Cross-Platform Parity",
+      "rc9_baseline": "CGO_ENABLED=0 Go build verified across Linux/macOS/Windows ([RUNTIME_VERIFIED]); RR-001 blocks cross-OS .tpkg digest parity.",
+      "target_hypothesis": "Preserve CGO_ENABLED=0 single-binary deployment with zero mandatory external daemons in Mode A and identical .tpkg package digests across Linux, macOS, and Windows.",
+      "linked_items": [
+        "ARCH-014",
+        "ARCH-015",
+        "FND-003"
+      ]
+    },
+    {
+      "id": "NFR-018",
+      "qas_id": "STANDING-LICENSE",
+      "category": "Licensing & IP Cleanliness",
+      "title": "Permissive Open-Source Dependency Hygiene",
+      "rc9_baseline": "Apache-2.0 repository license enforced by scripts/ci/check.go ([RUNTIME_VERIFIED]).",
+      "target_hypothesis": "100% of compiled runtime and Console dependencies restricted to permissive licenses compatible with Apache-2.0 (Apache-2.0, MIT, BSD-2/3-Clause, ISC; zero GPL/AGPL/SSPL/ELv2).",
+      "linked_items": [
+        "DEC-CAND-01"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,459 @@
+{
+  "foundational_backlog": [
+    {
+      "id": "FND-001",
+      "priority": "P0-Blocker",
+      "verification_status": "SOURCE_VERIFIED \u2014 SUSPECTED RUNTIME RISK (REQUIRES NON-DESTRUCTIVE REPRODUCTION)",
+      "category": "Cryptographic Data Integrity (Vault & PostgreSQL RLS)",
+      "title": "PostgreSQL handleRetireMasterKEK FORCE RLS Visibility Hazard & TANPOPO_MASTER_KEY_PREVIOUS Key-ID Mismatch",
+      "legacy_refs": [
+        "DEF-072",
+        "CAP-067"
+      ],
+      "evidence": "internal/admin/http/ops_lifecycle.go:169-208; db/migrations/postgres/0001_full_schema_rls_partitions.sql:1363-1367; cmd/tanpopo/serve.go:359.",
+      "description": "Static inspection indicates handleRetireMasterKEK runs SELECT COUNT(*) FROM org_encryption_keys WHERE kek_key_id = ? inside withOperatorReadTx (current_org_id=''). Because org_encryption_keys enforces FORCE RLS without an operator read clause, PostgreSQL is expected to return 0 even when active tenant DEKs remain wrapped under that KEK, risking premature bypass of 409 org_deks_not_rewrapped. Additionally, serve.go:359 assigns synthetic ID 'kek_prev_0' to TANPOPO_MASTER_KEY_PREVIOUS entries (mismatching AAD-bound original KEK IDs) and RetireKEK scrubs RAM only on the local Control-Plane node.",
+      "required_action": "1) Write a non-destructive multi-org PostgreSQL 16 integration test reproducing handleRetireMasterKEK with wrapped org_encryption_keys rows under FORCE RLS. 2) Remediate via a narrowly scoped RLS-safe KEK reference count + cluster-wide KEY_RETIRE epoch scrub + <id>=<base64> previous-key parsing before production PostgreSQL KEK retirement is used.",
+      "linked_features_or_enablers": [
+        "FEAT-059",
+        "NFR-011"
+      ]
+    },
+    {
+      "id": "FND-002",
+      "priority": "P0-Blocker",
+      "verification_status": "SOURCE_VERIFIED",
+      "category": "Multi-Tenant Control-Plane & Snapshot Scalability",
+      "title": "ARCH-OBS-01: 18 Cross-Organization O(N_orgs) RLS Loops & 7 Missing PostgreSQL Indexes",
+      "legacy_refs": [
+        "ARCH-OBS-01",
+        "DEF-081",
+        "CAP-048",
+        "CAP-068",
+        "CAP-078",
+        "CAP-106"
+      ],
+      "evidence": "snapshot/manager.go:857 (2+7*N_orgs per pod), auth/local.go:815,1388 (2*N_orgs), killswitch/registry.go, installer/lifecycle.go, audit/logger.go:237, 0001_full_schema_rls_partitions.sql.",
+      "description": "Commit cd5e5dc5 restored correctness for 1-5 organizations by iterating SetOrgRLSTx across every organization, leaving 18 O(N_orgs) query loops, 7 unindexed PostgreSQL FK/filter predicates, and O(M_partitions) lock-held audit tip scans.",
+      "required_action": "Implement incremental ConfigSnapshot delta sync (ARCH-006), audit_chain_heads + audit_partition_seals (ARCH-010), the 7 PostgreSQL composite/partial indexes + scoped cross-org lookup views (ARCH-011), and SYSTEM operator principal decoupling (DEC-CAND-12).",
+      "linked_features_or_enablers": [
+        "ARCH-006",
+        "ARCH-010",
+        "ARCH-011",
+        "FEAT-060",
+        "FEAT-070",
+        "NFR-009"
+      ]
+    },
+    {
+      "id": "FND-003",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED",
+      "category": "Release Packaging & Supply-Chain Provenance",
+      "title": "RR-001 / DEF-043: Canonical .tpkg Digest Non-Reproducibility Across Builtin Catalog, CLI Packer & OS Platforms",
+      "legacy_refs": [
+        "RR-001",
+        "DEF-043",
+        "GATE-REL-07",
+        "CAP-117"
+      ],
+      "evidence": "extensions/official/assets.go:11 vs internal/extension/testharness/pack.go:119; catalog.go:189-199; extensions/official/build-wasm.sh; signing ref 7503607c.",
+      "description": "Built-in catalog embeds 2-3 files while CLI plugin pack archives 10-15 files; Windows checkouts embed CRLF vs LF; runtime gzip.BestCompression depends on Go stdlib flate details; and build-wasm.sh uses unpinned host clang while omitting aws-bedrock.",
+      "required_action": "Unify built-in and CLI packaging onto one deterministic packer, enforce LF normalization, container-pin Wasm builds including aws-bedrock, evaluate Merkle vs archive signing in TEEP-03 (DEC-CAND-04), and verify 3-OS SHA-256 parity prior to owner signing ceremony.",
+      "linked_features_or_enablers": [
+        "ARCH-015",
+        "FEAT-103",
+        "FEAT-108",
+        "NFR-017"
+      ]
+    },
+    {
+      "id": "FND-004",
+      "priority": "P0-Blocker",
+      "verification_status": "SOURCE_VERIFIED",
+      "category": "Unwired Production Subsystems",
+      "title": "Nine Implemented Subsystems / Contracts Unwired or Uncalled in cmd/tanpopo/serve.go & Ingress",
+      "legacy_refs": [
+        "DEF-004",
+        "DEF-041",
+        "DEF-078",
+        "COND-PO-02"
+      ],
+      "evidence": "cmd/tanpopo/serve.go:346,1008-1028; tracer.go:1160; merge.go:226; routes.go:264; executor.go:61.",
+      "description": "Static call-graph audit confirmed 9 unwired/uncalled paths in RC9 production wiring: (1) finops/rollup.NewAggregator, (2) security/vault/kms (contradicting README.md:34), (3) telemetry/ttl.NewCleaner, (4) otel.Pipeline.CreateDebugCaptureSession, (5) ServerConfig.TokenVerifier (nil -> remote CLI 401), (6) ServerConfig.OIDC (nil), (7) broker.NewWorkloadIdentityExchanger, (8) EffectivePolicy.GuardrailHooks & non-provider ExtensionKinds, and (9) route_policies.request_timeout_ms / X-Tanpopo-Timeout-Ms.",
+      "required_action": "Wire each subsystem cleanly into serve.go / ingress or replace per approved TEEP-02B/03 design, backed by end-to-end integration tests against real tanpopo serve processes (never httptest-only stubs).",
+      "linked_features_or_enablers": [
+        "ARCH-003",
+        "FEAT-013",
+        "FEAT-033",
+        "FEAT-051",
+        "FEAT-054",
+        "FEAT-059",
+        "FEAT-061",
+        "FEAT-065",
+        "FEAT-100",
+        "FEAT-134"
+      ]
+    },
+    {
+      "id": "FND-005",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED & SOURCE_VERIFIED",
+      "category": "FinOps Accounting & Rollup Integrity",
+      "title": "DEF-078: Unwired usage_rollups_hourly, Chargeback Closed-Interval Skew & Cross-Midnight Stream Attribution",
+      "legacy_refs": [
+        "DEF-078",
+        "CAP-040",
+        "CAP-042"
+      ],
+      "evidence": "internal/finops/rollup/aggregator.go:49; internal/admin/http/finops.go:853,1118; internal/finops/ledger/service.go:1257.",
+      "description": "usage_rollups_hourly has 0 rows in production; Chargeback uses closed <= toMs (and lifetime UI default) whereas Budget ledgers use half-open < period_end_ms; DAILY/MONTHLY budgets lack an automatic rollover worker; and cross-midnight SSE streams debit the reservation period while stamping settled_at_ms in the new period.",
+      "required_action": "Wire incremental rollups (ARCH-003), standardize half-open [from, to) windows, persist billing_period_ref_ms from hold creation, and run automated period rollover + custom date-range UI (FEAT-039).",
+      "linked_features_or_enablers": [
+        "ARCH-003",
+        "FEAT-039",
+        "FEAT-041"
+      ]
+    },
+    {
+      "id": "FND-006",
+      "priority": "P0-Blocker",
+      "verification_status": "SOURCE_VERIFIED",
+      "category": "API & Console Contract Drift",
+      "title": "Four Unimplemented OpenAPI Admin Routes (HTTP 404) & 17 Admin Operations Missing Web Console UI",
+      "legacy_refs": [
+        "PG-004",
+        "PG-010",
+        "CAP-109",
+        "CAP-131"
+      ],
+      "evidence": "openapi/admin-v1.yaml:4145,4157,4186,4331 vs internal/admin/http/server.go:477-611; openapi_contract_test.go:258; web/console/src/api/client.ts.",
+      "description": "GET /admin/v1/openapi.json, POST /admin/v1/diagnostics/{smoke-test,support-bundle}, and PUT /admin/v1/settings/retention are documented in admin-v1.yaml (112 ops) but absent in server.go (108 ops -> 404) because openapi_contract_test.go checks only server subset of spec. Meanwhile 17 Admin operations lack Console UI and 2 MCP grant client helpers are dead code.",
+      "required_action": "Implement the 4 missing handlers, enforce a bidirectional spec == router CI contract test, and close all 17 Console UI lifecycle gaps.",
+      "linked_features_or_enablers": [
+        "FEAT-051",
+        "FEAT-099",
+        "FEAT-120",
+        "NFR-016"
+      ]
+    },
+    {
+      "id": "FND-007",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED & SOURCE_VERIFIED",
+      "category": "Tenant Offboarding & Cryptographic Erasure",
+      "title": "DEF-041: Crypto-Shred Partial-State Window, Bootstrap org_1 FK Deadlock & Cold-Backup Static-KEK Exposure",
+      "legacy_refs": [
+        "DEF-041",
+        "CAP-067",
+        "CAP-082"
+      ],
+      "evidence": "internal/admin/http/tenancy.go:1350-1490; bootstrap/token.go:518.",
+      "description": "If Phase 3 cleanup fails after ShredOrgDEK commits, tenant Virtual Keys and browser sessions remain active in RAM until manual retry; deleting bootstrap org_1 fails on operator FK references; PostgreSQL postShredHook is a no-op Ping; and static env KEK allows pre-shred cold backups to unwrap shredded DEKs.",
+      "required_action": "Fence all org Virtual Keys, sessions, and active streams atomically upon entering DELETING state, run an idempotent background erasure finalizer, decouple SYSTEM operators from org_1, and wire external Cloud KMS / Vault Transit KEK providers.",
+      "linked_features_or_enablers": [
+        "FEAT-059",
+        "FEAT-060",
+        "FEAT-074"
+      ]
+    },
+    {
+      "id": "FND-008",
+      "priority": "P0-Blocker",
+      "verification_status": "SOURCE_VERIFIED",
+      "category": "Emergency Containment Atomicity",
+      "title": "Non-Atomic Two-Transaction Global Extension Quarantine & Missing Direct Valkey Broadcast",
+      "legacy_refs": [
+        "ARCH-OBS-01",
+        "CAP-066"
+      ],
+      "evidence": "internal/admin/http/extensions.go:817-864.",
+      "description": "handleQuarantineExtension commits killSwitch.Trigger (TX1) and installer.Quarantine (TX2) in separate transactions, acquires advisory locks in inconsistent order, and omits direct s.publishChange Valkey notification (delaying Data-Plane quarantine up to the 5s DB poll interval).",
+      "required_action": "Collapse global quarantine + kill-switch + config_changelog bump + outbox insert into a single atomic transaction with canonical lock ordering and immediate Valkey Pub/Sub broadcast.",
+      "linked_features_or_enablers": [
+        "FEAT-058",
+        "NFR-003",
+        "NFR-009"
+      ]
+    },
+    {
+      "id": "FND-009",
+      "priority": "P0-Blocker",
+      "verification_status": "SOURCE_VERIFIED",
+      "category": "Notifications & RBAC",
+      "title": "Duplicate Quarantine Webhook Outbox Insertion, ORG_OWNER Webhook 403 & Missing Pending Index",
+      "legacy_refs": [
+        "ARCH-OBS-01",
+        "CAP-125"
+      ],
+      "evidence": "cmd/tanpopo/serve.go:1046; internal/admin/http/ops.go; 0001_full_schema_rls_partitions.sql.",
+      "description": "Extension quarantine records duplicate webhook outbox rows, ORG_OWNER is denied webhook subscription management despite owning tenant integrations, and webhook_event_outbox lacks a partial index on undispatched rows.",
+      "required_action": "Deduplicate outbox emission in ARCH-016, add partial pending index in ARCH-011, and restore ORG_OWNER webhook/notification management permissions in FEAT-114.",
+      "linked_features_or_enablers": [
+        "ARCH-011",
+        "ARCH-016",
+        "FEAT-114"
+      ]
+    },
+    {
+      "id": "FND-010",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED & SOURCE_VERIFIED",
+      "category": "Day-0 Onboarding & Trust Policy",
+      "title": "DEF-049 & Unsigned Build 403 org_trust_policy_denied Day-0 Dead-End",
+      "legacy_refs": [
+        "DEF-049",
+        "CAP-120",
+        "CAP-130"
+      ],
+      "evidence": "SetupPage.tsx; internal/admin/http/connections.go; web/console/e2e/signer.",
+      "description": "Fresh /setup receives available_adapters: [] (skipping guided setup and FirstKeyDialog), and unsigned/source builds reject built-in @tanpopo/* connections with 403 org_trust_policy_denied while providing zero Console UI or CLI command to configure org_extension_policies (masked in CI by test signer injection).",
+      "required_action": "Populate /setup from built-in catalog with automatic stage/enable, expose org_extension_policies in Console & CLI (FEAT-108), resolve RR-001 signing (FND-003), and add an unsigned-binary E2E test slice (FND-020).",
+      "linked_features_or_enablers": [
+        "FEAT-108",
+        "FEAT-119",
+        "FND-003",
+        "FND-020"
+      ]
+    },
+    {
+      "id": "FND-011",
+      "priority": "P1-High",
+      "verification_status": "RUNTIME_VERIFIED (Scoped Fix in RC8) / Prevention Open",
+      "category": "Database Schema Hygiene",
+      "title": "DEF-086 Follow-Through: Automated SQLite <-> PostgreSQL Column-Width & Constraint Parity Gate",
+      "legacy_refs": [
+        "DEF-086",
+        "CAP-108"
+      ],
+      "evidence": "db/migrations/postgres/0006_widen_budget_ledger_ids.sql.",
+      "description": "RC8 widened budget_ledgers ID columns after PG VARCHAR(64) truncation, but no automated CI check prevents new VARCHAR/type mismatches across remaining and future tables.",
+      "required_action": "Add automated dual-engine schema catalog comparison in scripts/ci/check.go (ARCH-012).",
+      "linked_features_or_enablers": [
+        "ARCH-012"
+      ]
+    },
+    {
+      "id": "FND-012",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED & SOURCE_VERIFIED",
+      "category": "CLI & Headless Authentication",
+      "title": "DEF-004: Remote CLI Commands Fail HTTP 401 Because ServerConfig.TokenVerifier Is Nil",
+      "legacy_refs": [
+        "DEF-004",
+        "CAP-073",
+        "CAP-134"
+      ],
+      "evidence": "cmd/tanpopo/serve.go:1008; internal/cli/remote.",
+      "description": "All 11 remote CLI commands using TANPOPO_ADMIN_TOKEN fail against a real running server because TokenVerifier is left nil in serve.go (unit tests only exercised mocked httptest servers).",
+      "required_action": "Implement scoped Admin Service Accounts & PATs (FEAT-065), wire TokenVerifier in serve.go, and run CLI E2E tests against live tanpopo serve binaries.",
+      "linked_features_or_enablers": [
+        "FEAT-065",
+        "FEAT-123",
+        "FND-020"
+      ]
+    },
+    {
+      "id": "FND-013",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED (Partial) & SOURCE_VERIFIED",
+      "category": "Native Ingress & Provider Adapters",
+      "title": "DEF-048 & Official Adapter Defects (Bedrock Multimodal/Probe/Slash/SigV4, Native Query/GET, Ollama :cloud)",
+      "legacy_refs": [
+        "DEF-048",
+        "CAP-002",
+        "CAP-004",
+        "CAP-009",
+        "CAP-012"
+      ],
+      "evidence": "native/handler.go:300,1798; native/inspector.go:157; aws-bedrock/src/adapter.c:36-59,104,654; admin/http/connections.go:798,808.",
+      "description": "Split --role data-plane native E2E is unverified; native passthrough blocks ?api-version= and GET /v1/models; inspector.go:157 prepends '/' while aws-bedrock adapter.c:654 checks 'model/' without '/'; aws-bedrock drops multimodal blocks and connections.go blocks AWS_SIGV4 creation; Gemini lacks unified /v1/embeddings; Ollama allows *:cloud remote tags under ON_PREM.",
+      "required_action": "Fix all adapter and native-ingress defects and verify split control-plane/data-plane E2E across all bundled dialects.",
+      "linked_features_or_enablers": [
+        "FEAT-002",
+        "FEAT-004",
+        "FEAT-009",
+        "FEAT-013"
+      ]
+    },
+    {
+      "id": "FND-014",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED & SOURCE_VERIFIED",
+      "category": "Cluster Health & Degraded-State Visibility",
+      "title": "DEF-072 / PG-007 / RR-010: False-Green Cluster Status When Data-Plane Nodes Disappear or Valkey Degrades",
+      "legacy_refs": [
+        "DEF-072",
+        "PG-007",
+        "RR-010",
+        "COND-PO-03",
+        "CAP-104",
+        "CAP-110"
+      ],
+      "evidence": "cmd/tanpopo/serve.go:547; OperationsPage.tsx.",
+      "description": "Graceful DP shutdown deletes its cluster_nodes row (leaving 0-DP split clusters reporting Ready/OK), and Valkey outages degrading into node-local memory fallback are hidden from Operations Health.",
+      "required_action": "Retain STOPPED/STALE node tombstones, enforce minimum DP quorum checks in split topologies, surface Valkey/OTLP degradation banners in OperationsPage (FEAT-095), and execute live Valkey failover reconciliation drills (ARCH-013).",
+      "linked_features_or_enablers": [
+        "FEAT-095",
+        "ARCH-013"
+      ]
+    },
+    {
+      "id": "FND-015",
+      "priority": "P1-High",
+      "verification_status": "RUNTIME_VERIFIED (QA-005 Open PARTIALs)",
+      "category": "QA-005 Preserved Partial Defects",
+      "title": "Complete Closure of Remaining 8 Open PARTIAL QA-005 Defects (DEF-020, 027, 028, 036, 044, 050, 060, 077)",
+      "legacy_refs": [
+        "DEF-020",
+        "DEF-027",
+        "DEF-028",
+        "DEF-036",
+        "DEF-044",
+        "DEF-050",
+        "DEF-060",
+        "DEF-077"
+      ],
+      "evidence": "origin/qa/qa-005-final-rc9 (5ee28dc0) RC9 assurance report & DEF-001..086 overlay.",
+      "description": "Preserves all remaining partial QA verification scopes: MCP HITL badge decrement (DEF-020), persisted route-target identity & live 3-provider failover (DEF-027), correlated Explain == live VKey inference (DEF-028), concurrent extension 409 & SemVer upgrade (DEF-036), graceful extension disable & prerequisite guidance (DEF-044), primary vs fallback capability warnings (DEF-050), live v1->v2->Rollback execution (DEF-060), and non-zero spend disambiguation across duplicate VKey names (DEF-077).",
+      "required_action": "Close each partial defect alongside its corresponding Console/API feature and add dedicated regression assertions in QA verification suites.",
+      "linked_features_or_enablers": [
+        "FEAT-029",
+        "FEAT-041",
+        "FEAT-107",
+        "FEAT-121"
+      ]
+    },
+    {
+      "id": "FND-016",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED",
+      "category": "Diagnostics & SSRF Observability",
+      "title": "PG-013 & RR-022: Silent HTTP 200 {valid:false} Provider Probe Failures & Missing SSRF Rejection Telemetry",
+      "legacy_refs": [
+        "PG-013",
+        "RR-022",
+        "CAP-011",
+        "CAP-065"
+      ],
+      "evidence": "ProvidersPage.tsx; connection_health.go; ssrf_guard.go.",
+      "description": "Failed connection probes return HTTP 200 {valid:false} with zero error banner/toast in ProvidersPage, and socket-level SSRFGuard rejections emit no structured operator telemetry.",
+      "required_action": "Return sanitized CheckDiagnosticCode + remediation guidance in probe responses, render explicit error banners in ProvidersPage (FEAT-012), and emit SSRF rejection metrics/audit events (ARCH-009).",
+      "linked_features_or_enablers": [
+        "FEAT-012",
+        "ARCH-009"
+      ]
+    },
+    {
+      "id": "FND-017",
+      "priority": "P0-Blocker",
+      "verification_status": "RUNTIME_VERIFIED",
+      "category": "Web Console & CLI Product Gaps",
+      "title": "Complete Closure of Carbon Product Gaps PG-001 through PG-014",
+      "legacy_refs": [
+        "PG-001",
+        "PG-002",
+        "PG-003",
+        "PG-004",
+        "PG-005",
+        "PG-006",
+        "PG-007",
+        "PG-008",
+        "PG-009",
+        "PG-010",
+        "PG-011",
+        "PG-012",
+        "PG-013",
+        "PG-014"
+      ],
+      "evidence": "origin/qa/qa-005-final-rc9 Carbon product-gap handoff.",
+      "description": "Tracks all 14 Carbon UX/CLI product gaps verbatim without waiver: preselected DEVELOPER role (PG-001), stale Active label on expired Playground keys (PG-002), untranslated vi FinOps/MCP enums (PG-003), missing Logical Model & MCP server delete/retire (PG-004), scope switcher reset on F5 (PG-005), unrevoked Playground key on End Session (PG-006), hidden Valkey degradation (PG-007), undocumented TANPOPO_OTLP_ALLOWED_CIDRS (PG-008) & TANPOPO_METRICS_SCRAPE_TOKEN (PG-009), missing SYSTEM audit selector (PG-010), TEAM_ADMIN member scope leak on filter clear (PG-011), preselected PROVIDER VKey plane (PG-012), silent failed probe (PG-013), and 403 empty-state/CTA leak on SecurityPage (PG-014).",
+      "required_action": "Verify 14/14 Carbon product gaps resolved with automated Playwright/CLI assertions.",
+      "linked_features_or_enablers": [
+        "FEAT-012",
+        "FEAT-021",
+        "FEAT-049",
+        "FEAT-050",
+        "FEAT-066",
+        "FEAT-067",
+        "FEAT-070",
+        "FEAT-077",
+        "FEAT-095",
+        "FEAT-120",
+        "FEAT-121",
+        "FEAT-122",
+        "FEAT-123",
+        "FEAT-124"
+      ]
+    },
+    {
+      "id": "FND-018",
+      "priority": "P1-High",
+      "verification_status": "UNVERIFIED / RESIDUAL RISK",
+      "category": "Platform, Browser, DR & Security Assurance",
+      "title": "Preserved Residual Risk & PO Condition Backlog (RR-002..RR-029, COND-PO-01..05)",
+      "legacy_refs": [
+        "RR-002",
+        "RR-003",
+        "RR-005",
+        "RR-006",
+        "RR-011",
+        "RR-015",
+        "RR-018",
+        "RR-023",
+        "RR-029",
+        "COND-PO-01",
+        "COND-PO-04",
+        "COND-PO-05"
+      ],
+      "evidence": "docs/reviews/unresolved-gaps.md & QA-005 residual-risk register.",
+      "description": "Preserves all historical platform/assurance residual risks: opt-in live provider smoke suite when authorized (RR-002), local CI attestation verification (RR-003), native macOS/Windows/ARM64 runtime & non-Linux Tier-3 sandbox parity (RR-005/023/029), Firefox/Safari WebKit E2E & third-party MCP SDK matrix & external black-box pentest (RR-011/COND-PO-04), PostgreSQL PITR + Vault envelope restore drill (RR-015), multi-target quarantine failover precedence (RR-018), Lighthouse CLI check (COND-PO-01), and RC9 open PG integration slices (REVOKED principal quarantine, positive 2-operator Four-Eyes on PG, live PG webhook HMAC delivery, standalone SQLite binary smoke).",
+      "required_action": "Maintain explicit release-gate tracking across TEEP-03/04 verification campaigns without silent waiver; keep GATE-REL-07 blocked until human PO sign-off.",
+      "linked_features_or_enablers": [
+        "FEAT-068",
+        "FEAT-096",
+        "FEAT-101",
+        "FEAT-114",
+        "NFR-016",
+        "NFR-017"
+      ]
+    },
+    {
+      "id": "FND-019",
+      "priority": "P1-High",
+      "verification_status": "SOURCE_VERIFIED",
+      "category": "Configuration & Frontend Asset Hygiene",
+      "title": "Ghost TANPOPO_ADMIN_LISTEN_ADDR Doctor Check Alignment, Unused @fontsource-variable/inter Removal & Stale Governance Copy",
+      "legacy_refs": [
+        "CAP-136",
+        "OQ-14",
+        "OQ-15"
+      ],
+      "evidence": "internal/ops/doctor/doctor.go:154; web/console/package.json; AGENTS.md.",
+      "description": "doctor.go:154 warns about TANPOPO_ADMIN_LISTEN_ADDR which serve.go never reads; web/console/package.json carries an unused @fontsource-variable/inter dependency; and AGENTS.md contains conflicting Astryx 'No <div>' vs token-bridged layout guidance.",
+      "required_action": "Wire TANPOPO_ADMIN_LISTEN_ADDR / --admin-listen if FEAT-098 (DEC-CAND-14) is approved (or remove the dead check if declined), drop unused font package, and align developer style docs.",
+      "linked_features_or_enablers": [
+        "FEAT-098",
+        "NFR-015"
+      ]
+    },
+    {
+      "id": "FND-020",
+      "priority": "P0-Blocker",
+      "verification_status": "SOURCE_VERIFIED",
+      "category": "CI Quality Gates",
+      "title": "Continuous >=4h Fuzzing Harness, Real-Process CLI E2E & Unsigned-Binary Console E2E Gate",
+      "legacy_refs": [
+        "CAP-155",
+        "COND-PO-01"
+      ],
+      "evidence": "scripts/ci/check.go; web/console/e2e/console_e2e.py.",
+      "description": "Continuous >=4h protocol/Wasm/JCS fuzzing has not been executed, CLI tests used in-process httptest mocks (missing DEF-004), mobile 375px checks ran against an unpopulated org, and console_e2e.py injected test signing keys that hid unsigned Day-0 403 failures.",
+      "required_action": "Add scheduled >=4h fuzzing jobs, real-subprocess CLI E2E, populated-org non-English 320px/375px Playwright checks, and a mandatory unsigned-binary Day-0 quickstart E2E gate.",
+      "linked_features_or_enablers": [
+        "NFR-013",
+        "NFR-014",
+        "NFR-016"
+      ]
+    }
+  ]
+}

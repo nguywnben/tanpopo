@@ -1,0 +1,306 @@
+{
+  "decisions": [
+    {
+      "id": "DEC-CAND-01",
+      "source_oq": "OQ-01",
+      "gate": "TEEP-02B (Founder Scope & Licensing Gate)",
+      "title": "Open-Source (Apache-2.0) vs Commercial Enterprise Licensing Boundary",
+      "provisional_direction": "Apache-2.0 open-source enterprise capabilities (Coordinator provisional direction; open for Founder decision at TEEP-02B).",
+      "options": "Option A: 100% Apache-2.0 across Core and Enterprise governance (SSO/SCIM, ABAC, FinOps, Multi-Instance Fleet, Air-Gap bundles), monetizing managed cloud/support/certified assurance later. Option B: Open-core split keeping single-org gateway/RBAC/FinOps/SDK Apache-2.0 while gating multi-subsidiary enterprises umbrella, SAML/SCIM, compliance packs, or multi-instance fleet hub.",
+      "trade_offs": "Option A maximizes enterprise adoption and differentiates sharply against paywalled competitors (LiteLLM, Bifrost, Kong); Option B preserves proprietary license leverage for large multi-subsidiary deals at the cost of community friction and split-build testing.",
+      "impacted_items": [
+        "FEAT-061",
+        "FEAT-062",
+        "FEAT-066",
+        "FEAT-072",
+        "FEAT-138",
+        "FEAT-151",
+        "NFR-018"
+      ]
+    },
+    {
+      "id": "DEC-CAND-02",
+      "source_oq": "OQ-02",
+      "gate": "TEEP-02B (Founder Scope Gate)",
+      "title": "v1.0.0 Release Scope Ambition vs Staged Multi-Release Horizon",
+      "provisional_direction": "Comprehensive Enterprise v1.0.0 ambition with internally phased implementation (open for Founder scenario selection SCEN-A / SCEN-B / SCEN-C / SCEN-D at TEEP-02B).",
+      "options": "SCEN-A: Comprehensive Enterprise v1.0.0 (P0+P1+P2 across 5 internal milestones). SCEN-B: Coherent Enterprise Platform v1.0.0 (P0+P1+flagship differentiators) + v1.1/v1.2 Horizon. SCEN-C: Progressive Foundation v1.0.0 + Enterprise v1.1 + Agentic/Fleet v1.2. SCEN-D: Lean Core v1.0.0 + Out-of-Band .tpkg Extension Waves.",
+      "trade_offs": "SCEN-A delivers maximum launch impact but carries the largest pre-1.0 QA/pentest surface; SCEN-B/D capture core enterprise readiness while isolating optional connectors/studios into faster post-1.0 or extension waves.",
+      "impacted_items": [
+        "ALL FEAT-001..153"
+      ]
+    },
+    {
+      "id": "DEC-CAND-03",
+      "source_oq": "OQ-03",
+      "gate": "TEEP-02B (Product Model) -> TEEP-03 (Architecture)",
+      "title": "Curated Public Marketplace Hosting & Distribution Topology",
+      "provisional_direction": "Curated public and governed private distribution without SaaS runtime lock-in.",
+      "options": "Option A: Git + CI OIDC moderation + static signed index + OCI 1.1 registry artifacts (zero stateful SaaS SPOF). Option B: Dynamic hosted Marketplace web service + publisher accounts + server-side build farm.",
+      "trade_offs": "Option A has near-zero operating cost, high auditability, and easy air-gap mirroring (avoiding Smithery-style proxy shutdown risk); Option B offers richer dynamic publisher analytics at higher ongoing SaaS ops/security cost.",
+      "impacted_items": [
+        "FEAT-105",
+        "FEAT-106",
+        "FEAT-109",
+        "FEAT-110"
+      ]
+    },
+    {
+      "id": "DEC-CAND-04",
+      "source_oq": "OQ-04",
+      "gate": "TEEP-03 (Architecture Evaluation)",
+      "title": "Canonical .tpkg Signature Target & Reproducibility Format (RR-001)",
+      "provisional_direction": "Defer final signing format selection to TEEP-03 while mandating cross-OS deterministic verification.",
+      "options": "Option A: Canonical File-Tree Merkle Manifest (tanpopo:tpkg-tree:v1) decoupled from gzip/flate bitstreams. Option B: Pinned deterministic archive byte signing.",
+      "trade_offs": "Option A survives Go stdlib compression changes across compiler upgrades; Option B requires zero verifier format changes if archive bytes are frozen.",
+      "impacted_items": [
+        "ARCH-015",
+        "FND-003",
+        "FEAT-103",
+        "FEAT-108"
+      ]
+    },
+    {
+      "id": "DEC-CAND-05",
+      "source_oq": "OQ-05",
+      "gate": "TEEP-02B (API Surface) -> TEEP-03 (Protocol Spec)",
+      "title": "Legacy Custom /a2a/tasks Surface Disposition vs Clean LF A2A v1.0.1 Cutover",
+      "provisional_direction": "Native multi-protocol interoperability on standard LF A2A v1.0.1 before v1.0.0 freeze.",
+      "options": "Option A: Clean replacement of pre-standard /a2a/tasks and /.well-known/agent.json with LF A2A v1.0.1 pre-v1.0.0. Option B: Serve LF A2A v1.0.1 as primary alongside a deprecated /a2a/tasks compatibility alias.",
+      "trade_offs": "Because v1.0.0 is not yet released, Option A avoids carrying legacy protocol debt into GA; Option B eases transition for internal RC9 test scripts.",
+      "impacted_items": [
+        "FEAT-083"
+      ]
+    },
+    {
+      "id": "DEC-CAND-06",
+      "source_oq": "OQ-06",
+      "gate": "TEEP-02B (Privacy Default) -> TEEP-03 (Storage Design)",
+      "title": "Stateful /v1/responses (previous_response_id) & /v1/conversations Default Posture",
+      "provisional_direction": "Zero-prompt-persistence default with explicit opt-in encrypted thread state.",
+      "options": "Option A: Reject stateful IDs by default (400 capability_not_supported) unless project policy explicitly enables TTL-bounded Project-DEK encrypted gateway thread hydration. Option B: Connection-pinned upstream passthrough only.",
+      "trade_offs": "Option A preserves ZDR defaults and cross-provider failover when opted in; Option B avoids gateway state storage but breaks failover and ZDR.",
+      "impacted_items": [
+        "FEAT-003",
+        "FEAT-130"
+      ]
+    },
+    {
+      "id": "DEC-CAND-07",
+      "source_oq": "OQ-07",
+      "gate": "TEEP-02B (Scope) -> TEEP-03 (Transport Architecture)",
+      "title": "Realtime Voice/Audio Gateway Scope (Ephemeral Token Broker vs Full WebSocket BiDi Proxy)",
+      "provisional_direction": "Defer transport architecture and staged rollout choice to TEEP-02B/TEEP-03.",
+      "options": "Option A: Constrained Ephemeral Session Token Broker only (browser/mobile WebRTC connects directly with pre-held budget). Option B: Ephemeral Token Broker + Full Governed WebSocket BiDi Proxy (inline audio/transcript DLP and strict VPC egress).",
+      "trade_offs": "Option A delivers lowest audio latency and simpler gateway statelessness; Option B is required by enterprises prohibiting direct client-to-vendor egress.",
+      "impacted_items": [
+        "FEAT-127"
+      ]
+    },
+    {
+      "id": "DEC-CAND-08",
+      "source_oq": "OQ-08",
+      "gate": "TEEP-03 (Monetary Architecture Evaluation)",
+      "title": "High-Precision Rate-Card Unit Scale & Sub-Micro-USD Settlement Rounding",
+      "provisional_direction": "Exact integer financial accounting; defer final fixed-point scale and sub-micro carry rules to TEEP-03.",
+      "options": "Option A: int64 nano_usd_per_1m_tokens (10^-15 USD/tok) + nano-USD sub-micro carry accumulator. Option B: int64 nano_usd_per_1m_tokens + 1 micro-USD per-request ceiling floor. Option C: Scaled u128 decimal rational representation.",
+      "trade_offs": "Option A avoids 100x micro-ceiling inflation on tiny single-sentence embeddings; Option B keeps every individual request self-contained in micro-USD without carry state.",
+      "impacted_items": [
+        "FEAT-017",
+        "FEAT-037",
+        "FEAT-040"
+      ]
+    },
+    {
+      "id": "DEC-CAND-09",
+      "source_oq": "OQ-09",
+      "gate": "TEEP-03 (Policy Engine Evaluation)",
+      "title": "Policy-as-Code & Conditional Routing Expression Engine Selection",
+      "provisional_direction": "Defer policy/routing expression engine selection (Cedar vs CEL vs OPA vs Native) to TEEP-03.",
+      "options": "Option A: Native Stage 1 + cedar-policy/cedar-go ABAC + cel-go route matchers. Option B: Unified CEL across both policy and routing. Option C: Embedded OPA Rego.",
+      "trade_offs": "Cedar provides explicit forbid-over-permit hierarchy guarantees; CEL unifies one expression syntax across routing and policy; Rego has broad K8s familiarity but higher evaluation/memory complexity.",
+      "impacted_items": [
+        "FEAT-027",
+        "FEAT-063"
+      ]
+    },
+    {
+      "id": "DEC-CAND-10",
+      "source_oq": "OQ-10",
+      "gate": "TEEP-02B (Product Boundary)",
+      "title": "Built-In Prompt & Evaluation Depth vs External Observability Integration",
+      "provisional_direction": "Lean, zero-ClickHouse gateway-native prompt/eval primitives + rich OTLP/API integration with dedicated eval platforms.",
+      "options": "Option A: Ship versioned prompt registry, deterministic regression cassettes, and 1% shadow canary scoring in SQLite/PG while exporting OTel gen_ai.* to Langfuse/Phoenix/Braintrust. Option B: Build a full human-annotation & dataset OLAP suite inside Tanpopo.",
+      "trade_offs": "Option A preserves single-binary operational simplicity while covering 80% of gateway CI/canary needs; Option B risks turning Tanpopo into a bloated multi-daemon OLAP product.",
+      "impacted_items": [
+        "FEAT-050",
+        "FEAT-052",
+        "FEAT-088",
+        "FEAT-091",
+        "FEAT-092"
+      ]
+    },
+    {
+      "id": "DEC-CAND-11",
+      "source_oq": "OQ-11",
+      "gate": "TEEP-03 (SDK & Runtime Evaluation)",
+      "title": "Polyglot Guest Extension SDK Runtime Model (Go, Rust, TypeScript)",
+      "provisional_direction": "Independent community extensibility without Core rebuilds; defer Wasm ABI/QuickJS/WIT runtime choice to TEEP-03.",
+      "options": "Option A: TinyGo/Go + Rust wasm32 + build-time QuickJS-ng Wasm snapshot for TypeScript on unchanged wazero host. Option B: Go/Rust Tier-2 Wasm only, routing TypeScript authors to Tier-3 sidecars.",
+      "trade_offs": "Option A unlocks the large TypeScript developer community inside zero-egress Tier-2 Wasm at the cost of larger (~1.5-3 MiB) TS .wasm binaries; Option B minimizes SDK maintenance.",
+      "impacted_items": [
+        "ARCH-014",
+        "FEAT-102"
+      ]
+    },
+    {
+      "id": "DEC-CAND-12",
+      "source_oq": "OQ-12",
+      "gate": "TEEP-03 (IAM & RLS Schema Evaluation)",
+      "title": "ARCH-OBS-01 Instance OPERATOR Identity Separation Model",
+      "provisional_direction": "Eliminate O(N_orgs) operator auth loops while preserving strict tenant FORCE RLS; defer schema design to TEEP-03.",
+      "options": "Option A: INSTANCE OPERATOR principals use org_id IS NULL (with explicit org membership records when acting inside a tenant). Option B: Retain org-bound principals with a global RLS-safe operator lookup directory.",
+      "trade_offs": "Option A cleanly separates platform SRE identity from tenant data planes and removes org_1 deletion deadlocks (FND-007); Option B minimizes migration changes to bootstrap flows.",
+      "impacted_items": [
+        "ARCH-011",
+        "FND-002",
+        "FND-007",
+        "FEAT-060"
+      ]
+    },
+    {
+      "id": "DEC-CAND-13",
+      "source_oq": "OQ-13",
+      "gate": "TEEP-02B (Privacy Posture) -> TEEP-03 (Crypto Spec)",
+      "title": "Failure Payload Debugging Default (Recipient-Key HPKE vs Vault Project-DEK)",
+      "provisional_direction": "Privacy-first zero default persistence; support recipient-key-encrypted debugging.",
+      "options": "Option A: Recipient-Key-Encrypted (RFC 9180 HPKE) Flight Recorder as recommended mode + optional Four-Eyes Vault Project-DEK interactive session. Option B: Vault Project-DEK sessions only.",
+      "trade_offs": "Option A ensures gateway operators/DBAs hold 0 private decryption keys for captured failure payloads; Option B allows in-browser payload viewing without client-side key management.",
+      "impacted_items": [
+        "FEAT-134"
+      ]
+    },
+    {
+      "id": "DEC-CAND-14",
+      "source_oq": "OQ-14",
+      "gate": "TEEP-02B (Security UX) -> TEEP-03 (Listener Wiring)",
+      "title": "Dedicated Admin Plane Network Listener (--admin-listen / TANPOPO_ADMIN_LISTEN_ADDR)",
+      "provisional_direction": "Support progressive network hardening for single-binary and cluster deployments.",
+      "options": "Option A: Implement optional --admin-listen / TANPOPO_ADMIN_LISTEN_ADDR binding /admin/v1/* and Console UI to a private interface/port while serving /v1/* publicly (aligning doctor.go:154). Option B: Remove ghost doctor check and rely solely on --role split.",
+      "trade_offs": "Option A gives single-binary Mode A/B operators physical management-port isolation without deploying separate Control-Plane containers; Option B reduces listener configuration surface.",
+      "impacted_items": [
+        "FEAT-098",
+        "FND-019"
+      ]
+    },
+    {
+      "id": "DEC-CAND-15",
+      "source_oq": "OQ-15",
+      "gate": "TEEP-03 (Frontend Governance)",
+      "title": "Astryx Neutral Console Component & Layout Token Rule Alignment",
+      "provisional_direction": "Preserve Astryx Neutral, Light/Dark consistency, WCAG 2.2 AA, 320-1920px responsiveness, and 15-locale offline architecture.",
+      "options": "Option A: Codify official @astryxdesign/core components + token-bridged responsive operational layouts (stacked mobile tables, topology canvas, rail) in AGENTS.md. Option B: Rewrite all custom responsive layouts into strict zero-<div> wrappers.",
+      "trade_offs": "Option A preserves verified responsive/a11y/bundle guarantees while reconciling documentation contradiction; Option B adds high UI refactor churn.",
+      "impacted_items": [
+        "FEAT-121",
+        "FND-019",
+        "NFR-013"
+      ]
+    },
+    {
+      "id": "DEC-CAND-16",
+      "source_oq": "OQ-16",
+      "gate": "TEEP-02B (Enterprise Packaging) -> TEEP-03 (Build Matrix)",
+      "title": "PostgreSQL Backup Strategy & Optional FIPS 140-3 Build Profile",
+      "provisional_direction": "Integrate with enterprise-standard PostgreSQL PITR tools and offer optional FIPS build artifacts.",
+      "options": "Option A: Delegate physical PG backups to pgBackRest/RDS/CNPG paired with 'tanpopo backup verify-pg' Vault/Audit verifier + optional Go FIPS 140-3 container profile. Option B: Build custom multi-GB logical PG dump/restore in Tanpopo CLI.",
+      "trade_offs": "Option A matches enterprise DBA operations for large databases; Option B duplicates native Postgres backup tooling poorly at scale.",
+      "impacted_items": [
+        "FEAT-096",
+        "FEAT-097"
+      ]
+    },
+    {
+      "id": "DEC-CAND-17",
+      "source_oq": "NEW-TEEP-02A",
+      "gate": "TEEP-02B (Ecosystem Scope) -> TEEP-03 (UI Security Spec)",
+      "title": "Extension-Contributed Console UI Isolation Model (Declarative Schema Only vs Sandboxed Iframe)",
+      "provisional_direction": "Safe extension-contributed pages, widgets, reports, settings, and actions without compromising Console security or Astryx consistency.",
+      "options": "Option A: 100% Host-Rendered Declarative Astryx UI Schema (zero third-party JS; extensions supply data/actions over governed host RPCs). Option B: Declarative Schema as default + optional strict-CSP cross-origin sandboxed iframe for bespoke visualizations.",
+      "trade_offs": "Option A guarantees Astryx Light/Dark, WCAG 2.2 AA, 15-locale i18n, <=250 KB JS budget, and zero XSS/CDN risk; Option B permits arbitrary custom charts at significant CSP, accessibility, and air-gap review cost.",
+      "impacted_items": [
+        "FEAT-104",
+        "ARCH-018",
+        "REJ-002"
+      ]
+    },
+    {
+      "id": "DEC-CAND-18",
+      "source_oq": "NEW-TEEP-02A",
+      "gate": "TEEP-02B (Policy) -> TEEP-03 (Packaging Spec)",
+      "title": "Direct Git Repository Extension Source Execution Policy",
+      "provisional_direction": "Support private Git, local archive, and OCI extension sources without server-side code compilation risks.",
+      "options": "Option A: Allow Git sources pinned to immutable commit SHA or signed tag containing declarative Tier-1 manifests, Solution/Prompt Packs, or pre-built signed .tpkg/.wasm artifacts (prohibiting server-side compiler execution on gateway nodes). Option B: Restrict Git sources to CI/CLI fetch-and-pack only.",
+      "trade_offs": "Option A delivers frictionless Console/GitOps private Git extension onboarding while keeping compilers off production gateway nodes; Option B requires an extra CI step before installation.",
+      "impacted_items": [
+        "FEAT-110"
+      ]
+    },
+    {
+      "id": "DEC-CAND-19",
+      "source_oq": "NEW-TEEP-02A",
+      "gate": "TEEP-02B (Enterprise Fleet Model) -> TEEP-03 (Topology)",
+      "title": "Multi-Instance Fleet Management Control Topology (Pull/Courier vs Central Push)",
+      "provisional_direction": "Support multi-instance visibility, drift detection, and promotion without turning standalone Tanpopo into microservices.",
+      "options": "Option A: Hybrid Pull + Federated Heartbeat (spoke instances push signed health/epoch/drift heartbeats and pull approved promotion bundles; air-gapped sites use .tppromote courier files). Option B: Central Hub holding direct admin write credentials into every spoke instance.",
+      "trade_offs": "Option A prevents a compromised Fleet Hub from immediately owning production spoke Vaults and works naturally across NATs and air-gaps; Option B enables instant central imperative writes but concentrates blast radius.",
+      "impacted_items": [
+        "FEAT-151",
+        "FEAT-152",
+        "FEAT-153"
+      ]
+    },
+    {
+      "id": "DEC-CAND-20",
+      "source_oq": "NEW-TEEP-02A",
+      "gate": "TEEP-02B (Privacy & UX Default)",
+      "title": "Product Update Center & Security Advisory Network Check Default",
+      "provisional_direction": "Preserve strict air-gap and zero-telemetry trust while keeping operators informed of updates and security advisories.",
+      "options": "Option A: Offline-by-default (uses embedded release/advisory baseline + manual/bundle upload) with explicit 1-toggle opt-in during /setup to poll static signed release/advisory JSON (sending 0 instance IDs or usage telemetry). Option B: Enabled-by-default anonymous static JSON fetch unless --air-gap / TANPOPO_OFFLINE=true is set.",
+      "trade_offs": "Option A satisfies strict zero-egress packet audits out of the box (NFR-012) while making opt-in effortless in /setup; Option B maximizes update awareness for casual users but emits an outbound HTTPS GET unless disabled.",
+      "impacted_items": [
+        "FEAT-149",
+        "FEAT-150",
+        "NFR-012"
+      ]
+    },
+    {
+      "id": "DEC-CAND-21",
+      "source_oq": "NEW-TEEP-02A",
+      "gate": "TEEP-03 (Storage & Retention Spec)",
+      "title": "Configuration Revision History Granularity & Retention Bounds",
+      "provisional_direction": "Enable entity and workspace revision diff and rollback across SQLite and PostgreSQL.",
+      "options": "Option A: Per-entity immutable JSON revision snapshots (retaining last N=100 revisions or 365 days by default) + optional named workspace checkpoints. Option B: Full Git-backed internal repository inside SQLite/PG.",
+      "trade_offs": "Option A uses simple relational tables with zero Git binary dependency and clean secret-slot reference redaction; Option B adds complex embedded Git state management.",
+      "impacted_items": [
+        "FEAT-143",
+        "FEAT-144"
+      ]
+    },
+    {
+      "id": "DEC-CAND-22",
+      "source_oq": "NEW-TEEP-02A",
+      "gate": "TEEP-03 (Distributed Systems Evaluation)",
+      "title": "Hot-Path Distributed Budget Admission Algorithm",
+      "provisional_direction": "Maintain exact integer accounting and hard budget bounds at high cluster RPS; defer algorithm selection to TEEP-03.",
+      "options": "Option A: Hierarchical Escrow-Backed Local Pod Budget Leases with Low-Water-Mark cutover to Valkey Lua. Option B: Pipelined/Batched Valkey Lua EVALSHA per shard without pod-local leases. Option C: Configurable per-budget mode (Strict Centralized vs Escrowed Lease).",
+      "trade_offs": "Option A achieves ~30 ns in-RAM admission when headroom >10% while keeping pre-escrowed ceiling safety; Option B is state-simpler on pods but incurs ~0.2-0.5 ms Valkey RTT per request; Option C lets operators choose per budget.",
+      "impacted_items": [
+        "ARCH-002",
+        "FEAT-037",
+        "NFR-001",
+        "NFR-006"
+      ]
+    }
+  ]
+}
