@@ -1,0 +1,25 @@
+{
+  "runtime_commit": "ac9ae87a68f095203de82968ac5d08729e33a531",
+  "installations": [
+    {
+      "canonical_name": "@tanpopo/ollama",
+      "state": "ENABLED_ACTIVE",
+      "version": 8
+    },
+    {
+      "canonical_name": "@tanpopo/openai-compatible",
+      "state": "ENABLED_ACTIVE",
+      "version": 14
+    }
+  ],
+  "adapter_slugs": [
+    "ollama",
+    "openai-compatible"
+  ],
+  "active_kill_switches": 0,
+  "audit_chain": {
+    "intact": true,
+    "checked_events_count": 114,
+    "first_broken_seq_no": null
+  }
+}

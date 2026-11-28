@@ -1,0 +1,9 @@
+{"time":"2026-11-28T02:43:36.319Z","method":"GET","path":"/v1/v1/models","authorizationPresent":false,"bodyLength":0}
+{"time":"2026-11-28T02:43:37.120Z","method":"GET","path":"/v1/models","authorizationPresent":false,"bodyLength":0}
+{"time":"2026-11-28T02:44:13.871Z","method":"GET","path":"/v1/models","authorizationPresent":false,"bodyLength":0}
+{"time":"2026-11-28T02:53:32.770Z","method":"POST","path":"/v1/chat/completions","authorizationPresent":false,"bodyLength":145}
+{"time":"2026-11-28T02:53:32.811Z","event":"client_disconnect","path":"/v1/chat/completions"}
+{"time":"2026-11-28T02:53:32.960Z","method":"POST","path":"/api/chat","authorizationPresent":false,"bodyLength":109}
+{"time":"2026-11-28T02:53:32.977Z","event":"client_disconnect","path":"/api/chat"}
+{"time":"2026-11-28T02:58:21.628Z","method":"POST","path":"/api/chat","authorizationPresent":false,"bodyLength":112}
+{"time":"2026-11-28T02:59:01.177Z","method":"POST","path":"/v1/chat/completions","authorizationPresent":false,"bodyLength":159}

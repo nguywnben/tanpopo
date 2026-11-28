@@ -1,0 +1,25 @@
+workstream,RC9_status,scope,evidence_or_limitation
+Artifact identity,PASS,Run 46048372483 artifact and exact frozen source,artifact-identity.json; five SHA256SUMS entries matched; local attestation cryptographic verification remains UNVERIFIED
+PR #51 and affected source,PASS,PR change review and RC9 source implementation review,GitHub PR #51; exact source archive ac9ae87a68f095203de82968ac5d08729e33a531
+DEF-081 PostgreSQL forced-RLS quarantine,PASS (scoped),RC9 runtime PG16 FORCE RLS restricted app role and healthy three-primary Valkey; both built-in adapters,Real runtime and targeted PostgreSQL test suites
+"DEF-082 UI badge, clear and recovery",PASS (scoped),Real Chromium clear from one active switch to zero without reload; explicit unquarantine and re-enable,Visual screenshots 06-12 and final runtime-state.json
+OpenAI-compatible inference,PASS,Actual SSE stream success; live stream cancellation; post-quarantine 503 with no egress; post-restart success,openai-after-restart.json and quarantine-admission-enforcement.json
+Ollama native inference,PASS,Actual NDJSON stream success; live stream cancellation; post-quarantine 503 with no egress; post-restart success,ollama-after-restart.json and quarantine-admission-enforcement.json
+Restart persistence,PASS (scoped),Both adapters ENABLED_ACTIVE after restart; adapter slugs persisted; zero active switches,final-runtime-state.json and screenshots 10-12
+Global switch inventory,PASS (scoped),Multi-organization counts and list/filter edge tests; actual inventory cleared,PostgreSQL test suites; final-runtime-state.json
+Audit integrity,PASS (scoped),Organization audit hash chain verified intact; 114 events checked,final-runtime-state.json
+Webhook containment outbox,PASS (scoped),Outbox events persisted; queue callback and atomic rollback harness checks passed,6 extension.quarantined and 6 kill_switch.triggered rows; actual subscriber delivery UNVERIFIED
+Four-eyes cross-org self-approval,PASS (scoped),Same-actor cross-org self-approval rejected HTTP 403 on PostgreSQL,TestDEF081_PostgresFourEyesCrossOrgSelfApprovalDenied
+Four-eyes independent approval,PARTIAL,Distinct INSTANCE OPERATOR approval passed in SQLite-backed test harness; not run successfully on PostgreSQL,TestPart2MultiTenantExtensionRBACAndFourEyesHardening
+"Unauthorized, inactive, forged and cross-tenant principals",PASS (scoped),"Non-operator, suspended, forged binding, nonexistent principal and anti-oracle cross-tenant clear checks",TestDEF081_PostgresForcedRLSNegativeAuthorizationAndIsolation
+Revoked-principal authorization,UNVERIFIED,No explicit revoked-principal scenario in executed Round 6 tests,Residual risk register
+RLS policy transitions,PASS (scoped),Forced RLS and operator resolution tests passed with NOBYPASSRLS roles,PostgreSQL source-integration tests and environment-identity.json
+SQLite adjacent lifecycle tests,PASS (scoped),SQLite/in-memory source test harness only; no standalone RC9 SQLite runtime,round6-test-results.md
+Actual SQLite runtime,UNVERIFIED,No separate Tanpopo SQLite server booted during this bounded mission,Residual risk register
+Historical DEF-001–080,NOT RETESTED,Preserve all CP125/RC8 evidence and dispositions,regression-ledger-overlay-001-086.csv
+Historical DEF-083–086,NOT RETESTED,Preserve CP125 scoped passes and evidence,regression-ledger-overlay-001-086.csv
+Historical CP123 PARTIAL cohort,PARTIAL,All 15 historical partials remain unresolved; only DEF-081/082 were targeted here,residual-risk-register.md
+Production signature integration,BLOCKED,"Deferred; no private keys, signature changes or owner-manifest branch access",User governance constraint; GATE-REL-07 remains BLOCKED
+"Windows, macOS and ARM binaries",UNVERIFIED,No platform execution in focused Round 6 scope,Release certification gap
+Safari/iOS and broad browser accessibility,UNVERIFIED,No platform/browser campaign in focused Round 6 scope,Release certification gap
+Comprehensive QA-005,INCOMPLETE,This is focused foundation verification and not exhaustive Alpha/Beta coverage,Do not declare QA-005 complete

@@ -1,0 +1,37 @@
+{
+  "source_commit": "ac9ae87a68f095203de82968ac5d08729e33a531",
+  "runtime_artifact": "GitHub Actions artifact 15224031447, linux/amd64",
+  "runtime_sha256": "1ad30a0d08f957ab92b6e5ca6facf2b7836f1fcc5df0271544740169261012e9",
+  "application": {
+    "listen": "127.0.0.1:18181",
+    "metrics": "127.0.0.1:19181",
+    "storage": "PostgreSQL 16, database qa005rc9",
+    "application_role": "qa005rc9_app",
+    "rolsuper": false,
+    "rolbypassrls": false,
+    "principals_relrowsecurity": true,
+    "principals_relforcerowsecurity": true,
+    "cache_cluster": "Valkey 8.1; 3 primary nodes; cluster_state=ok; slots_ok=16384; slots_fail=0",
+    "readiness_after_restart": 200,
+    "health_after_restart": 200
+  },
+  "fixture": {
+    "type": "local synthetic HTTP provider fixture",
+    "listen": "127.0.0.1:18200",
+    "protocols": ["OpenAI-compatible SSE", "Ollama NDJSON"],
+    "paid_provider_calls": 0,
+    "provider_credentials": "none"
+  },
+  "source_test_harness": {
+    "source": "git archive of ac9ae87a68f095203de82968ac5d08729e33a531",
+    "go_toolchain": "go1.26.0 (Docker golang:1.26-alpine)",
+    "postgres_test_role": "qa005rc9_tester; NOSUPERUSER; NOBYPASSRLS",
+    "host_go": "unusable managed shim; Go: Unknown option: version"
+  },
+  "configuration_notes": [
+    "An explicit ORG_OWNER extension trust policy was enabled for the unverified bundled adapters at the organization scope before creating project-scoped provider connections.",
+    "One initial OpenAI probe used an incorrect endpoint suffix and requested /v1/v1/models; correcting the fixture base URL to the provider root made probes succeed.",
+    "The Go harness initially used PostgreSQL superuser credentials and correctly refused them; it was rerun successfully using the restricted NOBYPASSRLS test role.",
+    "Container TLS initially lacked the environment CA; mounting the host CA bundle enabled normal Go module verification without disabling TLS verification."
+  ]
+}

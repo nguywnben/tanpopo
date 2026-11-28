@@ -1,0 +1,8 @@
+{
+  "http_status": 200,
+  "content_type": "application/x-ndjson",
+  "bytes": 183,
+  "contains_fixture_chunk": true,
+  "contains_done": true,
+  "sha256": "64d6682c8ed66bfd2b3469ede1eec3bb97dc4263aee606879fb6025720b4b44c"
+}

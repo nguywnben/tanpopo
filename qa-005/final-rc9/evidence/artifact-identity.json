@@ -1,0 +1,41 @@
+{
+  "repository": "nguywnben/tanpopo",
+  "source_commit": "ac9ae87a68f095203de82968ac5d08729e33a531",
+  "release_artifact_run": "46048372483",
+  "artifact_id": "15224031447",
+  "downloaded_before_expiry": true,
+  "artifact_expiry_utc": "2026-11-28T18:29:43Z",
+  "metadata": {
+    "version": "0.0.1-snapshot",
+    "commit": "ac9ae87a68f095203de82968ac5d08729e33a531",
+    "date": "2026-11-27T18:26:58.446793854Z",
+    "goos": "linux",
+    "goarch": "amd64"
+  },
+  "linux_amd64_binary_sha256": "1ad30a0d08f957ab92b6e5ca6facf2b7836f1fcc5df0271544740169261012e9",
+  "linux_amd64_archive_sha256": "36f0ac4aa57332bea3556b60a8f4d1891aa1c2ad4a1f482094f2c2be7bb1e01d",
+  "binary_version_output": "tanpopo version 0.0.1-snapshot (commit=ac9ae87a68f095203de82968ac5d08729e33a531 built=2026-11-27T18:26:58Z)",
+  "sha256_manifest": {
+    "tanpopo_0.0.1-snapshot_darwin_amd64.tar.gz": "d6deec18f72b6d03c9a62011e22bfebc776eb9c988511eb761a36c2501ebcd12",
+    "tanpopo_0.0.1-snapshot_darwin_arm64.tar.gz": "961b2a347050dd019a369115214719224c504903418714cd5f2bcd72cb7b5021",
+    "tanpopo_0.0.1-snapshot_linux_amd64.tar.gz": "36f0ac4aa57332bea3556b60a8f4d1891aa1c2ad4a1f482094f2c2be7bb1e01d",
+    "tanpopo_0.0.1-snapshot_linux_arm64.tar.gz": "0e5536705fff36d47d5ffa8dbdbfb992171ceaa4e04933be4f7aa4cfb265a32d",
+    "tanpopo_0.0.1-snapshot_windows_amd64.zip": "0eaef9a4123cdfa2e46b5d50dd3475409da8757e1521eda1e092a90b76dff301"
+  },
+  "manifest_verification": "All five archive entries matched SHA256SUMS before temporary archive cleanup.",
+  "ci_run": {
+    "id": "46048372404",
+    "conclusion": "success",
+    "head_sha": "ac9ae87a68f095203de82968ac5d08729e33a531"
+  },
+  "artifact_run": {
+    "id": "46048372483",
+    "conclusion": "success",
+    "head_sha": "ac9ae87a68f095203de82968ac5d08729e33a531"
+  },
+  "attestation": {
+    "workflow_attestation_job": "success",
+    "api_attestation_record_seen": true,
+    "independent_local_cryptographic_verification": "UNVERIFIED: installed gh 2.46.0 has no attestation command; cosign not installed"
+  }
+}

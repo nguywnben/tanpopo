@@ -1,0 +1,15 @@
+{
+  "source_commit": "ac9ae87a68f095203de82968ac5d08729e33a531",
+  "runtime": "RC9 linux/amd64 artifact sha256 1ad30a0d08f957ab92b6e5ca6facf2b7836f1fcc5df0271544740169261012e9",
+  "scenario": "Both built-in adapters quarantined; then real authenticated inference attempted over both provider protocols.",
+  "quarantine_http_statuses": [200, 200],
+  "blocked_requests": [
+    {"path":"/v1/chat/completions","status":503,"error":"extension_quarantined"},
+    {"path":"/native/ollama/api/chat","status":503,"error":"extension_quarantined"}
+  ],
+  "local_fixture_post_count_before": 4,
+  "local_fixture_post_count_after": 4,
+  "egress_on_rejection": false,
+  "unquarantine_http_statuses": [200, 200],
+  "cleanup": "Both extensions were re-enabled after recovery; active switch count returned to zero."
+}

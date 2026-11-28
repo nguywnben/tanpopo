@@ -1,0 +1,8 @@
+{
+  "http_status": 200,
+  "content_type": "text/event-stream; charset=utf-8",
+  "bytes": 166,
+  "contains_fixture_chunk": true,
+  "contains_done": true,
+  "sha256": "b44bf349fcebb3f4720405a51aef5c7011b08e61e0ff8d3fc91869b1ffa87130"
+}
