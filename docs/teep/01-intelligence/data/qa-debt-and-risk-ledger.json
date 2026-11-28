@@ -115,7 +115,7 @@
     {
       "id": "DEF-072",
       "severity": "Major",
-      "title": "Split DP node disappearance false-green Ready + PG FORCE RLS 0-count bypass in handleRetireMasterKEK + broken TANPOPO_MASTER_KEY_PREVIOUS IDs",
+      "title": "Split DP node disappearance false-green Ready + SOURCE_VERIFIED suspected PG FORCE RLS visibility hazard in handleRetireMasterKEK (requires non-destructive reproduction) + broken TANPOPO_MASTER_KEY_PREVIOUS IDs",
       "target_caps": [
         "CAP-067",
         "CAP-104"

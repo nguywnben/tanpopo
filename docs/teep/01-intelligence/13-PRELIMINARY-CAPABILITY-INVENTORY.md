@@ -233,7 +233,7 @@
 - **Existing Tanpopo RC9 Capability:** PARTIAL_IMPLEMENTATION: RateCard v2 nano_usd_per_token truncates 1,664 real LiteLLM token-cost fields (e.g., 8.75 and 144.375 nano-USD/tok); Admin DTO models.go:60-71 omits 3 fields; UI requires raw nano-USD/tok integers.
 - **Competitor & Technology Evidence:** Proven empirically across 7,193 models in litellm_model_prices.json (SRC-045), models.dev (\$/1M structs, SRC-046), and OpenRouter string decimals (SRC-047).
 - **Potential Improvements / Target Design:** Standardize RateCard v3 on int64 nano_usd_per_1m_tokens (10^-15 USD/tok, using existing u128 computePerMillionCeiling in calculator.go:702), expose all media/rerank/search/cache-1h/tier fields in Admin API, and provide \$/1M <-> nano-USD dual-unit inputs in Console.
-- **Enterprise Implications:** Guarantees 100% exact integer representation of every real vendor token price with zero floating-point drift.
+- **Enterprise Implications:** Represents all 1,664 fractional sub-nano token rates observed in the 2026-11-27 LiteLLM catalog snapshot as exact integers (final unit scale & sub-femto/FX rounding rules deferred to TEEP-03).
 - **Dependencies & Constraints:** Backward-compatible auto-migration of v1/v2 pricing_json rows (x 1,000,000).
 - **Security & Operational Considerations:** Reject scientific-notation floats at runtime; enforce u128 overflow checks and explicit self_hosted_zero_rate flag.
 
@@ -286,7 +286,7 @@
 - **Personas & Workflows:** `PER-02, PER-03, PER-07 | WF-04`
 - **User Problem & Value:** Eliminates emergency outages when cloud vendors retire model checkpoints by proactively validating replacement models against real route traffic and budgets.
 - **Existing Tanpopo RC9 Capability:** MISSING in RC9.
-- **Competitor & Technology Evidence:** litellm_model_prices.json contains 1,284 deprecation_date entries (407 already past, 877 upcoming as of 2026-11-27) (SRC-045); no competitor unifies EOL alerts + zero-prompt traffic replay + shadow evals.
+- **Competitor & Technology Evidence:** litellm_model_prices.json contains 1,284 deprecation_date entries (407 already past, 877 upcoming as of 2026-11-27) (SRC-045); none of the 19 primary gateways audited on 2026-11-27 unified EOL alerts, metadata-only traffic replay, and budget-capped shadow evals.
 - **Potential Improvements / Target Design:** Emit T-90d/30d/7d sunset alerts, verify 100% exercised capability & p100 token-window parity from request_traces_meta, compute exact 30d micro-USD cost delta via What-If Engine, optionally run 1% shadow canary, and generate a 1-click If-Match route migration patch (INN-02).
 - **Enterprise Implications:** Turns quarterly vendor model churn into a predictable, audited 5-minute workflow.
 - **Dependencies & Constraints:** CAP-017, CAP-101, CAP-152 (INN-01, INN-02).
@@ -803,9 +803,9 @@
 - **Proposal Classification:** `IMPROVE` · **Candidate Priority:** `P0-Foundational` · **Research Confidence:** `HIGH (VERIFIED_FACT)`
 - **Personas & Workflows:** `PER-03, PER-06 | WF-12`
 - **User Problem & Value:** Provides hardware/cloud-KMS root key protection, per-project cryptographic blast-radius isolation, and safe online Master KEK rotation on PostgreSQL HA.
-- **Existing Tanpopo RC9 Capability:** CRITICAL GAPS IN RC9: (1) vault/kms (AWS/GCP/Vault Transit) has 0 imports in serve.go:346; (2) handleRetireMasterKEK (ops_lifecycle.go:196) hits PG FORCE RLS 0-count bug bypassing 409 check!; (3) TANPOPO_MASTER_KEY_PREVIOUS mislabels IDs as kek_prev_0; (4) RetireKEK is single-process only.
+- **Existing Tanpopo RC9 Capability:** CRITICAL GAPS IN RC9: (1) vault/kms (AWS/GCP/Vault Transit) has 0 imports in serve.go:346; (2) handleRetireMasterKEK (ops_lifecycle.go:196) has a SOURCE_VERIFIED suspected PG FORCE RLS 0-count hazard risking 409 bypass (requires non-destructive reproduction); (3) TANPOPO_MASTER_KEY_PREVIOUS mislabels IDs as kek_prev_0; (4) RetireKEK is single-process only.
 - **Competitor & Technology Evidence:** Uncovered in TEEP-01-DOC-04 & TEEP-01-DOC-12 (DEF-041, DEF-072, COND-PO-02).
-- **Potential Improvements / Target Design:** Fix handleRetireMasterKEK via RLS-safe SECURITY DEFINER count + cluster-wide KEY_RETIRE epoch scrub, parse <id>=<key> in TANPOPO_MASTER_KEY_PREVIOUS, wire vault/kms RoutingProvider in serve.go & CLI (+ OpenBao & T3 Azure KV / PKCS#11 HSM), and batch RewrapAllOrgDEKs.
+- **Potential Improvements / Target Design:** Reproduce in PG test harness and remediate handleRetireMasterKEK via RLS-safe KEK usage count + cluster-wide KEY_RETIRE epoch scrub, parse <id>=<key> in TANPOPO_MASTER_KEY_PREVIOUS, wire vault/kms RoutingProvider in serve.go & CLI (+ OpenBao & T3 Azure KV / PKCS#11 HSM), and batch RewrapAllOrgDEKs.
 - **Enterprise Implications:** Unblocks enterprise BYOK compliance and eliminates cold-backup resurrection when external KMS keys are destroyed.
 - **Dependencies & Constraints:** Resolves DEF-072 KEK bugs, DEF-041 KMS gap, and COND-PO-02.
 - **Security & Operational Considerations:** Zeroize retired KEK bytes across all CP and DP pods and verify loaded_kek_ids_json convergence before confirming retirement.
@@ -848,7 +848,7 @@
 #### `CAP-071` — Two-Stage Policy-as-Code (Native + cedar-go ABAC) & Policy Delete / Reset-to-Parent
 - **Proposal Classification:** `ADD` · **Candidate Priority:** `P1-High` · **Research Confidence:** `HIGH (VERIFIED_FACT)`
 - **Personas & Workflows:** `PER-05, PER-06, PER-04 | WF-03, WF-05`
-- **User Problem & Value:** Empowers security teams to express rich attribute-based rules (groups, headers, hours, workload trust domains, tool risk) while preserving unbreakable parent ceilings.
+- **User Problem & Value:** Empowers security teams to express rich attribute-based rules (groups, headers, hours, workload trust domains, tool risk) while preserving monotonic parent-ceiling evaluation.
 - **Existing Tanpopo RC9 Capability:** PARTIAL_IMPLEMENTATION: native structural merge works (256.2 ns/op), but lacks expressive ABAC predicates and lacks GET /policies & DELETE /policies/{id} reset-to-parent!
 - **Competitor & Technology Evidence:** AWS Bedrock AgentCore (GA Mar 2026) and Kong AI GW 2.3 adopted Cedar (cedar-policy/cedar-go v1.9+, Apache-2.0, pure Go) (SRC-014, SRC-040, SRC-082).
 - **Potential Improvements / Target Design:** Keep native structural kernel as Stage 1 (~250-500ns) and compile schema-validated Cedar policies into ConfigSnapshot as Stage 2 (~1-5us HYPOTHESIS / UNVERIFIED), plus add GET/DELETE /admin/v1/policies/{id} in API & RoutingPage.tsx.
@@ -1707,13 +1707,13 @@
 
 ### DOM-23 — Privacy Engineering, Data Sovereignty & Cryptographic Custody
 
-#### `CAP-147` — Zero-Knowledge (RFC 9180 HPKE) Failure Flight Recorder & Wired Debug Capture Sessions
+#### `CAP-147` — Recipient-Key-Encrypted (RFC 9180 HPKE) Failure Flight Recorder & Wired Debug Capture Sessions
 - **Proposal Classification:** `REPLACE` · **Candidate Priority:** `P1-High` · **Research Confidence:** `HIGH (VERIFIED_FACT + HYPOTHESIS)`
 - **Personas & Workflows:** `PER-02, PER-06, PER-05 | WF-09`
 - **User Problem & Value:** Fixes RC9's 100%-unreachable debug blob feature while guaranteeing that not even Gateway root admins, DBAs, or Master KEK can read captured failure payloads.
 - **Existing Tanpopo RC9 Capability:** UNREACHABLE IN RC9: CreateDebugCaptureSession (tracer.go:1160) has 0 non-test callers across cmd/ and internal/ — debug_payload_blobs is permanently empty!
 - **Competitor & Technology Evidence:** Proven in TEEP-01-DOC-04; designed with Go crypto/hpke RFC 9180 in 11-PRODUCT-INNOVATION-OPPORTUNITIES.md (INN-08).
-- **Potential Improvements / Target Design:** Replace unreachable stub wiring with two explicit modes: (1) Recommended Zero-Knowledge HPKE Flight Recorder sealing 4xx/5xx/guardrail failure capsules in memory to an offline Project Triage X25519 Public Key (clear(buf) immediately; decrypted locally via 'tanpopo debug decrypt-capsule'), and (2) time-boxed (<=1h) Four-Eyes-gated Vault debug sessions wired in Console.
+- **Potential Improvements / Target Design:** Replace unreachable stub wiring with two explicit modes: (1) Recommended Recipient-Key-Encrypted HPKE Flight Recorder sealing 4xx/5xx/guardrail failure capsules in memory to an offline Project Triage X25519 Public Key (clear(buf) immediately; decrypted locally via 'tanpopo debug decrypt-capsule'), and (2) time-boxed (<=1h) Four-Eyes-gated Vault debug sessions wired in Console.
 - **Enterprise Implications:** Solves the acute developer-vs-DPO deadlock in banking and healthcare production debugging.
 - **Dependencies & Constraints:** RFC 9180 HPKE (CGO_ENABLED=0); CAP-057 (<=72h hard SQL TTL).
 - **Security & Operational Considerations:** Private triage key is NEVER uploaded to Tanpopo; mandatory JCS audit event on capsule creation and download.

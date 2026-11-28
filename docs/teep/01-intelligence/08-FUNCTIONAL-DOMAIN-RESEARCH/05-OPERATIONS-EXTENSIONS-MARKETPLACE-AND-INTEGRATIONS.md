@@ -35,7 +35,7 @@
 - **`CAP-114` (`ADD`):** Official Polyglot Guest SDKs (`tanpopo-sdk-go`, `tanpopo-sdk-rust`, `tanpopo-sdk-ts`) + Tier-3 template + optional build-time WIT lowering.
 - **`CAP-115` (`ADD`):** Declarative Localized Extension Config UI Schemas (JSON Schema + `uiSchema` + 15-locale metadata maps; `0` third-party Console JS).
 - **`CAP-116` (`IMPROVE`):** Offline Contract, Fuzz & Resource-Cap Harness (`tanpopo plugin test --fuzz`).
-- **`CAP-117` (`REPLACE` — Resolves `RR-001` & `DEF-043`):** Unified `internal/extension/tpkg` deterministic cross-OS packer (`linux`/`macos`/`windows` SHA-256 parity, CRLF guard, Merkle tree digest, containerized `build-wasm.sh` including `aws-bedrock`).
+- **`CAP-117` (`REPLACE` — Resolves `RR-001` & `DEF-043`):** Unified `internal/extension/tpkg` deterministic cross-OS packer (`linux`/`macos`/`windows` SHA-256 parity, CRLF guard, candidate Merkle tree digest `[DESIGN_PROPOSAL — TEEP-03]`, containerized `build-wasm.sh` including `aws-bedrock`).
 
 ### 2.2 `DOM-18` — Marketplace & Community Ecosystem (`CAP-118` .. `CAP-124`)
 - **`CAP-118` (`ADD`):** Keyless OIDC Sigstore (`Fulcio` + `Rekor`) Publisher Onboarding & DNS Namespace Verification (`0` static publishing PATs).

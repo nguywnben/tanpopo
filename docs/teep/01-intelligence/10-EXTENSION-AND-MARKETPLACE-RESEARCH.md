@@ -22,7 +22,7 @@
 
 ## 2. Eleven Extension Categories Without a New Core Release (`runtime.proto` `v1.1`)
 
-In frozen RC9, **only `PROVIDER_ADAPTER`** executes at runtime (`AUTH_DRIVER`, `GUARDRAIL_POLICY`, and `TELEMETRY_EXPORTER` are `ENUM_OR_CONTRACT_ONLY` in `manifest_validator.go:46-50`). Expanding `.tpkg` additively (`buf breaking` clean, tags `11..19` on `ExtensionRuntimeService`) unlocks **11 community and enterprise extension categories** while keeping the 7 Core security invariants (`AuthN`, `FORCE RLS`, `DataRegion`, `HardLimitMicros`, `BlindBroker` + `DEC-004` Cookie ban, `SM-06` MCP HITL, and JCS Audit) mathematically non-overridable:
+In frozen RC9, **only `PROVIDER_ADAPTER`** executes at runtime (`AUTH_DRIVER`, `GUARDRAIL_POLICY`, and `TELEMETRY_EXPORTER` are `ENUM_OR_CONTRACT_ONLY` in `manifest_validator.go:46-50`). Expanding `.tpkg` additively (`buf breaking` clean, tags `11..19` on `ExtensionRuntimeService`, `[DESIGN_PROPOSAL — TEEP-03]`) unlocks **11 community and enterprise extension categories** while keeping the 7 Core security invariants (`AuthN`, `FORCE RLS`, `DataRegion`, `HardLimitMicros`, `BlindBroker` + `DEC-004` Cookie ban, `SM-06` MCP HITL, and JCS Audit) host-enforced and non-overridable by guest plugins:
 
 | # | Extension Category | Allowed Tiers | Runtime Hook & Additive RPC | Resource Ceiling (`HYPOTHESIS / UNVERIFIED`) | Secret / Network / Tenant Fence | Default Fault Posture |
 |---|---|---|---|---|---|---|
