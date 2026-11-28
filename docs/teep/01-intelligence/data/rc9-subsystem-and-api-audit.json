@@ -1,0 +1,142 @@
+{
+  "baseline_commit": "ac9ae87a68f095203de82968ac5d08729e33a531",
+  "designation": "Unsigned RC9 \u2014 BASELINE_STABLE",
+  "metrics": {
+    "go_source_files": 344,
+    "sql_tables_migrated": 56,
+    "sqlite_migrations": 27,
+    "postgres_migrations": 7,
+    "console_page_modules": 15,
+    "console_locales": 15,
+    "dataplane_openapi_paths": 16,
+    "dataplane_openapi_operations": 18,
+    "admin_openapi_paths": 91,
+    "admin_openapi_operations": 112,
+    "admin_server_registered_operations": 108,
+    "admin_openapi_unimplemented_404_operations": 4,
+    "admin_operations_missing_console_ui": 17,
+    "admin_dead_console_client_wrappers": 2,
+    "runtime_env_vars_total": 41,
+    "measured_sqlite_rps": 109.48,
+    "measured_docker_ha_2vcpu_rps": 56.86
+  },
+  "unwired_or_unreachable_production_code": [
+    {
+      "symbol": "internal/finops/rollup.NewAggregator",
+      "status": "DEAD_CODE_ZERO_IMPORTS",
+      "impact": "usage_rollups_hourly permanently 0 rows; /usage/summary & /export scan raw usage_settlements (DEF-078)"
+    },
+    {
+      "symbol": "internal/security/vault/kms.{AWSKMSProvider,GCPKMSProvider,VaultTransitProvider,RoutingProvider}",
+      "status": "DEAD_CODE_ZERO_IMPORTS",
+      "impact": "serve.go:346 uses static env KEK only; contradicts README.md:34; leaves cold backups vulnerable post-shred (DEF-041, COND-PO-02)"
+    },
+    {
+      "symbol": "internal/telemetry/ttl.NewCleaner",
+      "status": "DEAD_CODE_ZERO_IMPORTS",
+      "impact": "Expired <=72h debug blobs and >30d trace rows never auto-reaped; PartitionManager.DetachAndDropExpired also uncalled"
+    },
+    {
+      "symbol": "internal/telemetry/otel.Pipeline.CreateDebugCaptureSession",
+      "status": "UNCALLED_IN_PRODUCTION",
+      "impact": "debug_payload_blobs permanently empty; GET /admin/v1/traces/{id}/debug-payload always 404"
+    },
+    {
+      "symbol": "adminhttp.ServerConfig.{TokenVerifier,OIDC}",
+      "status": "NIL_IN_SERVE_GO",
+      "impact": "All 11 remote CLI commands (TANPOPO_ADMIN_TOKEN) fail 401 (DEF-004); OIDC SSO routes inactive"
+    },
+    {
+      "symbol": "internal/security/broker.NewWorkloadIdentityExchanger",
+      "status": "UNWIRED_IN_SERVE_GO",
+      "impact": "AWS IRSA and GCP WIF outbound token exchange unavailable at runtime"
+    },
+    {
+      "symbol": "EffectivePolicy.GuardrailHooks & EXTENSION_TYPE_{AUTH_DRIVER,GUARDRAIL_POLICY,TELEMETRY_EXPORTER}",
+      "status": "ENUM_OR_CONTRACT_ONLY",
+      "impact": "Only PROVIDER_ADAPTER executes at runtime; zero payload guardrails run in ingress"
+    },
+    {
+      "symbol": "route_policies.request_timeout_ms & X-Tanpopo-Timeout-Ms & failover.Config.RequestDeadline",
+      "status": "ENUM_OR_CONTRACT_ONLY",
+      "impact": "Persisted/documented timeouts ignored by snapshot and ingress"
+    },
+    {
+      "symbol": "openapi/admin-v1.yaml: GET /openapi.json, POST /diagnostics/{smoke-test,support-bundle}, PUT /settings/retention",
+      "status": "UNIMPLEMENTED_HTTP_404",
+      "impact": "One-way openapi_contract_test.go subset check allowed 4 spec paths to 404"
+    }
+  ],
+  "bundled_official_adapters": [
+    {
+      "slug": "@tanpopo/openai",
+      "tier": "T1_DECLARATIVE",
+      "status": "COMPLETE_FOR_RC9_SCOPE",
+      "gaps": [
+        "GET /native/openai/v1/models fails model-hint check in native/handler.go:300",
+        "chat/completions hits GPT-5.4+/6.2 reasoning+tools wall unless routed via /v1/responses"
+      ]
+    },
+    {
+      "slug": "@tanpopo/openai-compatible",
+      "tier": "T1_DECLARATIVE",
+      "status": "COMPLETE_FOR_RC9_SCOPE",
+      "gaps": [
+        "No /v1/responses or /v1/rerank"
+      ]
+    },
+    {
+      "slug": "@tanpopo/ollama",
+      "tier": "T1_DECLARATIVE",
+      "status": "PARTIAL_IMPLEMENTATION",
+      "gaps": [
+        "Does not quarantine *:cloud remote proxied tags under DataRegion == ON_PREM",
+        "Does not use POST /api/show capability discovery"
+      ]
+    },
+    {
+      "slug": "@tanpopo/azure-openai",
+      "tier": "T1_DECLARATIVE",
+      "status": "PARTIAL_IMPLEMENTATION",
+      "gaps": [
+        "Chat-only legacy deployment URL; lacks Microsoft Foundry /openai/v1/*, Entra ID, embeddings, responses; /native blocked by ?api-version= query filter"
+      ]
+    },
+    {
+      "slug": "@tanpopo/cohere-rerank",
+      "tier": "T1_DECLARATIVE",
+      "status": "PARTIAL_IMPLEMENTATION",
+      "gaps": [
+        "Rerank-only; lacks Cohere v2 /v2/chat and /v2/embed"
+      ]
+    },
+    {
+      "slug": "@tanpopo/anthropic",
+      "tier": "T2_WASM_C",
+      "status": "PARTIAL_IMPLEMENTATION",
+      "gaps": [
+        "Ignores _tanpopo_modality=responses; lacks 5m vs 1h cache write rate split; manifest omits /v1/models"
+      ]
+    },
+    {
+      "slug": "@tanpopo/gemini",
+      "tier": "T2_WASM_C",
+      "status": "PARTIAL_IMPLEMENTATION",
+      "gaps": [
+        "No unified /v1/embeddings; drops multi-turn functionCall thoughtSignature on /v1/chat/completions; lacks Vertex AI OAuth"
+      ]
+    },
+    {
+      "slug": "@tanpopo/aws-bedrock",
+      "tier": "T2_WASM_C",
+      "status": "PARTIAL_IMPLEMENTATION",
+      "gaps": [
+        "adapter.c:36-59 drops multimodal blocks",
+        "adapter.c:104 hardcodes claude-3-5-sonnet probe",
+        "adapter.c:654 checks 'model/' without leading '/' while inspector.go:157 passes '/model/...'",
+        "connections.go:798,808 blocks AWS_SIGV4 creation via Admin API",
+        "manifest omits bedrock.<region> and bedrock-mantle.<region>.api.aws; does not block global.* profiles under regional policies"
+      ]
+    }
+  ]
+}

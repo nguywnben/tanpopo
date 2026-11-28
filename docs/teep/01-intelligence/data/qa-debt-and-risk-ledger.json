@@ -1,0 +1,276 @@
+{
+  "baseline_commit": "ac9ae87a68f095203de82968ac5d08729e33a531",
+  "qa_evidence_commit": "5ee28dc0cfd95aa990c3fbe878beadffed3b9b6f",
+  "gate_rel_07_status": "BLOCKED",
+  "def_001_086_summary": {
+    "total_tracked": 86,
+    "pass_scoped": 71,
+    "open_partial": 15,
+    "open_fail": 0,
+    "unverified": 0,
+    "note": "DEF-001..079 has 64 PASS (scoped) and 15 PARTIAL; DEF-080..086 has 7 PASS (scoped) as of RC9."
+  },
+  "open_partial_defects": [
+    {
+      "id": "DEF-004",
+      "severity": "Moderate",
+      "title": "CLI config show shadowed / remote CLI auth unverified (TokenVerifier nil in serve.go -> 401)",
+      "target_caps": [
+        "CAP-073",
+        "CAP-134"
+      ]
+    },
+    {
+      "id": "DEF-020",
+      "severity": "Moderate",
+      "title": "Security shell badges stale after resolving MCP HITL approval",
+      "target_caps": [
+        "CAP-132"
+      ]
+    },
+    {
+      "id": "DEF-027",
+      "severity": "Moderate",
+      "title": "Saved route target summary identity & live 3-provider failover unverified",
+      "target_caps": [
+        "CAP-028",
+        "CAP-154"
+      ]
+    },
+    {
+      "id": "DEF-028",
+      "severity": "Moderate",
+      "title": "Route Explain vs live correlated VKey inference equivalence unverified",
+      "target_caps": [
+        "CAP-028",
+        "CAP-152"
+      ]
+    },
+    {
+      "id": "DEF-036",
+      "severity": "Low",
+      "title": "Concurrent duplicate extension install 409 & SemVer upgrade path unverified",
+      "target_caps": [
+        "CAP-119"
+      ]
+    },
+    {
+      "id": "DEF-041",
+      "severity": "Moderate",
+      "title": "Crypto-shred partial state leaves VKeys/sessions active, org_1 FK deadlock, PG Ping postShred no-op, cold-backup resurrection under static KEK",
+      "target_caps": [
+        "CAP-067",
+        "CAP-082"
+      ]
+    },
+    {
+      "id": "DEF-043",
+      "severity": "Moderate",
+      "title": "Official extension production release signature unverified due to RR-001",
+      "target_caps": [
+        "CAP-117"
+      ]
+    },
+    {
+      "id": "DEF-044",
+      "severity": "Low",
+      "title": "Active extension uninstall prerequisite guidance & graceful disable unverified",
+      "target_caps": [
+        "CAP-119"
+      ]
+    },
+    {
+      "id": "DEF-048",
+      "severity": "High",
+      "title": "Native Data Plane endpoints in split data-plane role & non-Ollama dialects unverified (+ query/GET/Bedrock bugs)",
+      "target_caps": [
+        "CAP-002",
+        "CAP-004"
+      ]
+    },
+    {
+      "id": "DEF-049",
+      "severity": "Low",
+      "title": "Adapter-enabled /setup route creation unverified (available_adapters always empty on fresh boot)",
+      "target_caps": [
+        "CAP-130"
+      ]
+    },
+    {
+      "id": "DEF-050",
+      "severity": "Low",
+      "title": "Multi-target route capability warning fails to distinguish primary vs fallback roles",
+      "target_caps": [
+        "CAP-028"
+      ]
+    },
+    {
+      "id": "DEF-060",
+      "severity": "Moderate",
+      "title": "Initial ENABLED_ACTIVE rollback guidance & live v1->v2->v1 rollback unverified",
+      "target_caps": [
+        "CAP-119"
+      ]
+    },
+    {
+      "id": "DEF-072",
+      "severity": "Major",
+      "title": "Split DP node disappearance false-green Ready + PG FORCE RLS 0-count bypass in handleRetireMasterKEK + broken TANPOPO_MASTER_KEY_PREVIOUS IDs",
+      "target_caps": [
+        "CAP-067",
+        "CAP-104"
+      ]
+    },
+    {
+      "id": "DEF-077",
+      "severity": "Moderate",
+      "title": "Non-zero spend disambiguation across duplicate Virtual Key names unverified",
+      "target_caps": [
+        "CAP-043"
+      ]
+    },
+    {
+      "id": "DEF-078",
+      "severity": "Moderate",
+      "title": "usage_rollups_hourly dead code (0 rows), Chargeback closed <= toMs vs Budget < period_end_ms, cross-midnight stream period skew",
+      "target_caps": [
+        "CAP-040",
+        "CAP-042"
+      ]
+    }
+  ],
+  "product_gaps": [
+    {
+      "id": "PG-001",
+      "summary": "Add Member modal preselects Developer in multi-select",
+      "target_caps": [
+        "CAP-074",
+        "CAP-132"
+      ]
+    },
+    {
+      "id": "PG-002",
+      "summary": "Expired 15m Playground ephemeral Virtual Keys remain labeled Active",
+      "target_caps": [
+        "CAP-075"
+      ]
+    },
+    {
+      "id": "PG-003",
+      "summary": "Vietnamese (vi) FinOps screens leave PROJECT/VIRTUAL_KEY/MONTHLY/FinOps untranslated",
+      "target_caps": [
+        "CAP-133"
+      ]
+    },
+    {
+      "id": "PG-004",
+      "summary": "No UI/API delete or retire action for MCP servers or Logical Models",
+      "target_caps": [
+        "CAP-020",
+        "CAP-085",
+        "CAP-131"
+      ]
+    },
+    {
+      "id": "PG-005",
+      "summary": "Hard browser refresh resets active Organization/Project/Env switcher",
+      "target_caps": [
+        "CAP-132"
+      ]
+    },
+    {
+      "id": "PG-006",
+      "summary": "Playground End Session clears React state without revoking ephemeral key on server",
+      "target_caps": [
+        "CAP-135"
+      ]
+    },
+    {
+      "id": "PG-007",
+      "summary": "Operations Health hides Valkey outage / degraded fallback state",
+      "target_caps": [
+        "CAP-104"
+      ]
+    },
+    {
+      "id": "PG-008",
+      "summary": "TANPOPO_OTLP_ALLOWED_CIDRS undocumented in tanpopo serve --help",
+      "target_caps": [
+        "CAP-056",
+        "CAP-134"
+      ]
+    },
+    {
+      "id": "PG-009",
+      "summary": "TANPOPO_METRICS_SCRAPE_TOKEN missing from tanpopo serve --help and docs",
+      "target_caps": [
+        "CAP-055",
+        "CAP-134"
+      ]
+    },
+    {
+      "id": "PG-010",
+      "summary": "Security Audit view lacks SYSTEM chain partition selector",
+      "target_caps": [
+        "CAP-078",
+        "CAP-131"
+      ]
+    },
+    {
+      "id": "PG-011",
+      "summary": "TEAM_ADMIN clearing project filter retains project members under Organization members title",
+      "target_caps": [
+        "CAP-074",
+        "CAP-132"
+      ]
+    },
+    {
+      "id": "PG-012",
+      "summary": "Issue Virtual Key modal preselects PROVIDER plane by default",
+      "target_caps": [
+        "CAP-075"
+      ]
+    },
+    {
+      "id": "PG-013",
+      "summary": "Failed Provider Connection Probe returns 200 valid:false with zero UI feedback",
+      "target_caps": [
+        "CAP-011",
+        "CAP-132"
+      ]
+    },
+    {
+      "id": "PG-014",
+      "summary": "TEAM_ADMIN on Security sees 403 banner alongside 0-pending empty state and Trigger kill switch CTA",
+      "target_caps": [
+        "CAP-132"
+      ]
+    }
+  ],
+  "arch_obs_01": {
+    "cross_org_rls_loop_count": 18,
+    "missing_postgres_index_count": 7,
+    "quarantine_tx_split_hazard": "handleQuarantineInstallation runs TX1 (killswitch) + TX2 (installer) separately, runs recordExtensionWebhookOutbox twice, and omits direct Valkey publishChange",
+    "target_caps": [
+      "CAP-048",
+      "CAP-066",
+      "CAP-068",
+      "CAP-076",
+      "CAP-078",
+      "CAP-106",
+      "CAP-125"
+    ]
+  },
+  "rr_001_signing_reproducibility": {
+    "status": "BLOCKED",
+    "root_causes": [
+      "builtin.NewCatalog embeds 2-3 files vs tanpopo plugin pack walking 10-15 files (cassettes, src, tests)",
+      "Windows CRLF vs POSIX LF line endings on README.md and manifest.yaml embedded verbatim",
+      "Runtime compress/gzip BestCompression bitstream sensitivity across Go versions",
+      "extensions/official/build-wasm.sh unpinned host clang, missing -ffile-prefix-map, omits aws-bedrock"
+    ],
+    "target_caps": [
+      "CAP-117"
+    ]
+  }
+}
